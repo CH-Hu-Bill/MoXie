@@ -746,6 +746,15 @@ switch ($action) {
     case 'get_gallery':
         $gallery = Database::getClassData($classId, 'gallery');
         if (!is_array($gallery)) $gallery = [];
+        // 自愈：过滤丢失的图片
+        $valid = [];
+        $cleaned = false;
+        foreach ($gallery as $item) {
+            if (($item['image'] ?? '') !== '' && Database::getUploadedImagePath($classId, $item['image']) !== null) {
+                $valid[] = $item;
+            } else { $cleaned = true; }
+        }
+        if ($cleaned) { Database::saveClassData($classId, 'gallery', $valid); $gallery = $valid; }
         $page = max(1, (int)($_POST['page'] ?? 1));
         $perPage = min(50, max(1, (int)($_POST['per_page'] ?? 10)));
         $total = count($gallery);

@@ -15,6 +15,22 @@ requireClassAuth($classId, $class);
 
 $gallery = Database::getClassData($classId, 'gallery');
 if (!is_array($gallery)) $gallery = [];
+
+// 自愈：过滤掉图片文件已丢失的条目，并清理 gallery.json
+$validGallery = [];
+$cleaned = false;
+foreach ($gallery as $item) {
+    $imgFile = $item['image'] ?? '';
+    if ($imgFile !== '' && Database::getUploadedImagePath($classId, $imgFile) !== null) {
+        $validGallery[] = $item;
+    } else {
+        $cleaned = true;
+    }
+}
+if ($cleaned) {
+    Database::saveClassData($classId, 'gallery', $validGallery);
+    $gallery = $validGallery;
+}
 $csrfToken = csrfToken();
 
 // ========== save_gallery ==========
