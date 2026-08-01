@@ -95,7 +95,7 @@ require 'inc/header.php';
 </div>
 
 <!-- Lightbox -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;">
+<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;">
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;width:44px;height:44px;border-radius:50%;font-size:20px;">✕</button>
     <img id="lbImg" src="" alt="" style="max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
     <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);"></div>

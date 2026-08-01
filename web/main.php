@@ -308,9 +308,9 @@ require 'inc/header.php';
             </div>
         </div>
         <div style="height:2px;background:var(--pencil);opacity:0.15;margin:20px 0;"></div>
-        <div style="position:relative;">
-            <div class="quote" id="quoteText" style="text-align:center;font-style:italic;color:#888;font-size:15px;line-height:1.7;">"<?php echo htmlspecialchars($randomQuote); ?>" <button class="btn btn-sm" id="translateBtn" onclick="translateQuote()">AI 翻译</button></div>
-            <div class="quote-translation" id="quoteTranslation" style="display:none;margin-top:10px;font-style:italic;color:var(--pencil);font-size:14px;text-align:center;"></div>
+        <div style="overflow:hidden;">
+            <div class="quote" id="quoteText" style="text-align:center;font-style:italic;color:#888;font-size:15px;line-height:1.7;overflow-wrap:break-word;word-break:break-word;">"<?php echo htmlspecialchars($randomQuote); ?>" <button class="btn btn-sm" id="translateBtn" onclick="translateQuote()" style="vertical-align:middle;margin-left:8px;white-space:nowrap;">AI 翻译</button></div>
+            <div class="quote-translation" id="quoteTranslation" style="display:none;margin-top:10px;font-style:italic;color:var(--pencil);font-size:14px;text-align:center;overflow-wrap:break-word;"></div>
         </div>
     </div>
 </div>
