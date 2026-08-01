@@ -105,6 +105,7 @@ body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; 
 .gallery-card .info { padding:14px 16px; }
 .gallery-card .desc { font-size:14px; line-height:1.6; color:var(--text); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .gallery-card .meta { font-size:12px; color:var(--muted); margin-top:8px; display:flex; justify-content:space-between; align-items:center; }
+.gallery-card .meta .date { display:flex; align-items:center; gap:4px; }
 .gallery-card .btn-del { font-size:11px; color:#ccc; border:none; background:none; cursor:pointer; padding:2px 6px; border-radius:4px; }
 .gallery-card .btn-del:hover { color:var(--accent); background:#fff0f0; }
 
@@ -170,14 +171,19 @@ function renderGallery() {
     empty.style.display = 'none';
     grid.innerHTML = galleryData.map(function(item) {
         var url = 'upload.php?class_id=' + classId + '&file=' + item.image;
+        var dateText = formatDate(item.uploaded_at);
         return '<div class="gallery-card" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')">'
             + '<div class="img-wrap"><img src="' + url + '" alt="" loading="lazy"></div>'
             + '<div class="info">'
             + '<div class="desc">' + escapeHtml(item.description) + '</div>'
-            + '<div class="meta"><span>' + (item.uploaded_at || '').substring(0, 10) + '</span>'
+            + '<div class="meta"><span class="date">📅 ' + dateText + '</span>'
             + '<button class="btn-del" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button>'
             + '</div></div></div>';
     }).join('');
+}
+function formatDate(s) {
+    if (!s) return '';
+    return s.length >= 16 ? s.substring(0, 16).replace(' ', ' ') : s.substring(0, 10);
 }
 
 function openLightbox(url, desc) {
@@ -202,8 +208,7 @@ async function uploadGallery() {
     try {
         var r = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd })).json();
         if (r.success) {
-            galleryData.unshift({id: r.id, image: r.id ? '' : '', description: desc, uploaded_at: new Date().toISOString()});
-            // Refresh from server
+            galleryData.unshift({id: r.id, image: '', description: desc, uploaded_at: new Date().toISOString().replace('T',' ').substring(0,19)});
             location.reload();
         } else { showToast(r.error || '上传失败'); }
     } catch(e) { showToast('网络异常'); }
