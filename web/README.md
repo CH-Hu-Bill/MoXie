@@ -45,7 +45,7 @@
 | PHP 扩展 | **GD**（图片安全处理与缩放）、**cURL**（调用 DeepSeek AI） |
 | Web 服务器 | Nginx / Apache，文档根指向本目录 |
 | 数据库 | 无，使用 JSON 文件存储（`inc/db.php` 封装，原子写入 + 文件锁） |
-| 前端依赖 | 原生 HTML/CSS/JS；富文本编辑器 [Quill 2.x](https://quilljs.com)（CDN 引入） |
+| 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；[ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng) 中文字体；富文本编辑器 [Quill 2.x](https://quilljs.com)（CDN 引入） |
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 
 > 无需 Composer。项目通过 `require_once` 手动加载，无第三方 PHP 依赖包。
@@ -69,10 +69,12 @@
 ├── app_api.php            # APP 后端 API（全部接口）
 ├── upload.php             # 图片上传 / 查看（GD 安全处理）
 ├── download.php           # 导出文件下载（token + 自动 GC）
-├── common.css             # 公共样式
-├── common.js              # 公共脚本（TTS / Toast / 跟读 / 页面过渡等）
+├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
+├── common.js              # 公共脚本（TTS / Toast / 跟读 / 页面过渡 / 跑马灯等）
 ├── shiyin.mp3             # 任务提示音
 ├── inc/                   # 核心库
+│   ├── head.php           # 统一 HTML <head>（Google Fonts、meta、common.css）
+│   ├── header.php         # 统一状态栏（返回按钮、班级名、标题、右侧操作区）
 │   ├── db.php             # JSON 存储层（原子写 + 文件锁 + 班级数据隔离）
 │   ├── security.php       # CSRF / 班级鉴权（HMAC 签名 Cookie）/ token
 │   ├── api.php            # DeepSeek API 封装
@@ -222,6 +224,18 @@ data/
 ### CORS
 
 由 `inc/config.php` 的 `allowed_origins` 控制。`['*']` 允许所有来源（开发方便，生产不安全）；生产环境应改为域名白名单。
+
+---
+
+## 前端设计
+
+采用 **Hand-Drawn 手绘风格**，模拟纸笔/便签的课堂氛围：
+
+- **颜色**：暖纸底色（`#fdfbf7`）、铅笔黑（`#2d2d2d`）、红色修正笔（`#ff4d4d`）、蓝色圆珠笔（`#2d5da1`）
+- **字体**：标题 ZCOOL KuaiLe（站酷快乐体），正文 Ma Shan Zheng（马山正楷），Google Fonts 引入
+- **组件**：CSS 变量统一管理（`common.css`），`.btn` / `.card` / `.input` / `.word-card` 等组件类
+- **交互**：wobbly 不规则边框（`border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px`），硬阴影「按平」动效，卡片 hover 微旋转
+- **模板**：`inc/head.php` 统一 `<head>` 元数据与字体加载，`inc/header.php` 统一状态栏
 
 ---
 
