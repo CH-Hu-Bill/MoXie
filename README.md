@@ -7,7 +7,8 @@
 ```
 .
 ├── web/   # Web 端 + 后端 API（PHP + JSON 文件存储，无数据库）
-└── app/   # APP 客户端源码（Android / iOS，待补充）
+├── app/   # APP 客户端源码（Android / iOS，待补充）
+└── PRD/   # 产品需求文档（设计规范等）
 ```
 
 ## 模块说明
@@ -16,6 +17,7 @@
 |------|------|------|
 | [`web/`](web/) | 网站端（浏览器使用）+ APP 全部后端 API。基于 PHP，数据存于 JSON 文件 | [web/README.md](web/README.md) |
 | [`app/`](app/) | APP 客户端源码占位，后续补充 | [app/README.md](app/README.md) |
+| [`PRD/`](PRD/) | 产品需求文档，含设计规范 | [PRD/风格.md](PRD/风格.md) |
 
 ## 快速开始
 
