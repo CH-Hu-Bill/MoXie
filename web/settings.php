@@ -53,96 +53,78 @@ $defaultRepeatInterval = $settings['repeat_interval_' . $classId] ?? $settings['
 $followRepeat = $settings['follow_repeat'] ?? 1;
 $followBuffer = $settings['follow_buffer'] ?? 0.5;
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>设置 - <?php echo htmlspecialchars($class['name']); ?></title>
-    <link rel="stylesheet" href="common.css">
-    <style>
-        .settings-content { flex: 1; padding: 24px; width: 100%; max-width: 800px; margin: 0 auto; }
-        .section { background: #fff; border-radius: 14px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
-        .section-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; }
-        .setting-row { margin-bottom: 20px; }
-        .setting-row:last-child { margin-bottom: 0; }
-        .setting-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .setting-label .name { font-size: 14px; color: #333; }
-        .setting-label .value { font-size: 14px; color: #4a90d9; font-weight: bold; }
-        input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; background: #e0e0e0; border-radius: 3px; outline: none; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: #4a90d9; border-radius: 50%; cursor: pointer; }
-        input[type="number"] { width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 15px; }
-        input[type="number"]:focus { outline: none; border-color: #4a90d9; }
-        .save-btn { display: block; width: 100%; padding: 14px; background: #4a90d9; color: #fff; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; margin-top: 8px; transition: background 0.15s; }
-        .save-btn:hover { background: #3a7bc8; }
-    </style>
+<?php $pageTitle = '设置'; require 'inc/head.php'; ?>
 </head>
 <body>
     <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
-    <div class="status-bar">
-        <div class="left">
-            <button class="back-btn" onclick="showOkOverlayThen('main.php?id=<?php echo $classId; ?>')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <span style="font-size:15px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
-        </div>
-        <div class="title">设置</div>
-        <div class="right"></div>
-    </div>
-    <div class="settings-content">
-        <div class="section">
-            <div class="section-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>听写设置</div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span class="name">默认音量</span>
-                    <span class="value" id="volumeValue"><?php echo $defaultVolume; ?>%</span>
-                </div>
-                <input type="range" id="volumeSlider" min="0" max="100" value="<?php echo $defaultVolume; ?>" oninput="document.getElementById('volumeValue').textContent = this.value + '%'">
+    <?php
+    $backUrl = 'main.php?id=' . $classId;
+    $className = $class['name'];
+    $pageTitle = '设置';
+    require 'inc/header.php';
+    ?>
+    <div class="content">
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>听写设置
             </div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span class="name">默认单词间隔</span>
-                    <span class="value" id="intervalValue"><?php echo $defaultInterval; ?> 秒</span>
+            <div class="mb-4">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:14px;color:var(--pencil);">默认音量</span>
+                    <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="volumeValue"><?php echo $defaultVolume; ?>%</span>
                 </div>
-                <input type="number" id="intervalInput" value="<?php echo $defaultInterval; ?>" min="1" max="20" step="0.5" oninput="document.getElementById('intervalValue').textContent = this.value + ' 秒'">
+                <input type="range" id="volumeSlider" min="0" max="100" value="<?php echo $defaultVolume; ?>" oninput="document.getElementById('volumeValue').textContent = this.value + '%'" style="accent-color:var(--blue);width:100%;">
             </div>
-        </div>
-        <div class="section">
-            <div class="section-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>朗读设置</div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span class="name">单词朗读次数</span>
-                    <span class="value" id="repeatValue"><?php echo $defaultRepeat; ?> 次</span>
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:14px;color:var(--pencil);">默认单词间隔</span>
+                    <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="intervalValue"><?php echo $defaultInterval; ?> 秒</span>
                 </div>
-                <input type="number" id="repeatInput" value="<?php echo $defaultRepeat; ?>" min="1" max="10" step="1" oninput="document.getElementById('repeatValue').textContent = this.value + ' 次'">
-            </div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span class="name">重复朗读间隔</span>
-                    <span class="value" id="repeatIntValue"><?php echo $defaultRepeatInterval; ?> 秒</span>
-                </div>
-                <input type="number" id="repeatIntInput" value="<?php echo $defaultRepeatInterval; ?>" min="0.5" max="5" step="0.5" oninput="document.getElementById('repeatIntValue').textContent = this.value + ' 秒'">
+                <input type="number" class="input" id="intervalInput" value="<?php echo $defaultInterval; ?>" min="1" max="20" step="0.5" oninput="document.getElementById('intervalValue').textContent = this.value + ' 秒'">
             </div>
         </div>
-        <div class="section">
-            <div class="section-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>跟读设置</div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span class="name">每个单词朗读次数</span>
-                    <span class="value" id="followRepValue"><?php echo $followRepeat; ?> 次</span>
-                </div>
-                <input type="number" id="followRepInput" value="<?php echo $followRepeat; ?>" min="1" max="5" step="1" oninput="document.getElementById('followRepValue').textContent=this.value+' 次'">
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>朗读设置
             </div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span class="name">缓冲时间（朗读完单词后的额外等待）</span>
-                    <span class="value" id="followBufValue"><?php echo $followBuffer; ?> 秒</span>
+            <div class="mb-4">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:14px;color:var(--pencil);">单词朗读次数</span>
+                    <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="repeatValue"><?php echo $defaultRepeat; ?> 次</span>
                 </div>
-                <input type="number" id="followBufInput" value="<?php echo $followBuffer; ?>" min="0" max="5" step="0.5" oninput="document.getElementById('followBufValue').textContent = this.value + ' 秒'">
+                <input type="number" class="input" id="repeatInput" value="<?php echo $defaultRepeat; ?>" min="1" max="10" step="1" oninput="document.getElementById('repeatValue').textContent = this.value + ' 次'">
+            </div>
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:14px;color:var(--pencil);">重复朗读间隔</span>
+                    <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="repeatIntValue"><?php echo $defaultRepeatInterval; ?> 秒</span>
+                </div>
+                <input type="number" class="input" id="repeatIntInput" value="<?php echo $defaultRepeatInterval; ?>" min="0.5" max="5" step="0.5" oninput="document.getElementById('repeatIntValue').textContent = this.value + ' 秒'">
             </div>
         </div>
-        <div class="section" style="text-align:center;padding:18px;">
-            <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" style="background:none;border:none;color:#4a90d9;font-size:14px;cursor:pointer;font-weight:600;">📖 重新查看使用说明</button>
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>跟读设置
+            </div>
+            <div class="mb-4">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:14px;color:var(--pencil);">每个单词朗读次数</span>
+                    <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="followRepValue"><?php echo $followRepeat; ?> 次</span>
+                </div>
+                <input type="number" class="input" id="followRepInput" value="<?php echo $followRepeat; ?>" min="1" max="5" step="1" oninput="document.getElementById('followRepValue').textContent=this.value+' 次'">
+            </div>
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:14px;color:var(--pencil);">缓冲时间（朗读完单词后的额外等待）</span>
+                    <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="followBufValue"><?php echo $followBuffer; ?> 秒</span>
+                </div>
+                <input type="number" class="input" id="followBufInput" value="<?php echo $followBuffer; ?>" min="0" max="5" step="0.5" oninput="document.getElementById('followBufValue').textContent = this.value + ' 秒'">
+            </div>
         </div>
-        <button class="save-btn" onclick="saveSettings()">保存设置</button>
+        <div class="card mb-3" style="text-align:center;padding:18px;">
+            <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-sm" style="background:none;color:var(--blue);border:none;box-shadow:none;font-size:14px;font-weight:600;">📖 重新查看使用说明</button>
+        </div>
+        <button class="btn btn-primary mt-3" style="width:100%" onclick="saveSettings()">保存设置</button>
     </div>
     <div class="toast" id="toast"></div>
 

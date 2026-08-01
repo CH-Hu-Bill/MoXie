@@ -116,164 +116,40 @@ if (isset($_POST['action'])) {
 $wordMap = [];
 foreach ($words as $w) { $wordMap[$w['id']] = $w; }
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>默写任务 - <?php echo htmlspecialchars($class['name']); ?></title>
-    <link rel="stylesheet" href="common.css">
-    <style>
-        body { height: 100vh; overflow: hidden; }
+<?php $pageTitle = '默写任务'; require 'inc/head.php'; ?>
 
-        /* ====== 任务列表 ====== */
-        .task-list { padding: 10px 16px; max-width: 800px; margin: 0 auto; }
-        .task-date-header {
-            display: flex; align-items: center; gap: 10px; padding: 16px 8px 8px;
-            font-size: 15px; font-weight: bold; color: #555; border-bottom: 1px solid #eee;
-        }
-        .task-date-header:first-child { padding-top: 4px; }
-        .task-date-header .today-pill { font-size: 11px; color: #fff; background: #4a90d9; padding: 1px 8px; border-radius: 8px; font-weight: 600; }
-        .task-list-item {
-            background: #fff; padding: 16px 18px; margin: 4px 0; border-radius: 10px;
-            cursor: pointer; display: flex; align-items: center; gap: 12px;
-            border: 1px solid #eee; transition: all 0.15s;
-            user-select: none; -webkit-user-select: none;
-        }
-        .task-list-item:hover, .task-list-item:active { border-color: #4a90d9; box-shadow: 0 2px 10px rgba(74,144,217,0.1); }
-        .task-list-item .tl-icon {
-            width: 38px; height: 38px; border-radius: 10px; background: #f0f4ff;
-            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-        }
-        .task-list-item .tl-info { flex: 1; min-width: 0; }
-        .task-list-item .tl-label { font-size: 16px; font-weight: 600; color: #333; }
-        .task-list-item .tl-meta { font-size: 13px; color: #888; margin-top: 2px; }
-        .task-list-item .tl-arrow { color: #ccc; font-size: 20px; flex-shrink: 0; }
-
-        /* ====== 执行视图 ====== */
-        .mode-toggle { display: flex; background: #e0e0e0; border-radius: 18px; overflow: hidden; }
-        .mode-toggle button { padding: 7px 14px; border: none; background: transparent; cursor: pointer; font-size: 13px; }
-        .mode-toggle button.active { background: #4a90d9; color: #fff; }
-
-
-
-        .task-date { text-align: center; font-size: 18px; color: #333; margin-bottom: 16px; font-weight: bold; }
-        .task-date .task-label { font-size: 14px; color: #4a90d9; font-weight: bold; margin-left: 6px; background: #e8f0fb; padding: 2px 10px; border-radius: 12px; }
-        .task-follow-btn { margin-left: 8px; padding: 4px 14px; background: #43a047; color: #fff; border: none; border-radius: 16px; font-size: 13px; cursor: pointer; font-weight: bold; transition: background 0.15s; vertical-align: middle; }
-        .task-follow-btn:hover { background: #388e3c; }
-        .task-action-btn { padding: 4px 12px; border: none; border-radius: 14px; font-size: 12px; cursor: pointer; font-weight: 700; transition: all .12s; white-space: nowrap; flex-shrink: 0; }
-        .task-action-btn.done-btn { background: #43a047; color: #fff; }
-        .task-action-btn.done-btn:hover { background: #388e3c; }
-        .task-action-btn.cancel-btn { background: #fff; color: #e53935; border: 1.5px solid #e53935; }
-        .task-action-btn.cancel-btn:hover { background: #ffebee; }
-
-        /* Test sound row: play button + volume slider side by side */
-        .test-sound-row { display: flex; align-items: center; gap: 14px; margin: 16px 0 24px; max-width: 360px; margin-left: auto; margin-right: auto; }
-        .dict-test-btn { width: 48px; height: 48px; border-radius: 50%; background: #4a90d9; color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }
-        .dict-test-btn:active { transform: scale(0.95); }
-        .test-sound-row input[type="range"] { flex: 1; margin: 0; height: 6px; -webkit-appearance: none; background: #e0e0e0; border-radius: 3px; outline: none; }
-        .test-sound-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4a90d9; border-radius: 50%; cursor: pointer; }
-
-        .word-card.hide-word .word { display: none; }
-        .word-card.hide-word .speaker { display: none; }
-        .word-card.hide-word .card-body { padding: 20px 16px; }
-        .word-card.hide-word .meaning { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 26px; color: #1a1a1a; font-weight: 500; margin-bottom: 0; }
-        .word-card.hide-word .meaning.scrollable span {
-            display: inline-block; white-space: nowrap;
-            animation: meaningMarquee 4s ease-in-out 2;
-        }
-        @keyframes meaningMarquee {
-            0%,10% { transform: translateX(0); }
-            45%,55% { transform: translateX(var(--mx, -40px)); }
-            90%,100% { transform: translateX(0); }
-        }
-        .word-card.hide-word .pos { font-size: 15px; color: #666; margin-top: 0; }
-
-        /* Dictation */
-        .dict-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; padding: 20px 0; }
-        .dict-icon-wrap { width: 72px; height: 72px; background: #e8f0fb; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
-        .dict-prepare h3 { font-size: 22px; color: #333; margin-bottom: 12px; }
-        .main-btn { display: block; width: 200px; padding: 14px; background: #4a90d9; color: #fff; border: none; border-radius: 10px; font-size: 17px; cursor: pointer; margin: 10px auto; transition: all 0.15s; }
-        .main-btn:hover { background: #3a7bc8; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(74,144,217,0.25); }
-        .main-btn.secondary-btn { background: #fff; color: #4a90d9; border: 2px solid #4a90d9; }
-        .main-btn.secondary-btn:hover { background: #e8f0fb; }
-        .dict-step { max-width: 400px; margin: 0 auto; text-align: center; }
-        .step-num { width: 36px; height: 36px; background: #4a90d9; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; margin: 0 auto 14px; }
-        .dict-step h3 { font-size: 20px; color: #333; margin-bottom: 10px; }
-        .dict-step .hint { color: #888; font-size: 14px; margin-bottom: 20px; }
-        .vol-display { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
-        .vol-pct { font-size: 28px; font-weight: bold; color: #4a90d9; }
-        .dict-step input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; background: #e0e0e0; border-radius: 3px; outline: none; margin: 12px 0 20px; }
-        .dict-step input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: #4a90d9; border-radius: 50%; cursor: pointer; }
-        .interval-box { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 20px; }
-        .interval-box input[type="number"] { width: 100px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 22px; text-align: center; font-weight: bold; color: #4a90d9; }
-        .interval-box input[type="number"]:focus { outline: none; border-color: #4a90d9; }
-        .interval-unit { font-size: 16px; color: #888; }
-        .dict-step .step-btns { display: flex; gap: 10px; margin-top: 20px; justify-content: center; }
-        .dict-step .step-btns button { padding: 10px 24px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; transition: all 0.15s; }
-        .dict-step .step-btns .primary { background: #4a90d9; color: #fff; }
-        .dict-step .step-btns .primary:hover { background: #3a7bc8; }
-        .dict-step .step-btns .secondary { background: #e8e8e8; color: #555; }
-        .dict-step .step-btns .secondary:hover { background: #ddd; }
-
-        .dict-running { text-align: center; }
-        .dict-progress { margin-bottom: 24px; }
-        .dict-progress .big-num { font-size: 72px; color: #4a90d9; font-weight: bold; line-height: 1; }
-        .dict-progress .label { font-size: 15px; color: #888; margin-top: 8px; }
-        .dict-countdown { font-size: 20px; color: #999; margin-bottom: 24px; background: #f8f8f8; padding: 12px 24px; border-radius: 12px; display: inline-block; }
-        .dict-countdown .sec { color: #4a90d9; font-weight: bold; font-size: 28px; }
-        .dict-pause-btn { padding: 12px 36px; background: #ff9800; color: #fff; border: none; border-radius: 24px; font-size: 17px; cursor: pointer; transition: all 0.15s; }
-        .dict-pause-btn:hover { background: #f57c00; }
-        .dict-pause-btn.resume { background: #4a90d9; }
-        .dict-pause-btn.resume:hover { background: #3a7bc8; }
-
-        .dict-ready h3 { font-size: 26px; color: #333; margin-bottom: 16px; }
-        .ready-circle { width: 80px; height: 80px; background: #e8f5e9; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
-        .ready-info { display: flex; gap: 24px; justify-content: center; color: #888; font-size: 15px; margin-bottom: 28px; }
-
-        @media (max-width: 550px) {
-            .mode-toggle button { padding: 5px 7px; font-size: 11px; }
-        }
-        @media (max-width: 400px) {
-            .mode-toggle button { padding: 4px 5px; font-size: 10px; }
-        }
-    </style>
-</head>
 <body>
 <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
-<!-- ============== STATUS BAR ============== -->
-<div class="status-bar">
-    <div class="left">
-        <button class="back-btn" onclick="showOkOverlayThen('main.php?id=<?php echo $classId; ?>')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-        <span style="font-size:15px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
-    </div>
-    <div class="title">默写任务</div>
-    <div class="right" style="display:flex;align-items:center;gap:8px;">
-        <?php if ($selectedTask): ?>
-            <button class="task-action-btn done-btn" onclick="completeTask()" title="标记完成">✅ 完成</button>
-            <button class="task-action-btn cancel-btn" onclick="cancelTask()" title="取消任务">✕ 取消</button>
-            <button class="task-follow-btn" id="followBtn" onclick="showTaskFollow()" title="跟读单词"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:3px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>
-            <div class="mode-toggle">
-                <button id="showModeBtn" class="active" onclick="setMode('show')">展示</button>
-                <button id="hideModeBtn" onclick="setMode('hide')">默写</button>
-                <button id="dictModeBtn" onclick="setMode('dict')">听写</button>
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
+<?php
+$backUrl = 'main.php?id=' . $classId;
+$className = $class['name'];
+$pageTitle = '默写任务';
+$rightContent = '';
+if ($selectedTask):
+    $rightContent = '<button class="btn btn-sm" style="background:var(--blue);color:var(--white);" onclick="completeTask()" title="标记完成">完成</button>'
+        . '<button class="btn btn-danger btn-sm" onclick="cancelTask()" title="取消任务">取消</button>'
+        . '<button class="btn btn-sm" style="background:var(--blue);color:var(--white);" id="followBtn" onclick="showTaskFollow()" title="跟读单词"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:3px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>'
+        . '<div style="display:flex;background:var(--old-paper);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);overflow:hidden;">'
+        . '<button id="showModeBtn" class="btn btn-sm active" style="margin:0;box-shadow:none;border:none;border-radius:0;background:var(--pencil);color:var(--white);" onclick="setMode(\'show\')">展示</button>'
+        . '<button id="hideModeBtn" class="btn btn-sm" style="margin:0;box-shadow:none;border:none;border-radius:0;background:transparent;color:var(--pencil);" onclick="setMode(\'hide\')">默写</button>'
+        . '<button id="dictModeBtn" class="btn btn-sm" style="margin:0;box-shadow:none;border:none;border-radius:0;background:transparent;color:var(--pencil);" onclick="setMode(\'dict\')">听写</button>'
+        . '</div>';
+endif;
+require 'inc/header.php';
+?>
 
 <!-- ============== TASK LIST VIEW (default) ============== -->
 <?php if (!$selectedTask): ?>
 <div class="content" id="listView">
     <?php if ($searchQ !== ''): ?>
-    <div style="padding:10px 16px;background:#e8f0fb;color:#4a90d9;font-size:14px;max-width:800px;margin:8px auto;border-radius:8px;">搜索 "<?php echo htmlspecialchars($searchQ); ?>" 的待办任务 <a href="task.php?id=<?php echo $classId; ?>" style="color:#e53935;text-decoration:none;margin-left:8px;">×清除</a></div>
+    <div class="card" style="max-width:800px;margin:8px auto;color:var(--blue);background:var(--old-paper);">搜索 "<?php echo htmlspecialchars($searchQ); ?>" 的待办任务 <a href="task.php?id=<?php echo $classId; ?>" style="color:var(--red);text-decoration:none;margin-left:8px;">×清除</a></div>
     <?php endif; ?>
     <?php if (empty($pendingTasks)): ?>
         <div class="empty-state" style="padding:80px 20px;">
             <div class="icon"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
             <p style="font-size:15px;color:#999;">暂无待办默写任务</p>
             <p style="font-size:13px;color:#bbb;">去单词库创建任务吧</p>
-            <button class="main-btn" style="margin-top:18px;" onclick="showOkOverlayThen('words.php?id=<?php echo $classId; ?>')">前往单词库</button>
+            <button class="btn btn-primary" style="display:block;width:200px;margin:18px auto 0;" onclick="showOkOverlayThen('words.php?id=<?php echo $classId; ?>')">前往单词库</button>
         </div>
     <?php else: ?>
     <div class="task-list">
@@ -291,9 +167,9 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
                 <?php if ($isToday): ?><span class="today-pill">今天</span><?php endif; ?>
             </div>
         <?php endif; ?>
-        <div class="task-list-item" onclick="startTask('<?php echo $t['id']; ?>')">
+        <div class="task-list-item card" style="display:flex;align-items:center;gap:12px;cursor:pointer;margin:4px 0;" onclick="startTask('<?php echo $t['id']; ?>')">
             <div class="tl-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             </div>
             <div class="tl-info">
                 <div class="tl-label"><?php echo htmlspecialchars($t['label'] ?? '任务'); ?></div>
@@ -310,10 +186,10 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
 <?php else: ?>
 <!-- ============== TASK EXECUTION VIEW ============== -->
 <div class="content" id="execView">
-    <div class="task-date">
+    <div class="task-date" style="text-align:center;font-size:18px;color:var(--pencil);margin-bottom:16px;font-weight:bold;">
         <?php echo $selectedTask['date']; ?>
         <?php if (!empty($selectedTask['label'])): ?>
-            <span class="task-label"><?php echo htmlspecialchars($selectedTask['label']); ?></span>
+            <span class="tag" style="margin-left:6px;color:var(--blue);"><?php echo htmlspecialchars($selectedTask['label']); ?></span>
         <?php endif; ?>
     </div>
     <div class="word-grid" id="wordGrid">
@@ -375,25 +251,25 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
 
 <!-- Task Follow-along Player (auto-collapses to bubble after 3s) -->
 <div id="taskFollowPlayer" style="display:none;position:fixed;bottom:80px;left:16px;right:16px;z-index:700;max-width:500px;margin:0 auto;">
-    <div style="background:#fff;border:2px solid #4a90d9;border-radius:14px;padding:14px 18px;box-shadow:0 4px 16px rgba(0,0,0,0.12);">
-        <div style="display:flex;align-items:center;gap:14px;">
-            <div style="flex:1;min-width:0;">
-                <div style="font-size:11px;color:#999;margin-bottom:2px;">跟读中 <span id="taskFollowProgress">0/0</span></div>
-                <div id="taskFollowWord" style="font-size:20px;font-weight:bold;color:#4a90d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">--</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-shrink:0;">
-                <button id="taskFollowPauseBtn" onclick="toggleTaskFollowPause()" style="padding:8px 16px;background:#ff9800;color:#fff;border:none;border-radius:18px;font-size:13px;cursor:pointer;">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>暂停
-                </button>
-                <button onclick="stopTaskFollow()" style="padding:8px 16px;background:#e53935;color:#fff;border:none;border-radius:18px;font-size:13px;cursor:pointer;">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" style="vertical-align:-2px;margin-right:3px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>停止
-                </button>
+    <div class="card" style="padding:14px 18px;box-shadow:var(--shadow-md);">
+<div style="display:flex;align-items:center;gap:14px;flex:1;min-width:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:11px;color:#999;margin-bottom:2px;">跟读中 <span id="taskFollowProgress">0/0</span></div>
+                    <div id="taskFollowWord" style="font-size:20px;font-weight:bold;color:var(--blue);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">--</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-shrink:0;">
+                    <button id="taskFollowPauseBtn" onclick="toggleTaskFollowPause()" class="btn btn-danger btn-sm" style="background:var(--red);">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>暂停
+                    </button>
+                    <button onclick="stopTaskFollow()" class="btn btn-danger btn-sm">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-2px;margin-right:3px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>停止
+                    </button>
             </div>
         </div>
     </div>
 </div>
 <!-- Task Follow-along Bubble (collapsed state) -->
-<div id="taskFollowBubble" onclick="expandTaskFollowBubble()" style="display:none;position:fixed;bottom:24px;left:20px;width:52px;height:52px;background:linear-gradient(135deg,#4a90d9,#6aa8f0);border-radius:50%;z-index:702;cursor:pointer;box-shadow:0 3px 14px rgba(74,144,217,0.4);animation:followBubblePulse 2s ease-in-out infinite;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.3);">
+<div id="taskFollowBubble" onclick="expandTaskFollowBubble()" style="display:none;position:fixed;bottom:24px;left:20px;width:52px;height:52px;background:var(--blue);border-radius:var(--wobbly);z-index:702;cursor:pointer;box-shadow:var(--shadow-md);animation:followBubblePulse 2s ease-in-out infinite;display:flex;align-items:center;justify-content:center;border:2px solid var(--pencil);">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
 </div>
 
@@ -504,9 +380,9 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
         stopDictAudio();
         const c = document.getElementById('dictContainer');
         c.innerHTML = '<div class="dict-prepare">' +
-            '<div class="dict-icon-wrap"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></div>' +
+            '<div class="dict-icon-wrap"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></div>' +
             '<h3>听写准备</h3>' +
-            '<p style="color:#888;margin-bottom:28px;">共 <b style="color:#4a90d9;">' + dictState.words.length + '</b> 个单词</p>' +
+            '<p style="color:#888;margin-bottom:28px;">共 <b style="color:var(--blue);">' + dictState.words.length + '</b> 个单词</p>' +
             '<button class="main-btn" onclick="dictStartPrepare()">开始准备</button>' +
             '<button class="main-btn secondary-btn" onclick="dictSkipPrepare()" style="margin-top:0;">跳过准备</button>' +
             '</div>';
@@ -555,7 +431,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
             dictState.currentAudio.pause();
             dictState.currentAudio = null;
             btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-            btn.style.background = '#4a90d9';
+            btn.style.background = 'var(--pencil)';
         } else {
             // Start playback
             stopDictAudio();
@@ -563,17 +439,17 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
             dictState.currentAudio = audio;
             audio.volume = dictState.volume / 100;
             btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-            btn.style.background = '#e53935';
+            btn.style.background = 'var(--red)';
             audio.play().then(function() {
                 audio.onended = function() {
                     dictState.currentAudio = null;
                     btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                    btn.style.background = '#4a90d9';
+                    btn.style.background = 'var(--pencil)';
                 };
             }).catch(function() {
                 dictState.currentAudio = null;
                 btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                btn.style.background = '#4a90d9';
+                btn.style.background = 'var(--pencil)';
                 showToast('试音文件未找到', 'error');
             });
         }
@@ -623,7 +499,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
         var repeatInfo = (dictState.repeat > 1) ? '<span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:2px;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>' + dictState.repeat + ' 次</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:2px;"><line x1="12" y1="22" x2="12" y2="2"/><polyline points="15 5 9 9 9 13"/></svg>' + dictState.repeatInterval + ' 秒</span>' : '<span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:2px;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>' + dictState.repeat + ' 次</span>';
         const c = document.getElementById('dictContainer');
         c.innerHTML = '<div class="dict-ready">' +
-            '<div class="ready-circle"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+            '<div class="ready-circle"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>' +
             '<h3>一切就绪</h3>' +
             '<div class="ready-info"><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:2px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>' + dictState.volume + '%</span><span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:2px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + dictState.interval + ' 秒</span>' + repeatInfo + '</div>' +
             '<button class="main-btn" onclick="dictStart()">开始听写</button>' +
@@ -877,7 +753,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
             taskFollowCtrl.pause(); taskFollowPaused = true;
             clearTimeout(taskFollowCollapseTimer);
             btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>继续';
-            btn.style.background = '#4a90d9';
+            btn.style.background = 'var(--blue)';
         }
     }
 

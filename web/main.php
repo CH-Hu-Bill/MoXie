@@ -218,173 +218,102 @@ if (isset($_POST['action']) && $_POST['action'] === 'translate_quote') {
     echo json_encode(['success' => true, 'translation' => trim($result['content'])]);
     exit;
 }
+$pageTitle = $class['name'] . ' - 功能主页';
+require 'inc/head.php';
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($class['name']); ?> - 功能主页</title>
-    <link rel="stylesheet" href="common.css">
-    <style>
-        .switch-btn { padding: 6px 14px; background: #f0f0f0; border: none; border-radius: 16px; font-size: 13px; cursor: pointer; color: #666; transition: background 0.15s; }
-        .switch-btn:hover { background: #e0e0e0; }
-        .main-content { flex: 1; padding: 30px; width: 100%; }
-        .welcome { text-align: center; margin-bottom: 36px; }
-        .welcome h2 { font-size: 28px; color: #333; margin-bottom: 8px; }
-        .welcome p { color: #888; font-size: 15px; }
-        .menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 18px; margin-bottom: 36px; }
-        .menu-card { background: #fff; border-radius: 12px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.15s; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        .menu-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
-        .menu-card .icon { font-size: 52px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; }
-        .menu-card .icon svg { display: block; }
-        .menu-card .title { font-size: 20px; color: #333; font-weight: bold; }
-        .menu-card .desc { font-size: 13px; color: #999; margin-top: 4px; }
-        .menu-card.disabled { cursor: default; opacity: 0.5; }
-        .menu-card.weekend-active { border: 2px solid #4a90d9; animation: weekendGlow 2s ease-in-out infinite; }
-        @keyframes weekendGlow { 0%,100% { box-shadow: 0 1px 6px rgba(0,0,0,0.08); } 50% { box-shadow: 0 1px 20px rgba(74,144,217,0.3); } }
-        .menu-card.weekend-completed { border: 2px solid #52c41a; background: #f6ffed; cursor: pointer; }
-        .menu-card.weekend-completed .title { color: #389e0d; }
-        .stats-quote { background: #fff; border-radius: 14px; padding: 28px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
-        .stats { display: flex; justify-content: center; gap: 60px; margin-bottom: 24px; }
-        .stat-item { text-align: center; }
-        .stat-value { font-size: 42px; color: #4a90d9; font-weight: bold; }
-        .stat-label { font-size: 14px; color: #888; margin-top: 4px; }
-        .divider { height: 1px; background: #eee; margin-bottom: 24px; }
-        .quote { text-align: center; font-style: italic; color: #888; font-size: 15px; line-height: 1.7; }
-        .quote-wrap { position: relative; }
-        .quote-translate-btn { display: inline-block; margin-left: 10px; padding: 4px 12px; background: #f0f4ff; color: #4a90d9; border: none; border-radius: 12px; font-size: 12px; cursor: pointer; font-weight: 600; transition: all .12s; vertical-align: middle; }
-        .quote-translate-btn:hover { background: #dce8f7; }
-        .quote-translate-btn:disabled { opacity: .6; pointer-events: none; }
-        .quote-translation { margin-top: 10px; font-style: italic; color: #666; font-size: 14px; text-align: center; }
-        /* Search */
-        .search-section { max-width: 600px; margin: 0 auto 28px; position: relative; z-index: 2001; }
-        .search-section .search-row { display: flex; gap: 8px; position: relative; z-index: 2001; }
-        .search-section input { flex: 1; padding: 11px 18px; border: 2px solid #ddd; border-radius: 22px; font-size: 15px; outline: none; transition: all .2s; }
-        .search-section input:focus { border-color: #4a90d9; box-shadow: 0 0 0 3px rgba(74,144,217,.08); }
-        .search-section button { padding: 11px 22px; background: #4a90d9; color: #fff; border: none; border-radius: 22px; font-size: 15px; cursor: pointer; font-weight: 600; transition: all .12s; }
-        .search-section button:active { opacity: .85; }
-        .search-results { position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; width: 100%; max-height: 60vh; background: #fff; border-radius: 14px; box-shadow: 0 12px 48px rgba(0,0,0,0.18); overflow: hidden auto; display: none; z-index: 2002; }
-        .search-results.active { display: block; }
-        .search-results .sr-group { padding: 12px 18px; }
-        .search-results .sr-group + .sr-group { border-top: 1px solid #f0f0f0; }
-        .search-results .sr-group-title { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 8px; letter-spacing: .5px; padding: 2px 0; }
-        .search-results .sr-item { padding: 10px 12px; margin: 0 -12px; cursor: pointer; border-radius: 8px; transition: all .15s; display: flex; justify-content: space-between; align-items: center; }
-        .search-results .sr-item:hover { background: rgba(74,144,217,0.08); transform: translateX(2px); }
-        .search-results .sr-item .word { font-weight: 600; color: #333; }
-        .search-results .sr-item .meaning { font-size: 13px; color: #888; margin-left: 8px; }
-        .search-results .sr-item .arrow { color: #ccc; font-size: 14px; }
-        .search-results .sr-more { text-align: center; padding: 10px; font-size: 13px; color: #4a90d9; cursor: pointer; font-weight: 600; }
-        .search-results .sr-more:hover { text-decoration: underline; }
-        .search-results .sr-empty { text-align: center; padding: 24px; color: #999; font-size: 14px; }
-        .search-focus-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.15); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1999; }
-        .search-focus-overlay.active { display: block; }
-        .spin { display: inline-block; width: 18px; height: 18px; border: 2.5px solid #ddd; border-top-color: #4a90d9; border-radius: 50%; animation: spinAnim .7s linear infinite; vertical-align: middle; margin-right: 6px; }
-        @keyframes spinAnim { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) {
-            .menu-grid { grid-template-columns: repeat(2, 1fr); }
-            .stats { flex-direction: column; gap: 16px; }
-        }
-        @media (max-width: 400px) {
-            .menu-grid { grid-template-columns: 1fr; }
-        }
-    </style>
-</head>
 <body>
-    <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
-    <div class="status-bar">
-        <div class="left">
-            <span class="class-name" style="font-size:17px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
+<script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
+<?php
+$backUrl = 'index.php?switch=1';
+$className = $class['name'];
+$rightContent = '<button class="btn btn-sm" onclick="showOkOverlayThen(\'index.php?switch=1\')">切换班级</button>';
+require 'inc/header.php';
+?>
+<div class="content">
+    <div style="text-align:center;margin-bottom:32px;">
+        <h2 style="font-family:var(--font-heading);font-size:28px;color:var(--pencil);margin-bottom:8px;">欢迎来到<?php echo htmlspecialchars($class['name']); ?></h2>
+        <p style="color:#888;font-size:15px;">选择下方功能开始学习</p>
+    </div>
+
+    <div style="max-width:600px;margin:0 auto 28px;position:relative;z-index:2001;">
+        <div style="display:flex;gap:8px;position:relative;z-index:2001;">
+            <input type="text" id="searchInput" class="input" placeholder="搜索单词或释义..." onkeydown="if(event.key==='Enter')doSearch()" onfocus="onSearchFocus()" style="flex:1;">
+            <button class="btn btn-primary" onclick="doSearch()">搜索</button>
         </div>
-        <div class="title">功能主页</div>
-        <div class="right">
-            <button class="switch-btn" onclick="showOkOverlayThen('index.php?switch=1')">切换班级</button>
+        <div class="search-results" id="searchResults"></div>
+    </div>
+
+    <div class="menu-grid">
+        <div class="card menu-card" onclick="showOkOverlayThen('words.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+            <div class="title">单词库</div>
+            <div class="desc">管理班级单词</div>
+        </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('task.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+            <div class="title">默写任务</div>
+            <div class="desc">进行单词默写</div>
+        </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('history.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+            <div class="title">默写记录</div>
+            <div class="desc">查看历史记录</div>
+        </div>
+        <div class="card menu-card <?php echo $weekendCompleted ? 'weekend-completed' : ($weekendClickable ? 'weekend-active' : 'disabled'); ?>" id="weekendCard" onclick="handleWeekendClick()">
+            <div class="icon">
+                <?php if ($weekendCompleted): ?>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <?php else: ?>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--old-paper)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
+                <?php endif; ?>
+            </div>
+            <div class="title">周末大礼包</div>
+            <div class="desc" id="weekendDesc">
+                <?php
+                if ($weekendCompleted) { echo '已完成'; }
+                else switch($weekendState) {
+                    case 'weekdays': echo '还没开放'; break;
+                    case 'active': echo '给我加练'; break;
+                    case 'lazy': echo '真懒'; break;
+                }
+                ?>
+            </div>
+        </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('settings.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+            <div class="title">设置</div>
+            <div class="desc">听写参数配置</div>
+        </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('history_book.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/><path d="M12 14v3"/></svg></div>
+            <div class="title">班级史记</div>
+            <div class="desc">记录班级日常</div>
+        </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('gallery.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+            <div class="title">班级图集</div>
+            <div class="desc">图片记录与画廊</div>
         </div>
     </div>
-    <div class="main-content">
-        <div class="welcome">
-            <h2>欢迎来到<?php echo htmlspecialchars($class['name']); ?></h2>
-            <p>选择下方功能开始学习</p>
-        </div>
-        <div class="search-section">
-            <div class="search-row">
-                <input type="text" id="searchInput" placeholder="搜索单词或释义..." onkeydown="if(event.key==='Enter')doSearch()" onfocus="onSearchFocus()">
-                <button onclick="doSearch()">搜索</button>
+
+    <div class="card" style="padding:28px;">
+        <div class="stats">
+            <div style="text-align:center;">
+                <div class="stat-value"><?php echo $totalWords; ?></div>
+                <div class="stat-label">单词库总数</div>
             </div>
-            <div class="search-results" id="searchResults"></div>
-        </div>
-        <div class="menu-grid">
-            <div class="menu-card" onclick="showOkOverlayThen('words.php?id=<?php echo $classId; ?>')">
-                <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
-                <div class="title">单词库</div>
-                <div class="desc">管理班级单词</div>
-            </div>
-            <div class="menu-card" onclick="showOkOverlayThen('task.php?id=<?php echo $classId; ?>')">
-                <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
-                <div class="title">默写任务</div>
-                <div class="desc">进行单词默写</div>
-            </div>
-            <div class="menu-card" onclick="showOkOverlayThen('history.php?id=<?php echo $classId; ?>')">
-                <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-                <div class="title">默写记录</div>
-                <div class="desc">查看历史记录</div>
-            </div>
-            <div class="menu-card <?php echo $weekendCompleted ? 'weekend-completed' : ($weekendClickable ? 'weekend-active' : 'disabled'); ?>" id="weekendCard" onclick="handleWeekendClick()">
-                <div class="icon">
-                    <?php if ($weekendCompleted): ?>
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#52c41a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    <?php elseif ($weekendState === 'weekdays'): ?>
-                        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><text x="50%" y="55%" text-anchor="middle" dominant-baseline="central" font-size="40" font-weight="bold" fill="#ccc" font-family="sans-serif">?</text></svg>
-                    <?php else: ?>
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
-                    <?php endif; ?>
-                </div>
-                <div class="title">周末大礼包</div>
-                <div class="desc" id="weekendDesc">
-                    <?php
-                    if ($weekendCompleted) { echo '✅ 已完成'; }
-                    else switch($weekendState) {
-                        case 'weekdays': echo '还没开放'; break;
-                        case 'active': echo '给我加练'; break;
-                        case 'lazy': echo '真懒'; break;
-                    }
-                    ?>
-                </div>
-            </div>
-            <div class="menu-card" onclick="showOkOverlayThen('settings.php?id=<?php echo $classId; ?>')">
-                <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
-                <div class="title">设置</div>
-                <div class="desc">听写参数配置</div>
-            </div>
-            <div class="menu-card" onclick="showOkOverlayThen('history_book.php?id=<?php echo $classId; ?>')">
-                <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/><path d="M12 14v3"/></svg></div>
-                <div class="title">班级史记</div>
-                <div class="desc">记录班级日常</div>
-            </div>
-            <div class="menu-card" onclick="showOkOverlayThen('gallery.php?id=<?php echo $classId; ?>')">
-                <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
-                <div class="title">班级图集</div>
-                <div class="desc">图片记录与画廊</div>
+            <div style="text-align:center;">
+                <div class="stat-value"><?php echo $uniqueWordCount; ?></div>
+                <div class="stat-label">已默写单词数</div>
             </div>
         </div>
-        <div class="stats-quote">
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-value"><?php echo $totalWords; ?></div>
-                    <div class="stat-label">单词库总数</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value"><?php echo $uniqueWordCount; ?></div>
-                    <div class="stat-label">已默写单词数</div>
-                </div>
-            </div>
-            <div class="divider"></div>
-            <div class="quote-wrap">
-                <div class="quote" id="quoteText">"<?php echo htmlspecialchars($randomQuote); ?>" <button class="quote-translate-btn" id="translateBtn" onclick="translateQuote()">AI 翻译</button></div>
-                <div class="quote-translation" id="quoteTranslation" style="display:none;"></div>
-            </div>
+        <div style="height:2px;background:var(--pencil);opacity:0.15;margin:20px 0;"></div>
+        <div style="position:relative;">
+            <div class="quote" id="quoteText" style="text-align:center;font-style:italic;color:#888;font-size:15px;line-height:1.7;">"<?php echo htmlspecialchars($randomQuote); ?>" <button class="btn btn-sm" id="translateBtn" onclick="translateQuote()">AI 翻译</button></div>
+            <div class="quote-translation" id="quoteTranslation" style="display:none;margin-top:10px;font-style:italic;color:var(--pencil);font-size:14px;text-align:center;"></div>
         </div>
     </div>
+</div>
 
     <script src="common.js"></script>
     <script>
@@ -543,7 +472,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'translate_quote') {
                 box.insertAdjacentHTML('beforeend', '<div style="font-size:40px;margin-bottom:14px">' + (stepIdx===0?'📚':stepIdx===1?'📖':stepIdx===2?'✏️':stepIdx===3?'📋':stepIdx===4?'🔍':'🎉') + '</div>');
                 box.insertAdjacentHTML('beforeend', '<h2 style="font-size:22px;color:#333;margin-bottom:10px">' + s.title + '</h2>');
                 box.insertAdjacentHTML('beforeend', '<p style="color:#666;font-size:14px;line-height:1.7;margin-bottom:24px">' + s.desc + '</p>');
-                box.insertAdjacentHTML('beforeend', '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">' + steps.map(function(_,i){return '<span style="width:8px;height:8px;border-radius:50%;background:'+(i===stepIdx?'#4a90d9':'#ddd')+'"></span>';}).join('') + '</div>');
+                box.insertAdjacentHTML('beforeend', '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">' + steps.map(function(_,i){return '<span style="width:8px;height:8px;border-radius:50%;background:'+(i===stepIdx?'var(--blue)':'#ddd')+'"></span>';}).join('') + '</div>');
                 const btnRow = document.createElement('div');
                 btnRow.style.cssText = 'display:flex;gap:10px';
                 if (stepIdx > 0) {
@@ -555,7 +484,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'translate_quote') {
                 }
                 const next = document.createElement('button');
                 next.textContent = stepIdx < steps.length - 1 ? '下一步' : '开始使用';
-                next.style.cssText = 'flex:1;padding:12px;background:#4a90d9;color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer;font-weight:600;box-shadow:0 4px 12px rgba(74,144,217,.25)';
+                next.style.cssText = 'flex:1;padding:12px;background:var(--pencil);color:#fff;border:none;border-radius:var(--wobbly-sm);font-size:15px;cursor:pointer;font-weight:600;box-shadow:var(--shadow-md)';
                 next.onclick = function() {
                     if (stepIdx < steps.length - 1) { stepIdx++; render(); }
                     else { overlay.remove(); localStorage.setItem('guide_done','1'); }

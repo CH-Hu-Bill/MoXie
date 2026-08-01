@@ -88,60 +88,26 @@ foreach ($classes as $id => $class) {
     ];
 }
 $csrfToken = csrfToken();
+$pageTitle = '选择班级';
+require 'inc/head.php';
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>选择班级</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #eef1f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .container { width: 90%; max-width: 560px; }
-        h1 { text-align: center; color: #333; margin-bottom: 24px; font-size: 26px; }
-        .class-list { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-        .class-item { padding: 14px 18px; border: 2px solid #e8e8e8; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s; display: flex; justify-content: space-between; align-items: center; }
-        .class-item:hover { border-color: #4a90d9; background: #f0f7ff; }
-        .class-item .name { font-size: 17px; color: #333; }
-        .class-item .arrow { color: #bbb; font-size: 18px; }
-        .empty { text-align: center; color: #999; padding: 36px; font-size: 15px; }
-        .create-section { margin-top: 16px; }
-        .create-btn { width: 100%; padding: 14px; background: #4a90d9; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; transition: background 0.15s; }
-        .create-btn:hover { background: #3a7bc8; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.45); z-index: 1000; align-items: center; justify-content: center; }
-        .modal.active { display: flex; }
-        .modal-content { background: #fff; padding: 26px; border-radius: 12px; width: 90%; max-width: 380px; }
-        .modal-title { font-size: 18px; margin-bottom: 18px; text-align: center; font-weight: bold; }
-        .modal-input { width: 100%; padding: 11px 14px; border: 2px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 14px; }
-        .modal-input:focus { outline: none; border-color: #4a90d9; }
-        .modal-btns { display: flex; gap: 10px; }
-        .modal-btns button { flex: 1; padding: 11px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
-        .modal-btns .cancel { background: #e0e0e0; color: #333; }
-        .modal-btns .submit { background: #4a90d9; color: #fff; }
-        .pw-error { color: #e53935; font-size: 13px; text-align: center; margin-top: 8px; min-height: 18px; }
-        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(51,51,51,0.9); color: #fff; padding: 10px 24px; border-radius: 20px; z-index: 5000; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
-        .toast.show { opacity: 1; }
-        .toast.success { background: #43a047; }
-        .toast.warn { background: #ff9800; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>选择班级</h1>
-        <div class="class-list">
+<body style="display:flex;align-items:center;justify-content:center;">
+    <div style="width:90%;max-width:560px;">
+        <h1 style="text-align:center;font-family:var(--font-heading);font-size:32px;margin-bottom:24px;color:var(--pencil);">选择班级</h1>
+        <div class="card" style="padding:20px;">
             <?php if (empty($classes)): ?>
-                <div class="empty">还没有班级，点击下方按钮创建</div>
+                <div class="empty-state">还没有班级，点击下方按钮创建</div>
             <?php else: ?>
                 <?php foreach ($classes as $id => $class): ?>
-                    <div class="class-item" onclick="selectClass('<?php echo $id; ?>')">
-                        <span class="name"><?php echo htmlspecialchars($class['name']); ?></span>
-                        <span class="arrow">›</span>
+                    <div class="card" style="margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:14px 18px;"
+                         onclick="selectClass('<?php echo $id; ?>')">
+                        <span style="font-family:var(--font-heading);font-size:17px;"><?php echo htmlspecialchars($class['name']); ?></span>
+                        <span style="color:var(--old-paper);font-size:20px;font-weight:700;">→</span>
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
-            <div class="create-section">
-                <button class="create-btn" onclick="document.getElementById('modal').classList.add('active')">+ 新建班级</button>
+            <div style="margin-top:16px;">
+                <button class="btn btn-primary" style="width:100%;" onclick="document.getElementById('modal').classList.add('active')">+ 新建班级</button>
             </div>
         </div>
     </div>
@@ -150,13 +116,13 @@ $csrfToken = csrfToken();
         <div class="modal-content">
             <div class="modal-title">创建新班级</div>
             <?php if (!empty($createError)): ?>
-                <div style="color:#e53935;text-align:center;margin-bottom:12px;font-size:14px;"><?php echo htmlspecialchars($createError); ?></div>
+                <div style="color:var(--red);text-align:center;margin-bottom:12px;font-size:14px;"><?php echo htmlspecialchars($createError); ?></div>
             <?php endif; ?>
             <form method="post">
                 <input type="hidden" name="action" value="create_class">
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken); ?>">
-                <input type="text" name="class_name" class="modal-input" placeholder="请输入班级名称" maxlength="30" required autofocus value="<?php echo htmlspecialchars($_POST['class_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-                <input type="password" name="class_password" class="modal-input" placeholder="设置班级口令（至少4位字母或数字）" minlength="4" pattern="[a-zA-Z0-9]+" autocomplete="new-password" required>
+                <input type="text" name="class_name" class="input" placeholder="请输入班级名称" maxlength="30" required autofocus value="<?php echo htmlspecialchars($_POST['class_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" style="margin-bottom:14px;">
+                <input type="password" name="class_password" class="input" placeholder="设置班级口令（至少4位字母或数字）" minlength="4" pattern="[a-zA-Z0-9]+" autocomplete="new-password" required style="margin-bottom:14px;">
                 <div class="modal-btns">
                     <?php if (!$hasNoClass): ?>
                         <button type="button" class="cancel" onclick="document.getElementById('modal').classList.remove('active')">取消</button>
@@ -167,13 +133,12 @@ $csrfToken = csrfToken();
         </div>
     </div>
 
-    <!-- Password Modal -->
     <div class="modal" id="pwModal">
         <div class="modal-content">
-            <div class="modal-title" id="pwModalTitle">🔒 班级口令</div>
-            <p style="text-align:center;color:#666;margin-bottom:12px;" id="pwClassName"></p>
-            <input type="password" id="pwInput" class="modal-input" placeholder="请输入班级口令" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitPassword()">
-            <div class="pw-error" id="pwError"></div>
+            <div class="modal-title" id="pwModalTitle">班级口令</div>
+            <p style="text-align:center;color:var(--pencil);margin-bottom:12px;opacity:0.7;" id="pwClassName"></p>
+            <input type="password" id="pwInput" class="input" placeholder="请输入班级口令" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitPassword()" style="margin-bottom:8px;">
+            <div style="color:var(--red);font-size:13px;text-align:center;margin-top:8px;min-height:18px;" id="pwError"></div>
             <div class="modal-btns">
                 <button type="button" class="cancel" onclick="document.getElementById('pwModal').classList.remove('active');document.getElementById('pwInput').value='';document.getElementById('pwError').textContent='';">取消</button>
                 <button type="button" class="submit" onclick="submitPassword()">确认</button>
@@ -240,7 +205,6 @@ $csrfToken = csrfToken();
             btn.disabled = false; btn.textContent = '确认';
         }
 
-        // Auto-prompt for password if redirected with need_auth
         if (pendingAutoId) {
             setTimeout(function() { showPwModal(pendingAutoId); }, 300);
         }

@@ -297,85 +297,72 @@ PROMPT;
     exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>单词库 - <?php echo htmlspecialchars($class['name']); ?></title>
-    <link rel="stylesheet" href="common.css">
-    <style>
-        body { height: 100vh; overflow: hidden; }
-        .toolbar { background: #fff; padding: 8px 16px; display: flex; gap: 10px; align-items: center; flex-shrink: 0; border-bottom: 1px solid #eee; width: 100%; }
-        .action-btn { padding: 7px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 18px; font-size: 13px; cursor: pointer; transition: background 0.15s; }
-        .action-btn:hover { background: #3a7bc8; }
-        .selection-info { color: #4a90d9; font-weight: bold; font-size: 13px; margin-left: auto; }
-        .word-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-        .word-card { border: 2.5px solid transparent; min-height: 190px; cursor: pointer; }
-        .word-card.selected { border-color: #4a90d9; background: #e8f0fb; box-shadow: 0 0 0 2px rgba(74,144,217,0.25); }
-        .word-card.highlight { animation: hl 1.5s ease-out; }
-        @keyframes hl { 0%,20%,40% { background: #fff8e1; } 100% { background: #fff; } }
-        .word-card .corner-tl { position: absolute; top: 6px; left: 6px; display: flex; align-items: center; gap: 4px; z-index: 2; }
-        .word-card .number { background: #e8e8e8; color: #777; font-size: 11px; padding: 1px 6px; border-radius: 6px; }
-        .word-card .pending-mark { width: 9px; height: 9px; background: #ff9800; border-radius: 50%; }
-        .word-card .corner-tr { position: absolute; top: 6px; right: 6px; z-index: 2; }
-        .word-card .checkbox { width: 22px; height: 22px; border: 2px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 13px; background: #fff; transition: all 0.15s; position: relative; }
-        .word-card .checkbox::after { content: ''; position: absolute; top: -11px; left: -11px; width: 44px; height: 44px; }
-        .word-card.selected .checkbox { background: #4a90d9; border-color: #4a90d9; color: #fff; }
-        .word-card .corner-bl { position: absolute; bottom: 6px; left: 6px; z-index: 2; }
-        .word-card .corner-br { position: absolute; bottom: 6px; right: 6px; display: flex; align-items: center; gap: 4px; z-index: 2; }
-        .word-card .completed-mark { width: 20px; height: 20px; background: #43a047; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; flex-shrink: 0; }
-        .word-card .completed-mark svg { display: block; }
-        .word-card .edit-btn { width: 24px; height: 24px; background: rgba(0,0,0,0.05); border: none; border-radius: 4px; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
-        .word-card:hover .edit-btn { opacity: 0.7; }
-        @media (hover: none) { .word-card .edit-btn { opacity: 0.5; } }
-        .fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; background: #4a90d9; color: #fff; border: none; border-radius: 50%; font-size: 26px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.2); z-index: 500; transition: background 0.15s; }
-        .fab:hover { background: #3a7bc8; }
-        .csv-hint { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-size: 12px; color: #666; line-height: 1.6; }
-        .csv-hint code { background: #e8e8e8; padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #333; }
-        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
-        .file-input-wrapper input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
-        .file-input-label { display: block; padding: 10px; background: #f5f5f5; border: 2px dashed #ddd; border-radius: 8px; text-align: center; color: #666; cursor: pointer; font-size: 13px; }
-        .preview-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
-        .preview-row.duplicate { background: #f5f5f5; color: #bbb; text-decoration: line-through; }
-        .preview-row.duplicate input, .preview-row.duplicate .prev-word { pointer-events: none; color: #bbb !important; }
-        .preview-row.uncertain .prev-word { color: #f44336; font-weight: bold; }
-        .prev-col { flex-shrink: 0; }
-        .prev-word { width: 100px; font-weight: bold; color: #333; word-break: break-all; }
-        .prev-meaning { flex: 1; min-width: 80px; }
-        .prev-pos { width: 80px; }
-        .prev-actions { width: 50px; text-align: right; }
-        .mini-btn { width: 24px; height: 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }
-        .mini-btn.warn { background: #fff3e0; color: #ff9800; }
-        .mini-btn.del { background: #ffebee; color: #f44336; }
-        .mini-btn.ai-fill { background: #e8f0fb; color: #4a90d9; font-size: 13px; width: auto; padding: 0 6px; }
-        .mini-btn.ai-fill:hover { background: #d0e3f7; }
-        .prev-col.prev-word { position: relative; display: flex; align-items: center; gap: 4px; width: 120px; }
-        .prev-col.prev-word input { width: 80px; flex-shrink: 1; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 500px) {
-            .toolbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
-            .action-btn { padding: 6px 12px; font-size: 12px; }
-            .selection-info { margin-left: 0; width: 100%; text-align: right; }
-        }
-    </style>
+<?php $pageTitle = '单词库'; require 'inc/head.php'; ?>
+<style>
+    body { height: 100vh; overflow: hidden; }
+    .word-card { cursor: pointer; }
+    .word-card.selected { border-color: var(--blue); background: #e8f0fb; box-shadow: 0 0 0 2px rgba(45,93,161,0.25); }
+    .word-card.highlight { animation: hl 1.5s ease-out; }
+    @keyframes hl { 0%,20%,40% { background: var(--post-it); } 100% { background: var(--white); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .word-card .corner-tl { position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 4px; z-index: 2; }
+    .word-card .number { background: var(--old-paper); color: #777; font-size: 11px; padding: 2px 8px; border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); font-family: var(--font-heading); }
+    .word-card .pending-mark { width: 9px; height: 9px; background: #ff9800; border-radius: 50%; border: 1px solid var(--pencil); }
+    .word-card .corner-tr { position: absolute; top: 8px; right: 8px; z-index: 2; }
+    .word-card .checkbox { width: 22px; height: 22px; border: 2px solid var(--pencil); border-radius: var(--wobbly-sm); display: flex; align-items: center; justify-content: center; font-size: 13px; background: var(--white); transition: all 0.15s; position: relative; }
+    .word-card .checkbox::after { content: ''; position: absolute; top: -11px; left: -11px; width: 44px; height: 44px; }
+    .word-card.selected .checkbox { background: var(--blue); border-color: var(--blue); color: var(--white); }
+    .word-card .corner-bl { position: absolute; bottom: 8px; left: 8px; z-index: 2; }
+    .word-card .corner-br { position: absolute; bottom: 8px; right: 8px; display: flex; align-items: center; gap: 4px; z-index: 2; }
+    .word-card .completed-mark { width: 20px; height: 20px; background: var(--blue); border-radius: 50%; border: 1.5px solid var(--pencil); display: flex; align-items: center; justify-content: center; color: var(--white); font-size: 11px; flex-shrink: 0; }
+    .word-card .completed-mark svg { display: block; }
+    .word-card .edit-btn { width: 24px; height: 24px; background: rgba(0,0,0,0.05); border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+    .word-card:hover .edit-btn { opacity: 0.7; }
+    @media (hover: none) { .word-card .edit-btn { opacity: 0.5; } }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-shrink: 0; width: 100%; padding: 8px 16px; border-bottom: 2px solid var(--pencil); }
+    .selection-info { margin-left: auto; font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--blue); }
+    .fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border: 2px solid var(--pencil); border-radius: var(--wobbly); font-size: 26px; cursor: pointer; z-index: 500; display: flex; align-items: center; justify-content: center; background: var(--pencil); color: var(--white); box-shadow: var(--shadow-md); transition: transform 0.1s, box-shadow 0.1s; }
+    .fab:active { transform: translate(3px, 3px); box-shadow: none; }
+    .csv-hint { background: var(--paper); border: 2px solid var(--pencil); border-radius: var(--wobbly-sm); padding: 12px; margin-bottom: 12px; font-size: 12px; color: var(--pencil); line-height: 1.6; }
+    .csv-hint code { background: var(--old-paper); padding: 1px 6px; border-radius: var(--wobbly-sm); font-size: 12px; color: var(--pencil); font-family: var(--font-mono); }
+    .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+    .file-input-wrapper input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+    .file-input-label { display: block; padding: 10px; background: var(--white); border: 2px dashed var(--pencil); border-radius: var(--wobbly-sm); text-align: center; color: var(--pencil); cursor: pointer; font-size: 13px; font-family: var(--font-heading); }
+    .preview-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1.5px solid var(--old-paper); font-size: 13px; }
+    .preview-row.duplicate { background: var(--old-paper); color: #bbb; text-decoration: line-through; }
+    .preview-row.duplicate input, .preview-row.duplicate .prev-word { pointer-events: none; color: #bbb !important; }
+    .preview-row.uncertain .prev-word { color: var(--red); font-weight: bold; }
+    .prev-col { flex-shrink: 0; }
+    .prev-word { width: 100px; font-weight: bold; color: var(--pencil); word-break: break-all; }
+    .prev-meaning { flex: 1; min-width: 80px; }
+    .prev-pos { width: 80px; }
+    .prev-actions { width: 50px; text-align: right; }
+    .mini-btn { width: 24px; height: 24px; border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }
+    .mini-btn.warn { background: var(--post-it); color: var(--pencil); }
+    .mini-btn.del { background: #ffebee; color: var(--red); border-color: var(--red); }
+    .mini-btn.ai-fill { background: #e8f0fb; color: var(--blue); font-size: 13px; width: auto; padding: 0 6px; }
+    .mini-btn.ai-fill:hover { background: #d0e3f7; }
+    .prev-col.prev-word { position: relative; display: flex; align-items: center; gap: 4px; width: 120px; }
+    .prev-col.prev-word input { width: 80px; flex-shrink: 1; }
+    @media (max-width: 500px) {
+        .toolbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+        .selection-info { margin-left: 0; width: 100%; text-align: right; }
+    }
+</style>
 </head>
 <body>
     <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
-    <div class="status-bar">
-        <div class="left">
-            <button class="back-btn" onclick="showOkOverlayThen('main.php?id=<?php echo $classId; ?>')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <span style="font-size:15px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
-        </div>
-        <div class="title">单词库</div>
-        <div class="right" style="display:flex;align-items:center;gap:10px;">
-            <button class="action-btn" style="background:#43a047;padding:7px 14px;font-size:13px;" onclick="showFollowModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>
-        </div>
-    </div>
+    <?php
+    $backUrl = 'main.php?id=' . $classId;
+    $className = $class['name'];
+    $pageTitle = '单词库';
+    $rightContent = '<button class="btn btn-sm btn-primary" onclick="showFollowModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>';
+    require 'inc/header.php';
+    ?>
     <div class="toolbar">
-        <button class="action-btn" onclick="showImportModal()">导入CSV</button>
-        <button class="action-btn" onclick="exportCsv()">导出CSV</button>
-        <button class="action-btn" onclick="createTask()">创建默写任务</button>
+        <button class="btn btn-sm btn-secondary" onclick="showImportModal()">导入CSV</button>
+        <button class="btn btn-sm btn-secondary" onclick="exportCsv()">导出CSV</button>
+        <button class="btn btn-sm btn-primary" onclick="createTask()">创建默写任务</button>
         <span class="selection-info" id="selectionInfo">已选 <span id="selectedCount">0</span> 个</span>
     </div>
     <div class="content" id="contentWrap">
@@ -469,11 +456,11 @@ PROMPT;
             <div class="modal-title">创建默写任务</div>
             <div class="form-group">
                 <label>日期</label>
-                <input type="date" id="taskDate" value="<?php echo date('Y-m-d'); ?>" style="padding:9px 12px;border:2px solid #ddd;border-radius:8px;font-size:15px;width:100%;">
+                <input type="date" id="taskDate" value="<?php echo date('Y-m-d'); ?>" class="input">
             </div>
             <div class="form-group">
                 <label>任务标签（可选，如"第1次""上午"等）</label>
-                <input type="text" id="taskLabel" placeholder="留空自动生成编号" style="padding:9px 12px;border:2px solid #ddd;border-radius:8px;font-size:15px;width:100%;">
+                <input type="text" id="taskLabel" placeholder="留空自动生成编号" class="input">
             </div>
             <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('taskDateModal')">取消</button><button type="button" class="submit" onclick="confirmCreateTask()">确认创建</button></div>
         </div>
@@ -485,7 +472,7 @@ PROMPT;
             <div class="modal-title">批量添加单词</div>
             <div class="form-group">
                 <label>每行一个单词，可粘贴大量单词</label>
-                <textarea id="batchTextarea" rows="10" placeholder="apple&#10;book&#10;computer&#10;..." style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;font-family:inherit;"></textarea>
+                <textarea id="batchTextarea" rows="10" placeholder="apple&#10;book&#10;computer&#10;..." class="textarea"></textarea>
             </div>
             <div class="modal-btns">
                 <button type="button" class="cancel" onclick="closeModal('batchModal')">取消</button>
@@ -503,7 +490,7 @@ PROMPT;
             <div class="modal-title">预览与确认 (<span id="previewCount">0</span> 个单词)</div>
             <div id="previewList" style="max-height:50vh;overflow-y:auto;margin-bottom:12px;"></div>
             <div style="color:#999;font-size:12px;margin-bottom:8px;">
-                <span style="color:#f44336;">■</span> 不确定的单词 &nbsp;
+                <span style="color:var(--red);">■</span> 不确定的单词 &nbsp;
                 <span style="color:#bbb;text-decoration:line-through;">灰色删除线</span> 已存在 &nbsp;
                 <span>✨</span> 修改英文后点击可AI补全
             </div>
@@ -521,18 +508,18 @@ PROMPT;
             <div class="modal-title">跟读设置</div>
             <div class="form-group">
                 <label>单词范围</label>
-                <select id="followScope" style="width:100%;padding:9px 12px;border:2px solid #ddd;border-radius:8px;font-size:15px;">
+                <select id="followScope" class="input">
                     <option value="all">全部单词</option>
                     <option value="selected" id="followSelectedOpt">已选单词</option>
                 </select>
             </div>
             <div class="form-group">
                 <label>每个单词朗读次数</label>
-                <input type="number" id="followRepeat" value="<?php echo $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" style="width:100%;">
+                <input type="number" id="followRepeat" value="<?php echo $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" class="input">
             </div>
             <div class="form-group">
                 <label>缓冲时间（朗读完单词后的额外等待，秒）</label>
-                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" style="width:100%;">
+                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" class="input">
             </div>
             <div class="modal-btns">
                 <button type="button" class="cancel" onclick="closeFollowModal()">取消</button>
@@ -543,26 +530,26 @@ PROMPT;
 
     <!-- Follow-along Player Overlay (auto-collapses to bubble after 3s) -->
     <div id="followPlayer" style="display:none;position:fixed;bottom:100px;left:16px;right:16px;z-index:700;max-width:500px;margin:0 auto;">
-        <div style="background:#fff;border:2px solid #4a90d9;border-radius:14px;padding:14px 18px;box-shadow:0 4px 16px rgba(0,0,0,0.12);">
+        <div style="background:var(--white);border:2px solid var(--blue);border-radius:var(--wobbly);padding:14px 18px;box-shadow:var(--shadow-md);">
             <div style="display:flex;align-items:center;gap:14px;">
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:11px;color:#999;margin-bottom:2px;">跟读中 <span id="followProgress">0/0</span></div>
-                    <div id="followWordDisplay" style="font-size:20px;font-weight:bold;color:#4a90d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">准备中...</div>
+                    <div id="followWordDisplay" style="font-size:20px;font-weight:bold;color:var(--blue);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">准备中...</div>
                 </div>
                 <div style="display:flex;gap:8px;flex-shrink:0;">
-                    <button id="followPauseBtn" onclick="toggleFollowPause()" style="padding:10px 20px;background:#ff9800;color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer;">
+                    <button id="followPauseBtn" onclick="toggleFollowPause()" class="btn btn-sm" style="background:#ff9800;color:var(--white);border-color:#ff9800;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-2px;margin-right:4px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>暂停
                     </button>
-                    <button onclick="stopFollow()" style="padding:10px 20px;background:#e53935;color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>停止
+                    <button onclick="stopFollow()" class="btn btn-sm btn-danger">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>停止
                     </button>
                 </div>
             </div>
         </div>
     </div>
     <!-- Follow-along Bubble (collapsed state, bottom-left corner) -->
-    <div id="followBubble" onclick="expandFollowBubble()" style="display:none;position:fixed;bottom:24px;left:20px;width:52px;height:52px;background:linear-gradient(135deg,#4a90d9,#6aa8f0);border-radius:50%;z-index:702;cursor:pointer;box-shadow:0 3px 14px rgba(74,144,217,0.4);animation:followBubblePulse 2s ease-in-out infinite;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.3);">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+    <div id="followBubble" onclick="expandFollowBubble()" style="display:none;position:fixed;bottom:24px;left:20px;width:52px;height:52px;background:var(--pencil);border-radius:var(--wobbly);z-index:702;cursor:pointer;box-shadow:var(--shadow-md);animation:followBubblePulse 2s ease-in-out infinite;align-items:center;justify-content:center;border:2px solid var(--pencil);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--white)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
     </div>
 
     <form id="taskForm" style="display:none;">
@@ -631,7 +618,7 @@ PROMPT;
                 // Word: editable input + AI button
                 html += '<div class="prev-col prev-word">';
                 if (!isDuplicate) {
-                    html += '<input type="text" id="prevWord' + idx + '" value="' + escHtml(item.word) + '" onchange="previewData[' + idx + '].word=this.value" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:13px;' + (isUncertain ? 'border-color:#f44336;' : '') + '">';
+                    html += '<input type="text" id="prevWord' + idx + '" value="' + escHtml(item.word) + '" onchange="previewData[' + idx + '].word=this.value" style="width:100%;padding:4px 6px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:13px;' + (isUncertain ? 'border-color:var(--red);' : '') + '">';
                     html += '<button class="mini-btn ai-fill" id="aiBtn' + idx + '" onclick="aiFillWord(' + idx + ')" title="AI 补全释义和词性">✨</button>';
                 } else {
                     html += '<span style="color:#999;">' + escHtml(item.word) + '</span>';
@@ -639,14 +626,14 @@ PROMPT;
                 html += '</div>';
                 html += '<div class="prev-col prev-meaning">';
                 if (!isDuplicate) {
-                    html += '<input type="text" id="prevMeaning' + idx + '" value="' + escHtml(item.meaning) + '" onchange="previewData[' + idx + '].meaning=this.value" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">';
+                    html += '<input type="text" id="prevMeaning' + idx + '" value="' + escHtml(item.meaning) + '" onchange="previewData[' + idx + '].meaning=this.value" style="width:100%;padding:4px 6px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:13px;">';
                 } else {
                     html += '<span style="color:#999;">' + escHtml(item.meaning) + '</span>';
                 }
                 html += '</div>';
                 html += '<div class="prev-col prev-pos">';
                 if (!isDuplicate) {
-                    html += '<input type="text" id="prevPos' + idx + '" value="' + escHtml(item.pos) + '" onchange="previewData[' + idx + '].pos=this.value" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">';
+                    html += '<input type="text" id="prevPos' + idx + '" value="' + escHtml(item.pos) + '" onchange="previewData[' + idx + '].pos=this.value" style="width:100%;padding:4px 6px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:13px;">';
                 } else {
                     html += '<span style="color:#999;">' + escHtml(item.pos) + '</span>';
                 }
@@ -691,9 +678,9 @@ PROMPT;
                     if (posInput) posInput.value = d.pos;
                     // Update word input border color based on uncertain flag
                     if (d.uncertain) {
-                        wordInput.style.borderColor = '#f44336';
+                        wordInput.style.borderColor = 'var(--red)';
                     } else {
-                        wordInput.style.borderColor = '#4caf50';
+                        wordInput.style.borderColor = 'var(--blue)';
                     }
                     if (d.exists) {
                         showToast('该单词已存在于单词库中', '');
@@ -750,7 +737,7 @@ PROMPT;
                 return (w.word||'').toLowerCase().includes(q) || (w.meaning||'').toLowerCase().includes(q);
             }) : wordsArray;
             if (searchQuery) {
-                html += '<div style="padding:10px 14px;background:#e8f0fb;border-radius:8px;margin-bottom:10px;font-size:14px;color:#4a90d9;">搜索 "' + escHtml(searchQuery) + '" 匹配 ' + list.length + ' 个单词 <a href="words.php?id=' + classId + '" style="color:#e53935;margin-left:8px;text-decoration:none;">×清除</a></div>';
+                html += '<div style="padding:10px 14px;background:var(--white);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);margin-bottom:10px;font-size:14px;color:var(--blue);">搜索 "' + escHtml(searchQuery) + '" 匹配 ' + list.length + ' 个单词 <a href="words.php?id=' + classId + '" style="color:var(--red);margin-left:8px;text-decoration:none;">×清除</a></div>';
             }
             list.forEach((w, idx) => {
                 const wid = w['id'];
@@ -1004,7 +991,7 @@ PROMPT;
                 followPaused = true;
                 clearTimeout(followCollapseTimer);
                 btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-2px;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>继续';
-                btn.style.background = '#4a90d9';
+                btn.style.background = 'var(--blue)';
             }
         }
         function stopFollow() {

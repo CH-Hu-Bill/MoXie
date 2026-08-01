@@ -65,98 +65,40 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
     echo json_encode(['success' => true]); exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>班级图集 - <?php echo htmlspecialchars($class['name']); ?></title>
-<link rel="stylesheet" href="common.css">
-<style>
-:root { --bg: #f5f0eb; --card: #fff; --primary: #5b7fff; --text: #3d3d3d; --muted: #9c9c9c; --border: #e8e3dc; --accent: #ff6b6b; }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; font-family:inherit; }
-.status-bar { display:flex; align-items:center; justify-content:space-between; padding:8px 20px; background:var(--card); border-bottom:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); position:sticky; top:0; z-index:100; }
-.status-bar .left { display:flex; align-items:center; gap:10px; }
-.back-btn { background:none; border:none; cursor:pointer; padding:4px; color:#666; border-radius:8px; display:flex; align-items:center; }
-.back-btn:hover { background:#f0f0f0; }
-.main-content { flex:1; max-width:1100px; margin:24px auto; padding:0 20px; width:100%; }
-
-/* Upload area */
-.upload-card { background:var(--card); border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 2px 16px rgba(0,0,0,0.05); }
-.upload-card h3 { font-size:16px; margin-bottom:16px; color:var(--text); }
-.upload-form { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
-.upload-form .file-area { flex:1; min-width:200px; }
-.upload-form input[type="file"] { width:100%; padding:10px; border:2px dashed var(--border); border-radius:10px; cursor:pointer; font-size:13px; background:#fafaf8; }
-.upload-form .desc-area { flex:2; min-width:250px; }
-.upload-form input[type="text"] { width:100%; padding:10px 14px; border:2px solid var(--border); border-radius:10px; font-size:14px; outline:none; background:#fafaf8; }
-.upload-form input[type="text"]:focus { border-color:var(--primary); }
-.upload-form button { padding:10px 24px; background:var(--primary); color:#fff; border:none; border-radius:10px; font-size:14px; cursor:pointer; font-weight:600; white-space:nowrap; transition:all .15s; }
-.upload-form button:hover { background:#4a6ae0; }
-.upload-form button:disabled { opacity:.6; pointer-events:none; }
-
-/* Gallery grid */
-.gallery-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:20px; }
-.gallery-card { background:var(--card); border-radius:14px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.05); transition:all .2s; cursor:pointer; }
-.gallery-card:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,0.1); }
-.gallery-card .img-wrap { width:100%; aspect-ratio:4/3; overflow:hidden; background:#f0f0f0; }
-.gallery-card .img-wrap img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
-.gallery-card:hover .img-wrap img { transform:scale(1.05); }
-.gallery-card .info { padding:14px 16px; }
-.gallery-card .desc { font-size:14px; line-height:1.6; color:var(--text); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-.gallery-card .meta { font-size:12px; color:var(--muted); margin-top:8px; display:flex; justify-content:space-between; align-items:center; }
-.gallery-card .meta .date { display:flex; align-items:center; gap:4px; }
-.gallery-card .btn-del { font-size:11px; color:#ccc; border:none; background:none; cursor:pointer; padding:2px 6px; border-radius:4px; }
-.gallery-card .btn-del:hover { color:var(--accent); background:#fff0f0; }
-
-/* Lightbox */
-.lightbox { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:5000; align-items:center; justify-content:center; }
-.lightbox.active { display:flex; }
-.lightbox img { max-width:92vw; max-height:80vh; border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,0.3); }
-.lightbox .lb-desc { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); color:#fff; font-size:15px; text-align:center; max-width:600px; padding:12px 24px; background:rgba(0,0,0,0.5); border-radius:10px; }
-.lightbox .lb-close { position:fixed; top:20px; right:20px; color:#fff; font-size:32px; cursor:pointer; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:rgba(255,255,255,0.15); border:none; }
-.lightbox .lb-close:hover { background:rgba(255,255,255,0.3); }
-
-@media(max-width:600px) { .upload-form { flex-direction:column; } .gallery-grid { grid-template-columns:1fr; } }
-</style>
-</head>
+<?php $pageTitle = '班级图集'; require 'inc/head.php'; ?>
 <body>
 <input type="hidden" id="csrfToken" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
 
-<div class="status-bar">
-    <div class="left">
-        <button class="back-btn" onclick="showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <span style="font-size:15px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
-    </div>
-    <div style="font-size:17px;font-weight:bold;">📷 班级图集</div>
-    <div></div>
-</div>
+<?php
+$backUrl = 'main.php?id=' . $classId;
+$className = $class['name'];
+$pageTitle = '班级图集';
+require 'inc/header.php';
+?>
 
-<div class="main-content">
-    <div class="upload-card">
-        <h3>📷 上传图片</h3>
-        <div class="upload-form">
-            <div class="file-area"><input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp"></div>
-            <div class="desc-area"><input type="text" id="galleryDesc" placeholder="写一段关于这张图片的话…" maxlength="500"></div>
-            <button onclick="uploadGallery()" id="uploadBtn">上传</button>
+<div class="content">
+    <div class="card mb-4">
+        <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);">📷 上传图片</h3>
+        <div class="upload-form" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:200px;"><input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp" class="input" style="border-style:dashed;"></div>
+            <div style="flex:2;min-width:250px;"><input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片的话…" maxlength="500"></div>
+            <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
         </div>
     </div>
 
-    <div style="background:var(--card);border-radius:14px;padding:14px 20px;margin-bottom:20px;font-size:13px;color:var(--muted);box-shadow:0 2px 12px rgba(0,0,0,0.04);">
-💡 公开 API：<code style="background:#f0f4ff;padding:2px 8px;border-radius:4px;font-size:12px;">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，在 settings.json 中设置 <code>gallery_api_key_<?php echo htmlspecialchars($classId); ?></code> 即可启用密钥保护，调用时加 <code>&apikey=你的密钥</code>
-</div>
+    <div class="card mb-4" style="font-size:13px;color:#888;">
+💡 公开 API：<code class="tag">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，在 settings.json 中设置 <code class="tag">gallery_api_key_<?php echo htmlspecialchars($classId); ?></code> 即可启用密钥保护，调用时加 <code class="tag">&apikey=你的密钥</code>
+    </div>
 
-<div class="gallery-grid" id="galleryGrid"></div>
+    <div class="gallery-grid" id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;"></div>
     <div class="empty-state" id="emptyState" style="display:none"><p>还没有图片，上传第一张吧 📷</p></div>
 </div>
 
 <!-- Lightbox -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-    <button class="lb-close" onclick="closeLightbox()">✕</button>
-    <img id="lbImg" src="" alt="">
-    <div class="lb-desc" id="lbDesc"></div>
+<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;">
+    <button class="btn" onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;width:44px;height:44px;border-radius:50%;font-size:20px;">✕</button>
+    <img id="lbImg" src="" alt="" style="max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
+    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);"></div>
 </div>
 
 <script src="common.js"></script>
@@ -169,15 +111,15 @@ function renderGallery() {
     var empty = document.getElementById('emptyState');
     if (!galleryData.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
     empty.style.display = 'none';
-    grid.innerHTML = galleryData.map(function(item) {
+    grid.innerHTML = galleryData.map(function(item, idx) {
         var url = 'upload.php?class_id=' + classId + '&file=' + item.image;
         var dateText = formatDate(item.uploaded_at);
-        return '<div class="gallery-card" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')">'
-            + '<div class="img-wrap"><img src="' + url + '" alt="" loading="lazy"></div>'
-            + '<div class="info">'
-            + '<div class="desc">' + escapeHtml(item.description) + '</div>'
-            + '<div class="meta"><span class="date">📅 ' + dateText + '</span>'
-            + '<button class="btn-del" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button>'
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
+            + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;"><img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;"></div>'
+            + '<div class="info" style="padding:14px 16px;">'
+            + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'
+            + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date">📅 ' + dateText + '</span>'
+            + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button>'
             + '</div></div></div>';
     }).join('');
 }

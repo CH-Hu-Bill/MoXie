@@ -52,63 +52,18 @@ if ($selectedTaskId && isset($tasks[$selectedTaskId])) { $selectedTask = $tasks[
 $wordMap = [];
 foreach ($words as $w) { $wordMap[$w['id']] = $w; }
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>默写记录 - <?php echo htmlspecialchars($class['name']); ?></title>
-    <link rel="stylesheet" href="common.css">
-    <style>
-        body { height: 100vh; overflow: hidden; }
-        .content { display: flex; overflow: hidden; max-width: none !important; padding: 0 !important; }
-        .sidebar { width: 260px; background: #fafbfc; border-right: 1px solid #e8e8e8; overflow-y: auto; flex-shrink: 0; box-shadow: 2px 0 12px rgba(0,0,0,0.04); }
-        .sidebar-header { padding: 14px 18px; border-bottom: 1px solid #e8e8e8; font-size: 13px; color: #888; font-weight: 600; letter-spacing: 0.5px; background: #fff; }
-        .task-item { padding: 14px 18px; border-bottom: 1px solid #eef0f2; cursor: pointer; transition: all 0.15s; position: relative; }
-        .task-item:hover { background: #f0f4f8; }
-        .task-item.active { background: #eaf2fd; border-left: 3px solid #4a90d9; margin-left: 0; }
-        .task-item .date { font-size: 14px; color: #2a2a2a; margin-bottom: 5px; font-weight: 500; }
-        .task-item .date .label-tag { display: inline-block; font-size: 10px; color: #4a90d9; background: #e8f0fb; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: middle; font-weight: 500; }
-        .task-item.cancelled .date { color: #b0b0b0; text-decoration: line-through; }
-        .task-item .status { font-size: 12px; display: flex; align-items: center; gap: 4px; }
-        .task-item .status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-        .task-item .status.completed { color: #43a047; }
-        .task-item .status.completed::before { background: #43a047; }
-        .task-item .status.cancelled { color: #999; }
-        .task-item .status.cancelled::before { background: #ccc; }
-        .main-panel { flex: 1; overflow-y: auto; padding: 18px; }
-        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #eee; }
-        .task-header .date { font-size: 20px; font-weight: bold; color: #333; }
-        .task-header .status { padding: 4px 12px; border-radius: 16px; font-size: 13px; }
-        .task-header .status.completed { background: #e8f5e9; color: #43a047; }
-        .task-header .status.cancelled { background: #f5f5f5; color: #999; }
-        .word-card.cancelled { background: #f5f5f5; }
-        .cancel-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg); background: rgba(0,0,0,0.4); color: #fff; padding: 8px 22px; font-size: 20px; border-radius: 6px; z-index: 10; pointer-events: none; }
-        .recreate-btn { display: block; width: 100%; padding: 12px; background: #4a90d9; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-top: 18px; transition: background 0.15s; }
-        .recreate-btn:hover { background: #3a7bc8; }
-        @media (max-width: 600px) {
-            .content { flex-direction: column; }
-            .sidebar { width: 100%; max-height: 140px; border-right: none; border-bottom: 1px solid #ddd; display: flex; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; flex-shrink: 0; box-shadow: none; }
-            .sidebar-header { display: none; }
-            .task-item { flex-shrink: 0; white-space: nowrap; padding: 10px 14px; border-bottom: none; border-right: 1px solid #f0f0f0; }
-            .task-item:last-child { border-right: none; }
-            .main-panel { flex: 1; overflow-y: auto; }
-        }
-    </style>
-</head>
+<?php $pageTitle = '默写记录'; require 'inc/head.php'; ?>
 <body>
     <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
-    <div class="status-bar">
-        <div class="left">
-            <button class="back-btn" onclick="showOkOverlayThen('main.php?id=<?php echo $classId; ?>')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <span style="font-size:15px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
-        </div>
-        <div class="title">默写记录</div>
-        <div class="right"></div>
-    </div>
-    <div class="content">
+    <?php
+    $backUrl = 'main.php?id=' . $classId;
+    $className = $class['name'];
+    $pageTitle = '默写记录';
+    require 'inc/header.php';
+    ?>
+    <div class="content content-split">
         <?php if ($searchQ !== ''): ?>
-        <div style="padding:10px 16px;background:#e8f0fb;color:#4a90d9;font-size:14px;border-radius:8px;margin-bottom:8px;">搜索 "<?php echo htmlspecialchars($searchQ); ?>" 的历史记录 <a href="history.php?id=<?php echo $classId; ?>" style="color:#e53935;text-decoration:none;margin-left:8px;">×清除</a></div>
+        <div class="card-post-it mb-2" style="font-size:14px;">搜索 "<?php echo htmlspecialchars($searchQ); ?>" 的历史记录 <a href="history.php?id=<?php echo $classId; ?>" style="color:var(--red);text-decoration:none;margin-left:8px;">×清除</a></div>
         <?php endif; ?>
         <div class="sidebar">
             <div class="sidebar-header">历史记录 (<?php echo count($completedTasks); ?>条)</div>
@@ -128,7 +83,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
                 <div class="empty-state"><div class="icon"><svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><div>选择一个记录查看详情</div></div>
             <?php else: ?>
                 <div class="task-header">
-                    <div class="date"><?php echo $selectedTask['date']; ?><?php if (!empty($selectedTask['label'])): ?> <span style="font-size:13px;color:#4a90d9;background:#e8f0fb;padding:2px 10px;border-radius:12px;"><?php echo htmlspecialchars($selectedTask['label']); ?></span><?php endif; ?></div>
+                    <div class="date"><?php echo $selectedTask['date']; ?><?php if (!empty($selectedTask['label'])): ?> <span class="tag"><?php echo htmlspecialchars($selectedTask['label']); ?></span><?php endif; ?></div>
                     <div class="status <?php echo $selectedTask['status']; ?>"><?php echo $selectedTask['status'] === 'completed' ? '已完成' : '已取消'; ?></div>
                 </div>
                 <div class="word-grid">
@@ -151,7 +106,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
                     <?php endforeach; ?>
                 </div>
                 <?php if ($selectedTask['status'] === 'completed' || $selectedTask['status'] === 'cancelled'): ?>
-                    <button class="recreate-btn" onclick="recreateTask()">用这些单词重新创建任务</button>
+                    <button class="btn btn-primary mt-4" style="width:100%;" onclick="recreateTask()">用这些单词重新创建任务</button>
                 <?php endif; ?>
             <?php endif; ?>
         </div>

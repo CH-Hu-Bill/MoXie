@@ -47,304 +47,127 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
     echo json_encode(['success' => true, 'entry' => $entry], JSON_UNESCAPED_UNICODE); exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>班级史记 - <?php echo htmlspecialchars($class['name']); ?></title>
-<link rel="stylesheet" href="common.css">
+<?php $pageTitle = '班级史记'; require 'inc/head.php'; ?>
 <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.min.js"></script>
 <style>
-:root {
-    --bg: #f5f0eb;
-    --card: #fff;
-    --primary: #5b7fff;
-    --text: #3d3d3d;
-    --muted: #9c9c9c;
-    --border: #e8e3dc;
-    --accent: #ff6b6b;
-    --tag-bg: #fff3e0;
-    --tag-color: #e67e22;
-}
-* { margin:0; padding:0; box-sizing:border-box; }
-body {
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex; flex-direction: column;
-    background-image:
-        radial-gradient(ellipse at 20% 20%, rgba(91,127,255,0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(255,107,107,0.04) 0%, transparent 50%);
-}
-.status-bar {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:10px 20px; background:var(--card); border-bottom:1px solid var(--border);
-    box-shadow:0 1px 4px rgba(0,0,0,0.04); position:sticky; top:0; z-index:100;
-}
-.status-bar .left { display:flex; align-items:center; gap:10px; }
-.status-bar .title { font-size:15px; font-weight:700; color:var(--text); }
-.status-bar .right { min-width:34px; }
-.back-btn {
-    width:34px; height:34px; background:#f5f0eb; border:none; border-radius:50%;
-    cursor:pointer; display:flex; align-items:center; justify-content:center; color:#666;
-}
-.back-btn:hover { background:#ebe4dc; }
-
-.app {
-    flex:1; width:100%; max-width:1200px; margin:20px auto;
-    display:flex; gap:24px; align-items:flex-start; padding:0 20px 24px;
-}
-
-/* 左侧 */
-.timeline {
-    width:360px; flex-shrink:0;
-    position:sticky; top:68px;
-    max-height:calc(100vh - 88px); overflow-y:auto;
-    background:var(--card); border-radius:16px;
-    box-shadow:0 2px 24px rgba(0,0,0,0.06); padding:20px;
-}
+/* ======== 班级史记布局 (Hand-Drawn) ======== */
+.app { flex:1; width:100%; max-width:1200px; margin:20px auto; display:flex; gap:24px; align-items:flex-start; padding:0 20px 24px; }
+.timeline { width:360px; flex-shrink:0; position:sticky; top:68px; max-height:calc(100vh - 88px); overflow-y:auto; }
 .timeline::-webkit-scrollbar { width:4px; }
-.timeline::-webkit-scrollbar-thumb { background:#ddd; border-radius:4px; }
-.timeline-header {
-    display:flex; justify-content:space-between; align-items:center;
-    margin-bottom:14px;
-}
+.timeline::-webkit-scrollbar-thumb { background:var(--old-paper); border-radius:4px; }
+.timeline-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
 .timeline-header h2 { font-size:18px; font-weight:700; }
-.timeline-tabs {
-    display:flex; gap:4px; margin-bottom:16px; background:#f5f5f5;
-    border-radius:10px; padding:3px;
-}
-.timeline-tab {
-    flex:1; text-align:center; padding:7px 0; border-radius:8px;
-    font-size:13px; cursor:pointer; transition:all .15s; color:var(--muted);
-    font-weight:500; border:none; background:none;
-}
-.timeline-tab.active { background:#fff; color:var(--primary); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
-.month-selector {
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom:14px; gap:8px;
-}
-.month-selector button {
-    background:none; border:none; cursor:pointer; font-size:18px; color:var(--primary);
-    padding:2px 8px; border-radius:6px;
-}
-.month-selector button:hover { background:#f0f4ff; }
-.month-selector .month-label { font-size:13px; font-weight:600; color:var(--text); }
-
+.timeline-tabs { display:flex; gap:4px; margin-bottom:16px; background:var(--old-paper); border-radius:var(--wobbly-sm); padding:3px; }
+.timeline-tab { flex:1; text-align:center; padding:7px 0; border-radius:var(--wobbly-sm); font-size:13px; cursor:pointer; transition:all .15s; color:#888; font-weight:500; border:none; background:none; font-family:var(--font-body); }
+.timeline-tab.active { background:var(--white); color:var(--blue); font-weight:600; box-shadow:var(--shadow-sm); }
+.month-selector { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:8px; }
+.month-selector button { background:none; border:none; cursor:pointer; font-size:18px; color:var(--blue); padding:2px 8px; border-radius:var(--wobbly-sm); }
+.month-selector button:hover { background:var(--old-paper); }
+.month-selector .month-label { font-size:13px; font-weight:600; color:var(--pencil); font-family:var(--font-heading); }
 .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
-.calendar-grid .day-header{font-size:11px;color:#b0a89e;padding:6px 0 8px;font-weight:600;letter-spacing:.02em}
-.calendar-grid .day-cell{
-    aspect-ratio:1;display:flex;align-items:center;justify-content:center;
-    font-size:13px;border-radius:10px;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s,transform .12s;
-    position:relative;color:var(--text);background:transparent;border:1.5px solid transparent;font-weight:500;
-}
-.calendar-grid .day-cell:not(.disabled):not(.other-month):hover{
-    background:#f3f0ea; transform:scale(1.04);
-}
-.calendar-grid .day-cell.today{
-    border-color:rgba(255,107,107,.55); color:var(--accent); font-weight:700;
-}
-.calendar-grid .day-cell.has-entry{
-    background:#eef2ff; color:var(--primary); font-weight:600;
-}
-.calendar-grid .day-cell.has-entry::after{
-    content:''; position:absolute; bottom:5px; left:50%; transform:translateX(-50%);
-    width:4px; height:4px; background:var(--primary); border-radius:50%; opacity:.9;
-}
-.calendar-grid .day-cell.has-entry.today{
-    background:#fff5f5; color:var(--accent); border-color:rgba(255,107,107,.55);
-}
-.calendar-grid .day-cell.has-entry.today::after{ background:var(--accent); }
-.calendar-grid .day-cell.selected{
-    background:var(--primary) !important; color:#fff !important; border-color:var(--primary) !important;
-    font-weight:700; box-shadow:0 4px 12px rgba(91,127,255,.28);
-}
-.calendar-grid .day-cell.selected::after{ background:#fff !important; }
-.calendar-grid .day-cell.selected.today{
-    background:var(--accent) !important; border-color:var(--accent) !important;
-    box-shadow:0 4px 12px rgba(255,107,107,.28);
-}
-.calendar-grid .day-cell.disabled{
-    color:#d5cfc6; cursor:default; background:transparent; font-weight:400;
-}
-.calendar-grid .day-cell.disabled:hover{ background:transparent; transform:none; }
-.calendar-grid .day-cell.other-month{
-    color:#e6e0d8; cursor:default; background:transparent; font-weight:400;
-}
-.calendar-grid .day-cell.other-month:hover{ background:transparent; transform:none; }
-
-.user-list-wrap {
-    display:none; margin-top:14px; padding-top:12px; border-top:1px solid var(--border);
-}
-.user-list-wrap.show { display:block; }
-.user-list-title {
-    font-size:12px; color:var(--muted); margin-bottom:8px; font-weight:600;
-}
-.user-card {
-    padding:10px 12px; margin-bottom:6px; border-radius:12px; cursor:pointer;
-    background:#fafaf8; border:1.5px solid transparent; transition:all .15s;
-}
-.user-card:hover { border-color:#d5d0c8; }
-.user-card.active { border-color:var(--primary); background:#f0f4ff; }
-.user-card .name { font-size:14px; font-weight:600; color:var(--text); }
-.user-card .sub {
-    font-size:12px; color:var(--muted); margin-top:3px;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.user-card .meta { font-size:12px; margin-top:4px; display:flex; gap:6px; align-items:center; color:#888; }
-.user-list-empty { font-size:12px; color:var(--muted); padding:8px 0; }
-
-/* 右侧编辑 */
-.editor-panel {
-    flex:1; background:var(--card); border-radius:16px;
-    box-shadow:0 2px 24px rgba(0,0,0,0.06); padding:24px;
-    min-height:calc(100vh - 108px); display:flex; flex-direction:column;
-}
-.meta-bar {
-    display:flex; gap:12px; align-items:center; flex-wrap:wrap;
-    padding-bottom:14px; border-bottom:1px solid var(--border); margin-bottom:14px;
-}
-.meta-item {
-    display:flex; align-items:center; gap:6px;
-    font-size:14px; color:#666;
-}
-.meta-item .icon { font-size:16px; }
-.meta-item select, .meta-item input[type="text"] {
-    border:1.5px solid var(--border); border-radius:8px;
-    padding:6px 10px; font-size:14px; outline:none; background:#fafaf8;
-    color:var(--text);
-}
-.meta-item select:focus, .meta-item input:focus { border-color:var(--primary); }
-.meta-item select:disabled, .meta-item input:disabled {
-    opacity:0.85; cursor:default; background:#f7f8fa;
-}
-.meta-bar .badge {
-    font-size:11px; padding:2px 10px; border-radius:10px; font-weight:600;
-}
-.meta-bar .badge-readonly { background:#fff3e0; color:#ff9800; }
-.meta-bar .badge-class { background:#f0f4ff; color:var(--primary); }
-.meta-bar .badge-personal { background:#fff0f0; color:var(--accent); }
-.meta-bar .spacer { flex:1; }
-
-.title-input {
-    font-size:26px; font-weight:700; border:none; outline:none;
-    padding:4px 0 12px; color:var(--text);
-    background:transparent; width:100%;
-}
-.title-input::placeholder { color:#d0d0d0; }
-.title-input:disabled { color:var(--text); opacity:1; cursor:default; }
-
-#editorWrapper { display:none; flex:1; flex-direction:column; min-height:0; position:relative; }
-#quillEditor { flex:1; min-height:0; }
-#quillEditor .ql-editor { font-size:15px; line-height:1.8; min-height:280px; }
-#quillEditor .ql-editor.ql-blank::before {
-    color:#ccc; font-style:normal; font-size:15px; left:15px; right:15px;
-    pointer-events:none;
-}
-#quillEditor .ql-toolbar { border-radius:10px 10px 0 0; border-color:var(--border) !important; background:#fafaf8; }
-#quillEditor .ql-container { border-radius:0 0 10px 10px; border-color:var(--border) !important; }
-#quillEditor .ql-editor img { max-width:100%; border-radius:6px; display:block; margin:6px auto; }
-#quillEditor .ql-editor blockquote { border-left:3px solid #ccc; padding-left:10px; margin:6px 0; color:#666; }
-#quillEditor.readonly .ql-editor { background:#fafaf8; color:var(--text); }
-#quillEditor.readonly .ql-toolbar { display:none !important; }
-#quillEditor.readonly .ql-container { border-radius:10px; border-color:var(--border) !important; }
-/* 只读时彻底隐藏 Quill 灰色占位符，避免与正文重叠 */
-#quillEditor.readonly .ql-editor::before,
-#quillEditor.readonly .ql-editor.ql-blank::before { display:none !important; content:none !important; }
-
-.editor-placeholder {
-    flex:1; display:flex; align-items:center; justify-content:center;
-    color:#ccc; font-size:16px; text-align:center; padding:40px 20px; line-height:1.7;
-}
-.editor-placeholder[hidden],
-#editorWrapper[hidden] { display:none !important; }
-
-.tag-row {
-    display:none; gap:8px; align-items:center; flex-wrap:wrap; margin-top:12px;
-}
-.tag-row.show { display:flex; }
-.tag-input-area { display:flex; gap:6px; align-items:center; }
-.tag-input-area input {
-    border:1.5px solid var(--border); border-radius:8px;
-    padding:4px 10px; font-size:13px; outline:none; width:120px; background:#fafaf8;
-}
-.tag-input-area input:focus { border-color:var(--primary); }
-.tag-input-area input:disabled { background:#f7f8fa; }
-.btn-add-tag {
-    padding:4px 12px; border-radius:8px; border:none;
-    background:var(--tag-bg); color:var(--tag-color); font-size:13px; cursor:pointer;
-}
-.btn-add-tag:disabled { opacity:0.5; cursor:default; }
-.tag-chip {
-    display:inline-flex; align-items:center; gap:4px;
-    padding:3px 10px; border-radius:10px;
-    background:var(--tag-bg); color:var(--tag-color); font-size:12px;
-}
-.tag-chip button {
-    border:none; background:none; color:var(--tag-color); cursor:pointer; font-size:12px; padding:0 2px;
-}
-.tag-chip button:disabled { cursor:default; opacity:0.4; }
-
-.bottom-bar {
-    margin-top:14px; display:none; gap:10px; flex-wrap:wrap; align-items:center;
-}
-.bottom-bar.show { display:flex; }
-.btn {
-    padding:10px 22px; border-radius:10px; border:none;
-    font-size:14px; font-weight:600; cursor:pointer; transition:all .15s;
-}
-.btn-primary { background:var(--primary); color:#fff; }
-.btn-primary:hover { background:#4a6ae0; box-shadow:0 4px 12px rgba(91,127,255,0.3); }
-.btn-primary:disabled { opacity:0.6; cursor:default; box-shadow:none; }
-.btn-outline { background:#fff; color:var(--primary); border:1.5px solid var(--primary); }
-.btn-outline:hover { background:#f0f4ff; }
-.btn-ghost { background:transparent; color:var(--muted); }
-.btn-ghost:hover { color:var(--text); }
-.unsaved-dot { display:none; width:auto; color:var(--accent); font-size:12px; font-weight:600; }
-
-/* handwriting modal */
-.hw-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.6); z-index:5000; align-items:center; justify-content:center; }
-.hw-modal.active { display:flex; }
-.hw-box { background:#fff; border-radius:16px; padding:20px; width:95%; max-width:650px; box-shadow:0 10px 40px rgba(0,0,0,.2); }
-.hw-box h4 { text-align:center; margin-bottom:12px; color:#333; }
-.hw-tools { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-.hw-tools button { padding:6px 14px; border:1.5px solid #ddd; background:#fff; border-radius:8px; cursor:pointer; font-size:12px; transition:all .12s; }
-.hw-tools button:hover { border-color:var(--primary); color:var(--primary); }
-.hw-tools button.active { background:var(--primary); color:#fff; border-color:var(--primary); }
-.hw-tools input[type=color] { width:32px; height:32px; border:none; cursor:pointer; border-radius:6px; }
-.hw-tools input[type=range] { width:80px; }
-.hw-canvas-wrap { border:2px solid #e0e0e0; border-radius:10px; overflow:hidden; background:#fff; }
-.hw-canvas-wrap canvas { display:block; width:100%; cursor:crosshair; }
-.hw-btns { display:flex; gap:8px; margin-top:12px; justify-content:flex-end; }
-.hw-btns button { padding:8px 20px; border:none; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600; }
-.hw-btns .hw-insert { background:var(--primary); color:#fff; }
-.hw-btns .hw-cancel { background:#f0f0f0; color:#666; }
-
-@media(max-width:800px) {
-    .app { flex-direction:column; }
-    .timeline { width:100%; position:static; max-height:none; }
-}
+.calendar-grid .day-header{font-size:11px;color:#888;padding:6px 0 8px;font-weight:600;letter-spacing:.02em}
+.calendar-grid .day-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:13px;border-radius:var(--wobbly-sm);cursor:pointer;transition:background .15s,color .15s,box-shadow .15s,transform .12s;position:relative;color:var(--pencil);background:transparent;border:1.5px solid transparent;font-weight:500}
+.calendar-grid .day-cell:not(.disabled):not(.other-month):hover{background:var(--old-paper);transform:scale(1.04)}
+.calendar-grid .day-cell.today{border-color:var(--red);color:var(--red);font-weight:700}
+.calendar-grid .day-cell.has-entry{background:var(--old-paper);color:var(--blue);font-weight:600}
+.calendar-grid .day-cell.has-entry::after{content:'';position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:4px;height:4px;background:var(--blue);border-radius:50%;opacity:.9}
+.calendar-grid .day-cell.has-entry.today{background:var(--paper);color:var(--red);border-color:var(--red)}
+.calendar-grid .day-cell.has-entry.today::after{background:var(--red)}
+.calendar-grid .day-cell.selected{background:var(--blue)!important;color:var(--white)!important;border-color:var(--blue)!important;font-weight:700;box-shadow:var(--shadow-md)}
+.calendar-grid .day-cell.selected::after{background:var(--white)!important}
+.calendar-grid .day-cell.selected.today{background:var(--red)!important;border-color:var(--red)!important;box-shadow:var(--shadow-md)}
+.calendar-grid .day-cell.disabled{color:var(--old-paper);cursor:default;background:transparent;font-weight:400}
+.calendar-grid .day-cell.disabled:hover{background:transparent;transform:none}
+.calendar-grid .day-cell.other-month{color:var(--old-paper);cursor:default;background:transparent;font-weight:400}
+.calendar-grid .day-cell.other-month:hover{background:transparent;transform:none}
+.user-list-wrap{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--old-paper)}
+.user-list-wrap.show{display:block}
+.user-list-title{font-size:12px;color:#888;margin-bottom:8px;font-weight:600;font-family:var(--font-heading)}
+.user-card{padding:10px 12px;margin-bottom:6px;border-radius:var(--wobbly-sm);cursor:pointer;background:var(--paper);border:1.5px solid transparent;transition:all .15s}
+.user-card:hover{border-color:var(--old-paper)}
+.user-card.active{border-color:var(--blue);background:var(--old-paper)}
+.user-card .name{font-size:14px;font-weight:600;color:var(--pencil)}
+.user-card .sub{font-size:12px;color:#888;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-card .meta{font-size:12px;margin-top:4px;display:flex;gap:6px;align-items:center;color:#888}
+.user-list-empty{font-size:12px;color:#888;padding:8px 0}
+.editor-panel{flex:1;min-height:calc(100vh - 108px);display:flex;flex-direction:column}
+.meta-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--old-paper);margin-bottom:14px}
+.meta-item{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--pencil)}
+.meta-item .icon{font-size:16px}
+.meta-item select,.meta-item input[type="text"]{border:1.5px solid var(--old-paper);border-radius:var(--wobbly-sm);padding:6px 10px;font-size:14px;outline:none;background:var(--paper);color:var(--pencil)}
+.meta-item select:focus,.meta-item input:focus{border-color:var(--blue)}
+.meta-item select:disabled,.meta-item input:disabled{opacity:.85;cursor:default;background:var(--old-paper)}
+.meta-bar .badge{font-size:11px;padding:2px 10px;border-radius:var(--wobbly-sm);font-weight:600;border:1.5px solid var(--pencil)}
+.meta-bar .badge-readonly{background:var(--post-it);color:var(--pencil)}
+.meta-bar .badge-class{background:var(--old-paper);color:var(--blue)}
+.meta-bar .badge-personal{background:var(--paper);color:var(--red);border-color:var(--red)}
+.meta-bar .spacer{flex:1}
+.title-input{font-size:26px;font-weight:700;border:none;outline:none;padding:4px 0 12px;color:var(--pencil);background:transparent;width:100%;font-family:var(--font-heading)}
+.title-input::placeholder{color:var(--old-paper)}
+.title-input:disabled{color:var(--pencil);opacity:1;cursor:default}
+#editorWrapper{display:none;flex:1;flex-direction:column;min-height:0;position:relative}
+#quillEditor{flex:1;min-height:0}
+#quillEditor .ql-editor{font-size:15px;line-height:1.8;min-height:280px}
+#quillEditor .ql-editor.ql-blank::before{color:#ccc;font-style:normal;font-size:15px;left:15px;right:15px;pointer-events:none}
+#quillEditor .ql-toolbar{border-radius:var(--wobbly) var(--wobbly) 0 0;border-color:var(--old-paper)!important;background:var(--paper)}
+#quillEditor .ql-container{border-radius:0 0 var(--wobbly) var(--wobbly);border-color:var(--old-paper)!important}
+#quillEditor .ql-editor img{max-width:100%;border-radius:var(--wobbly-sm);display:block;margin:6px auto}
+#quillEditor .ql-editor blockquote{border-left:3px solid var(--old-paper);padding-left:10px;margin:6px 0;color:var(--pencil)}
+#quillEditor.readonly .ql-editor{background:var(--paper);color:var(--pencil)}
+#quillEditor.readonly .ql-toolbar{display:none!important}
+#quillEditor.readonly .ql-container{border-radius:var(--wobbly);border-color:var(--old-paper)!important}
+#quillEditor.readonly .ql-editor::before,#quillEditor.readonly .ql-editor.ql-blank::before{display:none!important;content:none!important}
+.editor-placeholder{flex:1;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:16px;text-align:center;padding:40px 20px;line-height:1.7}
+.editor-placeholder[hidden],#editorWrapper[hidden]{display:none!important}
+.tag-row{display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.tag-row.show{display:flex}
+.tag-input-area{display:flex;gap:6px;align-items:center}
+.tag-input-area input{border:1.5px solid var(--old-paper);border-radius:var(--wobbly-sm);padding:4px 10px;font-size:13px;outline:none;width:120px;background:var(--paper)}
+.tag-input-area input:focus{border-color:var(--blue)}
+.tag-input-area input:disabled{background:var(--old-paper)}
+.btn-add-tag{padding:4px 12px;border-radius:var(--wobbly-sm);border:1.5px solid var(--pencil);background:var(--post-it);color:var(--pencil);font-size:13px;cursor:pointer;font-family:var(--font-heading);box-shadow:var(--shadow-sm)}
+.btn-add-tag:disabled{opacity:.5;cursor:default}
+.tag-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--wobbly-sm);background:var(--post-it);color:var(--pencil);font-size:12px;border:1.5px solid var(--pencil)}
+.tag-chip button{border:none;background:none;color:var(--pencil);cursor:pointer;font-size:12px;padding:0 2px}
+.tag-chip button:disabled{cursor:default;opacity:.4}
+.bottom-bar{margin-top:14px;display:none;gap:10px;flex-wrap:wrap;align-items:center}
+.bottom-bar.show{display:flex}
+.unsaved-dot{display:none;width:auto;color:var(--red);font-size:12px;font-weight:600}
+.hw-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:5000;align-items:center;justify-content:center}
+.hw-modal.active{display:flex}
+.hw-box{background:var(--white);border-radius:var(--wobbly);padding:20px;width:95%;max-width:650px;box-shadow:var(--shadow-lg);border:2px solid var(--pencil)}
+.hw-box h4{text-align:center;margin-bottom:12px;color:var(--pencil);font-family:var(--font-heading)}
+.hw-tools{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.hw-tools button{padding:6px 14px;border:1.5px solid var(--pencil);background:var(--white);border-radius:var(--wobbly-sm);cursor:pointer;font-size:12px;transition:all .12s;font-family:var(--font-heading)}
+.hw-tools button:hover{border-color:var(--blue);color:var(--blue)}
+.hw-tools button.active{background:var(--blue);color:var(--white);border-color:var(--blue)}
+.hw-tools input[type=color]{width:32px;height:32px;border:1.5px solid var(--pencil);cursor:pointer;border-radius:var(--wobbly-sm)}
+.hw-tools input[type=range]{width:80px}
+.hw-canvas-wrap{border:2px solid var(--pencil);border-radius:var(--wobbly);overflow:hidden;background:var(--white)}
+.hw-canvas-wrap canvas{display:block;width:100%;cursor:crosshair}
+.hw-btns{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+.hw-btns button{padding:8px 20px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:14px;cursor:pointer;font-weight:600;font-family:var(--font-heading);box-shadow:var(--shadow-sm)}
+.hw-btns .hw-insert{background:var(--blue);color:var(--white)}
+.hw-btns .hw-insert:hover{background:var(--pencil)}
+.hw-btns .hw-cancel{background:var(--white);color:var(--pencil)}
+.hw-btns .hw-cancel:hover{background:var(--old-paper)}
+@media(max-width:800px){.app{flex-direction:column}.timeline{width:100%;position:static;max-height:none}}
 </style>
 </head>
 <body>
 <input type="hidden" id="csrfToken" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
 
-<div class="status-bar">
-    <div class="left">
-        <button class="back-btn" onclick="showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" type="button">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <span style="font-size:15px;font-weight:bold;color:#333;"><?php echo htmlspecialchars($class['name']); ?></span>
-    </div>
-    <div class="title">📔 班级史记</div>
-    <div class="right"></div>
-</div>
+<?php
+$backUrl = 'main.php?id=' . $classId;
+$className = $class['name'];
+$pageTitle = '班级史记';
+$rightContent = '';
+require 'inc/header.php';
+?>
 
 <div class="app">
-    <div class="timeline" id="timeline">
+    <div class="card timeline" id="timeline">
         <div class="timeline-header">
             <h2>📔 班级史记</h2>
         </div>
@@ -363,11 +186,11 @@ body {
         <div class="user-list-wrap" id="personalUserList"></div>
     </div>
 
-    <div class="editor-panel">
+    <div class="card editor-panel">
         <div class="meta-bar" id="metaBar">
             <div class="meta-item">
                 <span class="icon">📅</span>
-                <span id="selectedDateLabel" style="font-weight:700;color:var(--text);">请选择日期</span>
+                <span id="selectedDateLabel" style="font-weight:700;color:var(--pencil);">请选择日期</span>
             </div>
             <div class="meta-item" id="moodItem" style="display:none">
                 <span class="icon">😊</span>
@@ -400,7 +223,7 @@ body {
             <span class="badge badge-readonly" id="readonlyBadge" style="display:none">只读</span>
             <span class="badge badge-class" id="badgeClass" style="display:none">班级史记</span>
             <span class="spacer"></span>
-            <button type="button" class="btn btn-ghost" id="handwriteBtn" onclick="openHandwrite()" style="display:none">✏️ 手写板</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="handwriteBtn" onclick="openHandwrite()" style="display:none">✏️ 手写板</button>
         </div>
 
         <input type="text" class="title-input" id="entryTitle" placeholder="今天发生了什么有趣的事？" maxlength="80" style="display:none" disabled>
@@ -431,7 +254,7 @@ body {
 <div class="hw-tools">
 <button type="button" onclick="setPenColor('#000000')" id="clrBlack" class="active">黑</button>
 <button type="button" onclick="setPenColor('#e53935')" id="clrRed">红</button>
-<button type="button" onclick="setPenColor('#5b7fff')" id="clrBlue">蓝</button>
+<button type="button" onclick="setPenColor('#2d5da1')" id="clrBlue">蓝</button>
 <input type="color" value="#000000" onchange="setPenColor(this.value)" title="选色">
 <input type="range" min="1" max="10" value="3" id="penWidth" oninput="hwCtx.lineWidth=this.value" title="粗细">
 <button type="button" onclick="clearHandwrite()">清屏</button>
@@ -1056,7 +879,7 @@ function getHwTouch(e) {
 function setPenColor(c) {
     hwCtx.strokeStyle = c;
     document.querySelectorAll('.hw-tools button[id^=clr]').forEach(function(b) { b.classList.remove('active'); });
-    var id = 'clr' + (c === '#000000' ? 'Black' : c === '#e53935' ? 'Red' : c === '#5b7fff' ? 'Blue' : '');
+    var id = 'clr' + (c === '#000000' ? 'Black' : c === '#e53935' ? 'Red' : c === '#2d5da1' ? 'Blue' : '');
     if (id && document.getElementById(id)) document.getElementById(id).classList.add('active');
 }
 function undoStroke() { if (hwStrokes.length) hwRedoStrokes.push(hwStrokes.pop()); redrawHw(); }
