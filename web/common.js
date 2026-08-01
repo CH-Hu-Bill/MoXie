@@ -112,10 +112,10 @@ function initMarquee() {
     document.querySelectorAll('.word-card .word').forEach(el => {
         el.style.fontSize = '';
         const len = el.textContent.trim().length;
-        if (len > 16) el.style.fontSize = '18px';
-        else if (len > 12) el.style.fontSize = '22px';
-        else if (len > 9) el.style.fontSize = '26px';
-        else if (len > 7) el.style.fontSize = '28px';
+        if (len > 16) el.style.fontSize = '20px';
+        else if (len > 12) el.style.fontSize = '24px';
+        else if (len > 9) el.style.fontSize = '28px';
+        else if (len > 7) el.style.fontSize = '32px';
     });
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {

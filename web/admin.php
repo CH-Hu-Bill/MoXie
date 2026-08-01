@@ -139,12 +139,6 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 ?><?php $pageTitle = '管理后台'; require 'inc/head.php'; ?>
 </head>
 <body>
-<?php
-$backUrl = 'index.php?switch=1';
-$className = '';
-$pageTitle = '管理后台';
-require 'inc/header.php';
-?>
 <div class="content">
 
 <?php if (!$isAuthed): ?>

@@ -384,7 +384,7 @@ body {
   border-radius: var(--wobbly);
   position: relative;
   box-shadow: var(--shadow-sm);
-  min-height: 200px;
+  min-height: 220px;
   display: flex; flex-direction: column;
   overflow: hidden;
   transition: transform 0.1s, box-shadow 0.1s;
@@ -401,7 +401,7 @@ body {
 }
 .word-card .word {
   overflow: hidden; white-space: nowrap; width: 100%;
-  font-size: 32px; font-weight: 700; color: var(--pencil);
+  font-size: 38px; font-weight: 700; color: var(--pencil);
   line-height: 1.15; margin-bottom: 5px;
   font-family: var(--font-heading);
   letter-spacing: 0.5px;
@@ -417,7 +417,7 @@ body {
 }
 .word-card .meaning {
   overflow: hidden; white-space: nowrap; width: 100%;
-  font-size: 19px; color: #555; line-height: 1.35; margin-bottom: 3px;
+  font-size: 22px; color: #555; line-height: 1.35; margin-bottom: 3px;
   font-family: var(--font-body);
 }
 .word-card .meaning.scrollable {
@@ -434,7 +434,7 @@ body {
   88%,100% { transform: translateX(var(--mx, -30px)); }
 }
 .word-card .pos {
-  font-size: 15px; color: #888; font-style: italic;
+  font-size: 17px; color: #888; font-style: italic;
   font-family: var(--font-heading);
 }
 .word-card .divider {
@@ -444,7 +444,7 @@ body {
 }
 .word-card .speaker {
   position: absolute; bottom: 8px; left: 8px;
-  width: 30px; height: 30px;
+  width: 36px; height: 36px;
   background: var(--white);
   border: 2px solid var(--pencil);
   border-radius: var(--wobbly-sm);
@@ -760,9 +760,9 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 10px;
   }
-  .word-card .word { font-size: 26px; }
-  .word-card .meaning { font-size: 16px; }
-  .word-card .pos { font-size: 13px; }
+  .word-card .word { font-size: 30px; }
+  .word-card .meaning { font-size: 18px; }
+  .word-card .pos { font-size: 14px; }
   .status-bar { padding: 0 10px; }
   .status-bar .title { font-size: 16px; }
   .content { padding: 10px 8px; }
@@ -773,10 +773,10 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
-  .word-card { min-height: 160px; }
-  .word-card .word { font-size: 22px; }
-  .word-card .meaning { font-size: 14px; }
-  .word-card .pos { font-size: 12px; }
+  .word-card { min-height: 180px; }
+  .word-card .word { font-size: 24px; }
+  .word-card .meaning { font-size: 16px; }
+  .word-card .pos { font-size: 13px; }
   .card { padding: 12px; }
 }
 
