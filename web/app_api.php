@@ -560,70 +560,22 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['entry' => $entry]]);
 
     case 'upload_image':
-        // APP 端图片上传 (需登录 + 班级校验，复用 GD 压缩逻辑)
+        // APP 端图片上传 (需登录 + 班级校验，复用统一图片处理逻辑)
         if (!isset($_FILES['file']) || !is_array($_FILES['file'])) appError('请选择图片');
         $file = $_FILES['file'];
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             appError(($file['error'] ?? 0) === UPLOAD_ERR_INI_SIZE ? '图片超过服务器上传限制' : '图片上传失败');
         }
-        // 体积限制: 5MB
-        if (($file['size'] ?? 0) <= 0 || $file['size'] > 5242880) appError('图片最大允许 5MB', null, 413);
+        if (($file['size'] ?? 0) <= 0) appError('上传文件无效');
         if (!is_uploaded_file($file['tmp_name'])) appError('上传文件无效');
 
-        // MIME 校验: 仅允许 JPEG/PNG/WebP
-        $info = @getimagesize($file['tmp_name']);
-        $allowedTypes = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
-        if (!$info || !isset($allowedTypes[$info[2]])) appError('仅支持 JPEG、PNG 或 WebP 图片');
-        $width = (int)$info[0];
-        $height = (int)$info[1];
-        if ($width < 1 || $height < 1) appError('图片尺寸无效');
-        // 像素上限: 2500万
-        if ($width * $height > 25000000) appError('图片像素过大', null, 413);
-        if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) appError('服务器未启用 GD 扩展', null, 503);
-
-        // GD 解码
-        $loaders = [IMAGETYPE_JPEG => 'imagecreatefromjpeg', IMAGETYPE_PNG => 'imagecreatefrompng', IMAGETYPE_WEBP => 'imagecreatefromwebp'];
-        if (!function_exists($loaders[$info[2]])) appError('服务器 GD 不支持该图片格式', null, 503);
-        $source = @$loaders[$info[2]]($file['tmp_name']);
-        if (!$source) appError('图片内容损坏或无法解码');
-
-        // 缩放到最大边 1600px
-        $maxEdge = 1600;
-        $scale = min(1, $maxEdge / max($width, $height));
-        $targetWidth = max(1, (int)round($width * $scale));
-        $targetHeight = max(1, (int)round($height * $scale));
-        $target = imagecreatetruecolor($targetWidth, $targetHeight);
-        if (!$target) { imagedestroy($source); appError('图片处理失败', null, 500); }
-
-        // 非 JPEG 图片保留透明通道
-        if ($info[2] !== IMAGETYPE_JPEG) {
-            imagealphablending($target, false);
-            imagesavealpha($target, true);
-            $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
-            imagefill($target, 0, 0, $transparent);
+        try {
+            $filename = Database::saveUploadedImage($classId, $file['tmp_name']);
+        } catch (RuntimeException $e) {
+            $msg = $e->getMessage();
+            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB')) ? 413 : 500;
+            appError($msg, null, $code);
         }
-        if (!imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height)) {
-            imagedestroy($source); imagedestroy($target); appError('图片缩放失败', null, 500);
-        }
-
-        // 生成随机文件名并保存
-        $classDirectory = Database::getUploadsDirectory($classId);
-        if (!is_dir($classDirectory) && !mkdir($classDirectory, 0750, true) && !is_dir($classDirectory)) {
-            imagedestroy($source); imagedestroy($target); appError('上传目录不可用', null, 500);
-        }
-        $extension = $allowedTypes[$info[2]];
-        $filename = bin2hex(random_bytes(16)) . '.' . $extension;
-        $path = $classDirectory . DIRECTORY_SEPARATOR . $filename;
-        $writers = [
-            IMAGETYPE_JPEG => function($image, $p) { return imagejpeg($image, $p, 82); },
-            IMAGETYPE_PNG  => function($image, $p) { return imagepng($image, $p, 7); },
-            IMAGETYPE_WEBP => function($image, $p) { return imagewebp($image, $p, 82); },
-        ];
-        $saved = $writers[$info[2]]($target, $path);
-        imagedestroy($source);
-        imagedestroy($target);
-        if (!$saved) { @unlink($path); appError('图片保存失败', null, 500); }
-        @chmod($path, 0640);
 
         // 返回相对 URL (与 historySanitizeHtml 允许的格式一致)
         appJson(['success' => true, 'data' => ['url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($filename)]]);
@@ -830,8 +782,7 @@ switch ($action) {
         Database::updateClassData($classId, 'gallery', function($latest) use ($gid, $classId) {
             if (!is_array($latest)) return null;
             foreach ($latest as $i => $item) if (($item['id'] ?? '') === $gid) {
-                $p = Database::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . ($item['image'] ?? '');
-                if (is_file($p)) @unlink($p);
+                Database::deleteUploadedImage($classId, $item['image'] ?? '');
                 array_splice($latest, $i, 1);
                 return $latest;
             }

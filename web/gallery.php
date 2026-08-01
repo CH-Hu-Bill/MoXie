@@ -28,38 +28,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     $desc = trim((string)($_POST['description'] ?? ''));
     if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
+    if (($image['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) { echo json_encode(['success' => false, 'error' => '图片最大 12MB']); exit; }
 
-    // 复用 upload.php 的上传逻辑 — 直接在这里处理上传
-    $allowed = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
-    $info = @getimagesize($image['tmp_name']);
-    if (!$info || !isset($allowed[$info[2]])) { echo json_encode(['success' => false, 'error' => '仅支持 JPEG、PNG、WebP']); exit; }
-    if (($image['size'] ?? 0) > 12582912) { echo json_encode(['success' => false, 'error' => '图片最大 12MB']); exit; }
-
-    $uploadDir = Database::getUploadsDirectory($classId);
-    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0750, true)) { echo json_encode(['success' => false, 'error' => '上传目录不可用']); exit; }
-
-    $ext = $allowed[$info[2]];
-    $filename = bin2hex(random_bytes(16)) . '.' . $ext;
-    $path = $uploadDir . DIRECTORY_SEPARATOR . $filename;
-
-    // 缩放图片（最大边 1600px）
-    $src = null; $loaders = [IMAGETYPE_JPEG => 'imagecreatefromjpeg', IMAGETYPE_PNG => 'imagecreatefrompng', IMAGETYPE_WEBP => 'imagecreatefromwebp'];
-    if (function_exists($loaders[$info[2]])) {
-        $src = @$loaders[$info[2]]($image['tmp_name']);
-    }
-    if ($src) {
-        $w = imagesx($src); $h = imagesy($src);
-        $scale = min(1, 1600 / max($w, $h));
-        $nw = max(1, (int)round($w * $scale)); $nh = max(1, (int)round($h * $scale));
-        $dst = imagecreatetruecolor($nw, $nh);
-        if ($info[2] !== IMAGETYPE_JPEG) { imagealphablending($dst, false); imagesavealpha($dst, true); imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 0, 0, 0, 127)); }
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
-        $writers = [IMAGETYPE_JPEG => 'imagejpeg', IMAGETYPE_PNG => 'imagepng', IMAGETYPE_WEBP => 'imagewebp'];
-        $qualities = [IMAGETYPE_JPEG => 82, IMAGETYPE_PNG => 7, IMAGETYPE_WEBP => 82];
-        $writers[$info[2]]($dst, $path, $qualities[$info[2]]);
-        imagedestroy($src); imagedestroy($dst);
-    } else {
-        if (!move_uploaded_file($image['tmp_name'], $path)) { echo json_encode(['success' => false, 'error' => '保存失败']); exit; }
+    try {
+        $filename = Database::saveUploadedImage($classId, $image['tmp_name']);
+    } catch (RuntimeException $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit;
     }
 
     $id = bin2hex(random_bytes(16));
@@ -81,8 +55,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
         if (!is_array($latest)) return null;
         foreach ($latest as $i => $item) {
             if (($item['id'] ?? '') === $id) {
-                $path = Database::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . ($item['image'] ?? '');
-                if (is_file($path)) @unlink($path);
+                Database::deleteUploadedImage($classId, $item['image'] ?? '');
                 array_splice($latest, $i, 1);
                 return $latest;
             }

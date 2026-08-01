@@ -281,16 +281,11 @@ function historyExtractImageRefs($content) {
 function historyRewriteImageUrlsToBase64($html) {
     $pattern = '/upload\.php\?class_id=([A-Za-z0-9][A-Za-z0-9_-]*)&(?:amp;)?file=([a-f0-9]{32}\.(?:jpg|png|webp))/i';
     return preg_replace_callback($pattern, function($m) {
-        $classId = $m[1];
-        $filename = $m[2];
-        if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) return $m[0];
-        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp)\z/D', $filename)) return $m[0];
-        $path = Database::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . $filename;
-        if (!is_file($path) || !is_readable($path)) return $m[0];
+        $path = Database::getUploadedImagePath($m[1], $m[2]);
+        if ($path === null) return $m[0];
         $data = @file_get_contents($path);
-        if ($data === false || strlen($data) === 0) return $m[0];
-        if (strlen($data) > 4 * 1024 * 1024) return $m[0];
-        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if ($data === false || strlen($data) === 0 || strlen($data) > 4 * 1024 * 1024) return $m[0];
+        $ext = strtolower(pathinfo($m[2], PATHINFO_EXTENSION));
         $mime = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'][$ext] ?? 'image/jpeg';
         return 'data:' . $mime . ';base64,' . base64_encode($data);
     }, $html);

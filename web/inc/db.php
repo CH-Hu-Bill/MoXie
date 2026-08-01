@@ -301,6 +301,114 @@ class Database {
         @rmdir($dir);
     }
 
+    // ==================== 上传图片管理 ====================
+    /** @var int 单张图片最大字节数 (12MB) */
+    const UPLOAD_MAX_BYTES = 12582912;
+    /** @var int 图片最大像素数 (2500 万) */
+    const UPLOAD_MAX_PIXELS = 25000000;
+    /** @var int 缩放后最长边像素 */
+    const UPLOAD_MAX_EDGE = 1600;
+
+    /**
+     * 安全保存上传图片：校验 → GD 解码 → 等比缩放 → 保存 → 落盘校验。
+     * 所有图片上传入口 (upload.php / gallery.php / app_api.php) 统一调用此方法，
+     * 避免逻辑重复导致路径/处理不一致。
+     *
+     * @param string $classId 班级ID
+     * @param string $tmpPath 临时文件路径 ($_FILES['x']['tmp_name'])
+     * @return string 生成的文件名 (32位hex + 扩展名)
+     * @throws RuntimeException 校验或保存失败时抛出 (含可读消息)
+     */
+    public static function saveUploadedImage($classId, $tmpPath) {
+        $classId = self::validateClassId($classId);
+
+        if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
+            throw new RuntimeException('服务器未启用 GD，无法处理图片');
+        }
+        $info = @getimagesize($tmpPath);
+        $allowed = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+        if (!$info || !isset($allowed[$info[2]])) {
+            throw new RuntimeException('仅支持 JPEG、PNG 或 WebP 图片');
+        }
+        $width = (int)$info[0];
+        $height = (int)$info[1];
+        if ($width < 1 || $height < 1 || $width > intdiv(self::UPLOAD_MAX_PIXELS, $height)) {
+            throw new RuntimeException('图片像素过大，最多 2500 万像素');
+        }
+
+        $loaders = [IMAGETYPE_JPEG => 'imagecreatefromjpeg', IMAGETYPE_PNG => 'imagecreatefrompng', IMAGETYPE_WEBP => 'imagecreatefromwebp'];
+        if (!function_exists($loaders[$info[2]])) {
+            throw new RuntimeException('服务器 GD 不支持该图片格式');
+        }
+        $source = @$loaders[$info[2]]($tmpPath);
+        if (!$source) throw new RuntimeException('图片内容损坏或无法解码');
+
+        $scale = min(1, self::UPLOAD_MAX_EDGE / max($width, $height));
+        $tw = max(1, (int)round($width * $scale));
+        $th = max(1, (int)round($height * $scale));
+        $target = imagecreatetruecolor($tw, $th);
+        if (!$target) { imagedestroy($source); throw new RuntimeException('图片处理失败'); }
+        if ($info[2] !== IMAGETYPE_JPEG) {
+            imagealphablending($target, false);
+            imagesavealpha($target, true);
+            imagefill($target, 0, 0, imagecolorallocatealpha($target, 0, 0, 0, 127));
+        }
+        if (!imagecopyresampled($target, $source, 0, 0, 0, 0, $tw, $th, $width, $height)) {
+            imagedestroy($source); imagedestroy($target);
+            throw new RuntimeException('图片缩放失败');
+        }
+
+        $dir = self::getUploadsDirectory($classId);
+        if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
+            imagedestroy($source); imagedestroy($target);
+            throw new RuntimeException('上传目录不可用');
+        }
+        $filename = bin2hex(random_bytes(16)) . '.' . $allowed[$info[2]];
+        $path = $dir . DIRECTORY_SEPARATOR . $filename;
+
+        $writers = [
+            IMAGETYPE_JPEG => function($img, $p) { return imagejpeg($img, $p, 82); },
+            IMAGETYPE_PNG  => function($img, $p) { return imagepng($img, $p, 7); },
+            IMAGETYPE_WEBP => function($img, $p) { return imagewebp($img, $p, 82); },
+        ];
+        $saved = $writers[$info[2]]($target, $path);
+        imagedestroy($source);
+        imagedestroy($target);
+        if (!$saved) { @unlink($path); throw new RuntimeException('图片保存失败'); }
+        @chmod($path, 0640);
+
+        // 落盘校验：确认文件真实存在且可读，避免「保存成功」但实际丢失
+        if (!is_file($path) || !is_readable($path) || filesize($path) === 0) {
+            @unlink($path);
+            throw new RuntimeException('图片落盘校验失败');
+        }
+        return $filename;
+    }
+
+    /**
+     * 获取班级上传图片的绝对路径 (带文件名校验，防路径穿越)。
+     * @param string $classId 班级ID
+     * @param string $filename 文件名 (32位hex + 扩展名)
+     * @return string|null 绝对路径；文件名非法或文件不存在返回 null
+     */
+    public static function getUploadedImagePath($classId, $filename) {
+        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp)\z/D', $filename)) return null;
+        $path = self::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . $filename;
+        return is_file($path) ? $path : null;
+    }
+
+    /**
+     * 删除班级上传图片 (带文件名校验)。
+     * @param string $classId 班级ID
+     * @param string $filename 文件名
+     * @return bool 是否删除成功 (文件不存在也返回 true)
+     */
+    public static function deleteUploadedImage($classId, $filename) {
+        $path = self::getUploadedImagePath($classId, $filename);
+        if ($path === null) return true;
+        return @unlink($path);
+    }
+
     // ==================== 工具方法 ====================
     /**
      * 自动取消过期任务
