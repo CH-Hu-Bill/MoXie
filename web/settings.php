@@ -122,7 +122,7 @@ $followBuffer = $settings['follow_buffer'] ?? 0.5;
             </div>
         </div>
         <div class="card mb-3" style="text-align:center;padding:18px;">
-            <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-sm" style="background:none;color:var(--blue);border:none;box-shadow:none;font-size:14px;font-weight:600;">📖 重新查看使用说明</button>
+            <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-secondary" style="font-size:14px;">重新查看使用说明</button>
         </div>
         <button class="btn btn-primary mt-3" style="width:100%" onclick="saveSettings()">保存设置</button>
     </div>

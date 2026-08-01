@@ -376,6 +376,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 14px;
+  padding: 4px;
 }
 .word-card {
   background: var(--white);
@@ -400,7 +401,7 @@ body {
 }
 .word-card .word {
   overflow: hidden; white-space: nowrap; width: 100%;
-  font-size: 29px; font-weight: 700; color: var(--pencil);
+  font-size: 32px; font-weight: 700; color: var(--pencil);
   line-height: 1.15; margin-bottom: 5px;
   font-family: var(--font-heading);
   letter-spacing: 0.5px;
@@ -416,7 +417,7 @@ body {
 }
 .word-card .meaning {
   overflow: hidden; white-space: nowrap; width: 100%;
-  font-size: 17px; color: #555; line-height: 1.35; margin-bottom: 3px;
+  font-size: 19px; color: #555; line-height: 1.35; margin-bottom: 3px;
   font-family: var(--font-body);
 }
 .word-card .meaning.scrollable {
@@ -433,7 +434,7 @@ body {
   88%,100% { transform: translateX(var(--mx, -30px)); }
 }
 .word-card .pos {
-  font-size: 13px; color: #999; font-style: italic;
+  font-size: 15px; color: #888; font-style: italic;
   font-family: var(--font-heading);
 }
 .word-card .divider {
@@ -470,6 +471,7 @@ body {
   box-shadow: 6px 6px 0px 0px var(--red) !important;
   transform: rotate(-0.5deg) scale(1.03);
   z-index: 5;
+  overflow: visible;
 }
 
 /* ======== 内容区 ======== */
@@ -758,8 +760,9 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 10px;
   }
-  .word-card .word { font-size: 24px; }
-  .word-card .meaning { font-size: 15px; }
+  .word-card .word { font-size: 26px; }
+  .word-card .meaning { font-size: 16px; }
+  .word-card .pos { font-size: 13px; }
   .status-bar { padding: 0 10px; }
   .status-bar .title { font-size: 16px; }
   .content { padding: 10px 8px; }
@@ -771,8 +774,9 @@ body {
     gap: 8px;
   }
   .word-card { min-height: 160px; }
-  .word-card .word { font-size: 20px; }
+  .word-card .word { font-size: 22px; }
   .word-card .meaning { font-size: 14px; }
+  .word-card .pos { font-size: 12px; }
   .card { padding: 12px; }
 }
 

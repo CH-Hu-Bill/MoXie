@@ -140,7 +140,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 </head>
 <body>
 <?php
-$backUrl = 'index.php';
+$backUrl = 'index.php?switch=1';
 $className = '';
 $pageTitle = '管理后台';
 require 'inc/header.php';
