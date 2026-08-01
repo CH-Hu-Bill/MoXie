@@ -18,7 +18,7 @@ $isZip = preg_match('/\A[a-f0-9]{48}\.zip\z/D', $storedName) && basename($stored
 $isTar = preg_match('/\A[a-f0-9]{48}\.tar\z/D', $storedName) && basename($storedName) === $storedName;
 $isCsv = preg_match('/\A[a-f0-9]{48}\.csv\z/D', $storedName) && basename($storedName) === $storedName;
 if (!$isPdf && !$isHtml && !$isZip && !$isTar && !$isCsv) { http_response_code(404); exit('文件不存在'); }
-$file = __DIR__ . '/data/exports/' . $storedName;
+$file = Database::getExportsDirectory() . '/' . $storedName;
 if (!is_file($file)) { http_response_code(404); exit('文件不存在'); }
 $filename = preg_replace('/[\r\n"]+/', '_', (string)($record['filename'] ?? 'export'));
 // 根据文件类型设置 Content-Type 和默认文件名
@@ -49,7 +49,7 @@ readfile($file);
  */
 function downloadGcExpired() {
     $now = time();
-    $exportsDir = __DIR__ . '/data/exports';
+    $exportsDir = Database::getExportsDirectory();
     Database::update('exports.json', function($exports) use ($now, $exportsDir) {
         if (!is_array($exports)) return [];
         $changed = false;

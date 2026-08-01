@@ -472,7 +472,8 @@ switch ($action) {
         foreach (($tasks[$taskId]['word_ids'] ?? []) as $wid) if (isset($map[$wid])) { $count++; $rows .= '<tr><td>' . htmlspecialchars($map[$wid]['word'], ENT_QUOTES, 'UTF-8') . '</td><td>' . htmlspecialchars($map[$wid]['meaning'], ENT_QUOTES, 'UTF-8') . '</td><td>' . htmlspecialchars($map[$wid]['pos'] ?? '', ENT_QUOTES, 'UTF-8') . '</td></tr>'; }
         $date = htmlspecialchars($tasks[$taskId]['date'] ?? '', ENT_QUOTES, 'UTF-8'); $label = htmlspecialchars($tasks[$taskId]['label'] ?? '', ENT_QUOTES, 'UTF-8');
         $html = "<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:\"Noto Sans SC\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;color:#222;line-height:1.8}h1{text-align:center}.meta{text-align:center;color:#666;margin-bottom:24px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #bbb;text-align:left}th{background:#eee}</style></head><body><h1>单词表 - $label</h1><div class='meta'>日期：$date　词数：$count</div><table><thead><tr><th>单词</th><th>释义</th><th>词性</th></tr></thead><tbody>$rows</tbody></table></body></html>";
-        $directory = __DIR__ . '/data/exports';
+        $directory = Database::getExportsDirectory();
+        if (!is_dir($directory)) mkdir($directory, 0750, true);
         if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) appError('无法创建导出目录', 'IO_ERROR', 500);
         $token = bin2hex(random_bytes(32));
         $storedName = bin2hex(random_bytes(24)) . '.html';
@@ -501,7 +502,8 @@ switch ($action) {
         if (!$count) appError('没有可导出的记录');
         $body = historyRewriteImageUrlsToBase64($body);
         $html = '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.8;max-width:800px;margin:40px auto;padding:20px}h1{text-align:center}section{margin-bottom:24px}img{max-width:100%;border-radius:6px}</style></head><body><h1>个人列传</h1>' . $body . '</body></html>';
-        $directory = __DIR__ . '/data/exports';
+        $directory = Database::getExportsDirectory();
+        if (!is_dir($directory)) mkdir($directory, 0750, true);
         if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) appError('无法创建导出目录', 'IO_ERROR', 500);
         $token = bin2hex(random_bytes(32));
         $storedName = bin2hex(random_bytes(24)) . '.html';
@@ -686,7 +688,8 @@ switch ($action) {
         if ($action === 'export_task_csv') {
             $csv = implode("
 ", $csvRows);
-            $directory = __DIR__ . '/data/exports';
+            $directory = Database::getExportsDirectory();
+        if (!is_dir($directory)) mkdir($directory, 0750, true);
             if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) appError('无法创建导出目录', 'IO_ERROR', 500);
             $token = bin2hex(random_bytes(32));
             $storedName = bin2hex(random_bytes(24)) . '.csv';
@@ -720,7 +723,8 @@ switch ($action) {
         if ($action === 'export_wrong_csv') {
             $csv = implode("
 ", $csvRows);
-            $directory = __DIR__ . '/data/exports';
+            $directory = Database::getExportsDirectory();
+        if (!is_dir($directory)) mkdir($directory, 0750, true);
             if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) appError('无法创建导出目录', 'IO_ERROR', 500);
             $token = bin2hex(random_bytes(32));
             $storedName = bin2hex(random_bytes(24)) . '.csv';
@@ -757,18 +761,15 @@ switch ($action) {
         if (!isset($_FILES['image']) || !is_array($_FILES['image'])) appError('请选择图片');
         $img = $_FILES['image'];
         if (($img['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('图片上传失败');
-        if (($img['size'] ?? 0) > 12582912) appError('图片最大 12MB', null, 413);
-        $info = @getimagesize($img['tmp_name']);
-        $allowed = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
-        if (!$info || !isset($allowed[$info[2]])) appError('仅支持 JPEG、PNG、WebP');
+        if (($img['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) appError('图片最大 12MB', null, 413);
         $desc = trim((string)($_POST['description'] ?? ''));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
-        $uploadDir = Database::getUploadsDirectory($classId);
-        if (!is_dir($uploadDir)) mkdir($uploadDir, 0750, true);
-        $ext = $allowed[$info[2]];
-        $fname = bin2hex(random_bytes(16)) . '.' . $ext;
-        $path = $uploadDir . DIRECTORY_SEPARATOR . $fname;
-        if (!move_uploaded_file($img['tmp_name'], $path)) appError('保存失败');
+        try {
+            $fname = Database::saveUploadedImage($classId, $img['tmp_name']);
+        } catch (RuntimeException $e) {
+            $msg = $e->getMessage();
+            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB')) ? 413 : 500);
+        }
         $id = bin2hex(random_bytes(16));
         Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
             if (!is_array($latest)) $latest = [];
