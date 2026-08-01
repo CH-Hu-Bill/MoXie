@@ -12,6 +12,7 @@
 - [技术栈与运行要求](#技术栈与运行要求)
 - [目录结构](#目录结构)
 - [部署指南](#部署指南)
+- [部署安全加固](#部署安全加固)
 - [核心入口说明](#核心入口说明)
 - [数据存储说明](#数据存储说明)
 - [APP API 说明](#app-api-说明)
@@ -111,22 +112,131 @@
    chmod -R 755 data/
    ```
 
-4. **Web 根**：将文档根指向本目录。Nginx 示例：
+4. **Web 服务器配置**：将文档根指向本目录，并**配置安全规则**（这是部署中最关键的一步，详见下方 [部署安全加固](#部署安全加固)）。最小 Nginx 示例：
    ```nginx
-   root /var/www/listenwrite;
-   location ~ \.php$ {
-       fastcgi_pass unix:/run/php/php-fpm.sock;
-       include fastcgi_params;
-       fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+   server {
+       listen 443 ssl;
+       server_name example.com;
+       root /var/www/listenwrite;
+       index index.php;
+
+       location ~ \.php$ {
+           fastcgi_pass unix:/run/php/php-fpm.sock;
+           include fastcgi_params;
+           fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+       }
    }
    ```
 
-5. **确认防护生效**：访问 `https://你的域名/data/classes.json` 应返回 403（`.htaccess` 在 Apache 下生效；Nginx 需另行配置 `location /data/ { deny all; }`）。
-
-6. **访问**：
+5. **访问**：
    - Web 端：`https://你的域名/`
    - 管理后台：`https://你的域名/admin.php`
    - APP 接口：`https://你的域名/app_api.php`
+
+---
+
+## 部署安全加固
+
+> ⚠️ **这是部署时必须完成的步骤。** 源码层面无法阻止工具（如 wget/HTTrack）爬取数据文件，以下配置由 Web 服务器在请求入口拦截。
+
+### Nginx 完整安全配置
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name example.com;
+    root /var/www/listenwrite;
+    index index.php;
+
+    # ---- 基础安全头 ----
+    add_header X-Content-Type-Options  "nosniff" always;
+    add_header X-Frame-Options         "DENY" always;
+    add_header X-XSS-Protection        "1; mode=block" always;
+    add_header Referrer-Policy         "no-referrer" always;
+    add_header Permissions-Policy      "camera=(), microphone=(), geolocation=()" always;
+
+    # ---- 禁止访问敏感目录和文件 ----
+    # data/ 目录（所有 JSON 数据 + 上传图片）
+    location /data/        { deny all; }
+
+    # inc/ 目录（PHP 源码，防止源码泄露）
+    location /inc/         { deny all; }
+
+    # 配置文件（即使 .php 会被解析，再加一层保险）
+    location ~ /inc/config\.php$ { deny all; }
+
+    # 禁止下载 .json 文件（即使不在 data/ 下）
+    location ~ \.json$     { deny all; }
+
+    # 禁止直接访问隐藏文件（.htaccess / .git / .env 等）
+    location ~ /\.         { deny all; }
+
+    # 禁止目录浏览
+    autoindex off;
+
+    # ---- PHP 处理 ----
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+
+        # 隐藏 PHP 版本
+        fastcgi_hide_header X-Powered-By;
+    }
+
+    # ---- 限流（防暴力破解） ----
+    limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+    location = /admin.php {
+        limit_req zone=login burst=3 nodelay;
+        # admin.php 本身也是 PHP，需要交给 fastcgi
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+    location = /app_api.php {
+        limit_req zone=login burst=10 nodelay;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+}
+```
+
+### Apache (.htaccess)
+
+项目已自带 `data/.htaccess`（`Deny all`）。建议在网站根目录额外添加或修改：
+
+```apache
+# 禁止访问 inc/ 目录（防止 PHP 源码泄露）
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^inc/ - [F,L]
+</IfModule>
+
+# 禁止直接访问 .json 文件
+<FilesMatch "\.json$">
+    Require all denied
+</FilesMatch>
+
+# 隐藏 PHP 版本
+<IfModule mod_headers.c>
+    Header unset X-Powered-By
+</IfModule>
+
+# 禁止目录浏览
+Options -Indexes
+```
+
+### 其他建议
+
+| 措施 | 说明 |
+|------|------|
+| **HTTPS 强制** | 全站 HTTPS，配合 HSTS（`Strict-Transport-Security` header） |
+| **Fail2ban** | 监控 PHP 错误日志和 403 响应，自动封禁异常 IP |
+| **文件权限** | `data/` 目录 `chmod 700`，`inc/config.php` `chmod 600`，Web 进程用户只读 |
+| **PHP 配置** | `expose_php = Off`，`display_errors = Off`（生产环境），`open_basedir` 限制到网站目录 |
+| **定期备份** | `data/` 目录定期备份（rsync/cron），这是唯一的数据存储 |
+| **WAF** | 可选 Cloudflare 免费计划，自带 DDoS 防护和恶意爬虫拦截 |
 
 ---
 
@@ -249,7 +359,7 @@ data/
 - **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。
-- **数据保护**：`data/` 目录禁止 Web 直链（`.htaccess`）。
+- **数据保护**：`data/` 目录禁止 Web 直链（`.htaccess`）。**生产环境必须额外配置 Web 服务器规则**，拦截 `inc/`、`.json`、隐藏文件等，详见 [部署安全加固](#部署安全加固)。
 
 ---
 
