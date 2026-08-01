@@ -607,8 +607,7 @@ switch ($action) {
         }
 
         // 生成随机文件名并保存
-        $uploadRoot = __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'uploads';
-        $classDirectory = $uploadRoot . DIRECTORY_SEPARATOR . $classId;
+        $classDirectory = Database::getUploadsDirectory($classId);
         if (!is_dir($classDirectory) && !mkdir($classDirectory, 0750, true) && !is_dir($classDirectory)) {
             imagedestroy($source); imagedestroy($target); appError('上传目录不可用', null, 500);
         }

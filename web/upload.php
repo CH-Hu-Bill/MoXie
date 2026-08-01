@@ -19,8 +19,7 @@ if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) uploadJsonError('
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) uploadJsonError('班级不存在', 404);
 
-$uploadRoot = __DIR__ . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'uploads';
-$classDirectory = $uploadRoot . DIRECTORY_SEPARATOR . $classId;
+$classDirectory = Database::getUploadsDirectory($classId);
 
 // GET 请求（查看图片）无需鉴权，外部 API 可直接引用
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {

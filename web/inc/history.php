@@ -279,14 +279,13 @@ function historyExtractImageRefs($content) {
  * 安全性：classId 和 filename 严格正则校验，防路径穿越。
  */
 function historyRewriteImageUrlsToBase64($html) {
-    $siteRoot = dirname(__DIR__); // 网站根目录
     $pattern = '/upload\.php\?class_id=([A-Za-z0-9][A-Za-z0-9_-]*)&(?:amp;)?file=([a-f0-9]{32}\.(?:jpg|png|webp))/i';
-    return preg_replace_callback($pattern, function($m) use ($siteRoot) {
+    return preg_replace_callback($pattern, function($m) {
         $classId = $m[1];
         $filename = $m[2];
         if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) return $m[0];
         if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp)\z/D', $filename)) return $m[0];
-        $path = $siteRoot . '/data/uploads/' . $classId . '/' . $filename;
+        $path = Database::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . $filename;
         if (!is_file($path) || !is_readable($path)) return $m[0];
         $data = @file_get_contents($path);
         if ($data === false || strlen($data) === 0) return $m[0];
