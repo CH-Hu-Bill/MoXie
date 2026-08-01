@@ -13,8 +13,7 @@ if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
 $class = $classes[$classId];
 requireClassAuth($classId, $class);
 
-$galleryFile = 'gallery_' . $classId . '.json';
-$gallery = Database::read($galleryFile);
+$gallery = Database::getClassData($classId, 'gallery');
 if (!is_array($gallery)) $gallery = [];
 $csrfToken = csrfToken();
 
@@ -64,7 +63,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     }
 
     $id = bin2hex(random_bytes(16));
-    Database::update($galleryFile, function($latest) use ($id, $filename, $desc) {
+    Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
         if (!is_array($latest)) $latest = [];
         array_unshift($latest, ['id' => $id, 'image' => $filename, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
         return $latest;
@@ -78,7 +77,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
     requireCsrf();
     $id = (string)($_POST['id'] ?? '');
     if (!preg_match('/\A[a-f0-9]{32}\z/D', $id)) { echo json_encode(['success' => false, 'error' => '无效ID']); exit; }
-    Database::update($galleryFile, function($latest) use ($id, $classId) {
+    Database::updateClassData($classId, 'gallery', function($latest) use ($id, $classId) {
         if (!is_array($latest)) return null;
         foreach ($latest as $i => $item) {
             if (($item['id'] ?? '') === $id) {

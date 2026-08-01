@@ -79,13 +79,7 @@ if ($isAuthed) {
                     foreach (array_keys($s) as $k) if (substr((string)$k, -strlen($suffix)) === $suffix) unset($s[$k]);
                     return $s;
                 });
-                $dir = dirname(Database::getFilePath('classes.json'));
-                foreach (scandir($dir) ?: [] as $f) {
-                    if (preg_match('/\Apersonal_history_[A-Za-z0-9_-]+_' . preg_quote($delId, '/') . '\.json\z/D', $f)) Database::delete($f);
-                }
-                foreach (['words_','tasks_','history_'] as $pre) Database::delete($pre . $delId . '.json');
-                $upDir = Database::getUploadsDirectory($delId);
-                if (is_dir($upDir)) { foreach (scandir($upDir) ?: [] as $f) { if ($f !== '.' && $f !== '..') @unlink($upDir . DIRECTORY_SEPARATOR . $f); } @rmdir($upDir); }
+                Database::deleteClassDataDir($delId);
                 $msg = '班级已删除';
             } else { $msg = '班级已变更，删除取消'; }
         } else { $msg = '班级名不匹配，删除取消'; }

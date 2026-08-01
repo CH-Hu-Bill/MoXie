@@ -16,7 +16,7 @@
  *   ?ok=1         — 显示 OK 过渡蒙版 (从任务页返回时)
  *
  * 数据依赖:
- *   data/classes.json, data/words_{classId}.json, data/tasks_{classId}.json, data/settings.json
+ *   data/classes.json, data/classes/{classId}/words.json, data/classes/{classId}/tasks.json, data/settings.json
  * ============================================================
  */
 require_once 'inc/db.php';
@@ -110,7 +110,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_weekend_task') {
     shuffle($pick);
     $pick = array_slice(array_values(array_unique($pick)), 0, 20);
     $weekendTaskId = null;
-    $updatedTasks = Database::update('tasks_' . $classId . '.json', function($latestTasks) use ($currentWeek, $pick, &$weekendTaskId) {
+    $updatedTasks = Database::updateClassData($classId, 'tasks', function($latestTasks) use ($currentWeek, $pick, &$weekendTaskId) {
         foreach ($latestTasks as $tid => $task) {
             if (($task['weekend_week'] ?? '') === $currentWeek) {
                 $weekendTaskId = $tid;

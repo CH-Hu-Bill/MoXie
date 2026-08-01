@@ -14,8 +14,7 @@ $class = $classes[$classId];
 
 requireClassAuth($classId, $class);
 
-$historyFile = 'history_' . $classId . '.json';
-$history = historySanitizeEntries(Database::read($historyFile));
+$history = historySanitizeEntries(Database::getClassData($classId, 'history'));
 $today = date('Y-m-d');
 $csrfToken = csrfToken();
 
@@ -40,11 +39,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
         'updated_at' => date('Y-m-d H:i:s'),
     ];
 
-    Database::update($historyFile, function($latest) use ($date, $entry) {
+    Database::updateClassData($classId, 'history', function($latest) use ($date, $entry) {
         $latest[$date] = $entry;
         return $latest;
     });
-    try { historyCleanupOrphanImages($classId, $historyFile); } catch (Throwable $_) {}
+    try { historyCleanupOrphanImages($classId, 'history'); } catch (Throwable $_) {}
     echo json_encode(['success' => true, 'entry' => $entry], JSON_UNESCAPED_UNICODE); exit;
 }
 ?>
@@ -469,7 +468,7 @@ foreach (($appData['users'] ?? []) as $uid => $user) {
     $consentMap = $user['consent_map'] ?? [];
     $allowed = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($user['consent']) ? true : false);
     if (!$allowed || !preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', (string)$uid)) continue;
-    $personalHistory = historySanitizeEntries(Database::read('personal_history_' . $uid . '_' . $classId . '.json'));
+    $personalHistory = historySanitizeEntries(Database::getClassData($classId, 'personal_history_' . $uid));
     foreach ($personalHistory as $dateKey => $entry) {
         if (!isset($personalDates[$dateKey])) $personalDates[$dateKey] = [];
         $personalDates[$dateKey][] = [

@@ -80,7 +80,7 @@ if (isset($_POST['action'])) {
         $currentTaskId = $_GET['task_id'] ?? '';
         $changed = false;
         if ($tid !== '' && hash_equals((string)$currentTaskId, (string)$tid)) {
-            Database::update('tasks_' . $classId . '.json', function($latestTasks) use ($tid, &$changed) {
+            Database::updateClassData($classId, 'tasks', function($latestTasks) use ($tid, &$changed) {
                 if (!isset($latestTasks[$tid]) || ($latestTasks[$tid]['status'] ?? '') !== 'pending') return null;
                 $latestTasks[$tid]['status'] = 'completed';
                 $changed = true;
@@ -98,7 +98,7 @@ if (isset($_POST['action'])) {
         $currentTaskId = $_GET['task_id'] ?? '';
         $changed = false;
         if ($tid !== '' && hash_equals((string)$currentTaskId, (string)$tid)) {
-            Database::update('tasks_' . $classId . '.json', function($latestTasks) use ($tid, &$changed) {
+            Database::updateClassData($classId, 'tasks', function($latestTasks) use ($tid, &$changed) {
                 if (!isset($latestTasks[$tid]) || ($latestTasks[$tid]['status'] ?? '') !== 'pending') return null;
                 $latestTasks[$tid]['status'] = 'cancelled';
                 $changed = true;

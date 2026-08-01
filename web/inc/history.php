@@ -142,7 +142,7 @@ function historyBuildMergedEntries($history, $classId, $start, $end, $includePer
             $consentMap = $user['consent_map'] ?? [];
             $allowed = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($user['consent']) ? true : false);
             if (!$allowed || !preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', (string)$uid)) continue;
-            foreach (historySanitizeEntries(Database::read('personal_history_' . $uid . '_' . $classId . '.json')) as $dateKey => $entry) {
+            foreach (historySanitizeEntries(Database::getClassData($classId, 'personal_history_' . $uid)) as $dateKey => $entry) {
                 if (($start !== '' && $dateKey < $start) || ($end !== '' && $dateKey > $end)) continue;
                 $merged[$dateKey][] = ['title' => '个人列传 - ' . (string)($user['name'] ?? $uid), 'content' => $entry['content'], 'author_uid' => $uid, 'author_name' => (string)($user['name'] ?? $uid)];
             }
@@ -268,9 +268,9 @@ function historyExtractImageRefs($content) {
 
 /**
  * 清理该班级史记不再引用的图片文件
- * 扫描 data/uploads/{classId}/ 目录，删除不在任何史记条目引用列表中的图片
+ * 扫描 data/classes/{classId}/uploads/ 目录，删除不在任何史记条目引用列表中的图片
  * @param string $classId 班级ID
- * @param string $historyFile 史记文件名
+ * @param string $historyKey 史记数据键 (如 'history')
  */
 /**
  * 把 HTML 中的 upload.php?class_id=xxx&file=xxx 图片 URL
@@ -342,12 +342,12 @@ function historyExtractBlocks($node, &$blocks) {
     if ($text !== '') $blocks[] = ['type' => 'text', 'text' => $text];
 }
 
-function historyCleanupOrphanImages($classId, $historyFile) {
+function historyCleanupOrphanImages($classId, $historyKey) {
     $uploadsDir = Database::getUploadsDirectory($classId);
     if (!is_dir($uploadsDir)) return;
 
     // 收集所有史记条目引用的图片
-    $history = Database::read($historyFile);
+    $history = Database::getClassData($classId, $historyKey);
     $referenced = [];
     foreach ($history as $entry) {
         $content = (string)($entry['content'] ?? '');

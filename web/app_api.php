@@ -335,7 +335,7 @@ switch ($action) {
         if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) appError('输入内容过长');
         $newId = bin2hex(random_bytes(8));
         $duplicate = false;
-        Database::update('words_' . $classId . '.json', function($words) use ($word, $meaning, $pos, $newId, &$duplicate) {
+        Database::updateClassData($classId, 'words', function($words) use ($word, $meaning, $pos, $newId, &$duplicate) {
             foreach ($words as $existing) if (mb_strtolower($existing['word']) === mb_strtolower($word)) { $duplicate = true; return null; }
             $words[] = ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => date('Y-m-d')];
             return $words;
@@ -395,7 +395,7 @@ switch ($action) {
         $taskId = appStrictId($_POST['task_id'] ?? '', 'task_id');
         $changed = false;
         $newStatus = $action === 'complete_task' ? 'completed' : 'cancelled';
-        Database::update('tasks_' . $classId . '.json', function($tasks) use ($taskId, $newStatus, &$changed) {
+        Database::updateClassData($classId, 'tasks', function($tasks) use ($taskId, $newStatus, &$changed) {
             if (!isset($tasks[$taskId]) || ($tasks[$taskId]['status'] ?? '') !== 'pending') return null;
             $tasks[$taskId]['status'] = $newStatus;
             $changed = true;
@@ -492,7 +492,7 @@ switch ($action) {
     case 'export_personal_history':
         $start = trim((string)($_POST['start_date'] ?? '')); $end = trim((string)($_POST['end_date'] ?? ''));
         if (($start !== '' && !historyStrictDate($start)) || ($end !== '' && !historyStrictDate($end)) || ($start !== '' && $end !== '' && $start > $end)) appError('日期范围无效');
-        $entries = historySanitizeEntries(Database::read('personal_history_' . $userId . '_' . $classId . '.json'));
+        $entries = historySanitizeEntries(Database::getClassData($classId, 'personal_history_' . $userId));
         $body = ''; $count = 0;
         foreach ($entries as $dateKey => $entry) {
             if ($dateKey === date('Y-m-d') || ($start !== '' && $dateKey < $start) || ($end !== '' && $dateKey > $end)) continue;
@@ -521,14 +521,14 @@ switch ($action) {
     case 'get_class_history':
         $month = trim((string)($_POST['month'] ?? ''));
         if ($month !== '' && !preg_match('/\A\d{4}-(?:0[1-9]|1[0-2])\z/D', $month)) appError('month 格式无效');
-        $history = historySanitizeEntries(Database::read('history_' . $classId . '.json'));
+        $history = historySanitizeEntries(Database::getClassData($classId, 'history'));
         if ($month !== '') $history = array_filter($history, function($entryDate) use ($month) { return strncmp($entryDate, $month . '-', 8) === 0; }, ARRAY_FILTER_USE_KEY);
         appJson(['success' => true, 'data' => $history]);
 
     case 'get_personal_history':
         $month = trim((string)($_POST['month'] ?? ''));
         if ($month !== '' && !preg_match('/\A\d{4}-(?:0[1-9]|1[0-2])\z/D', $month)) appError('month 格式无效');
-        $history = historySanitizeEntries(Database::read('personal_history_' . $userId . '_' . $classId . '.json'));
+        $history = historySanitizeEntries(Database::getClassData($classId, 'personal_history_' . $userId));
         if ($month !== '') $history = array_filter($history, function($entryDate) use ($month) { return strncmp($entryDate, $month . '-', 8) === 0; }, ARRAY_FILTER_USE_KEY);
         appJson(['success' => true, 'data' => $history]);
 
@@ -553,7 +553,7 @@ switch ($action) {
         ]);
         $entry['content'] = $content;
         $entry['updated_at'] = date('Y-m-d H:i:s');
-        Database::update('personal_history_' . $userId . '_' . $classId . '.json', function($history) use ($date, $entry) {
+        Database::updateClassData($classId, 'personal_history_' . $userId, function($history) use ($date, $entry) {
             $history[$date] = $entry;
             return $history;
         });
@@ -789,7 +789,7 @@ switch ($action) {
         }
 
     case 'get_gallery':
-        $gallery = Database::read('gallery_' . $classId . '.json');
+        $gallery = Database::getClassData($classId, 'gallery');
         if (!is_array($gallery)) $gallery = [];
         $page = max(1, (int)($_POST['page'] ?? 1));
         $perPage = min(50, max(1, (int)($_POST['per_page'] ?? 10)));
@@ -812,14 +812,14 @@ switch ($action) {
         if (!$info || !isset($allowed[$info[2]])) appError('仅支持 JPEG、PNG、WebP');
         $desc = trim((string)($_POST['description'] ?? ''));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
-        $uploadDir = __DIR__ . '/data/uploads/' . $classId . '/';
+        $uploadDir = Database::getUploadsDirectory($classId);
         if (!is_dir($uploadDir)) mkdir($uploadDir, 0750, true);
         $ext = $allowed[$info[2]];
         $fname = bin2hex(random_bytes(16)) . '.' . $ext;
-        $path = $uploadDir . $fname;
+        $path = $uploadDir . DIRECTORY_SEPARATOR . $fname;
         if (!move_uploaded_file($img['tmp_name'], $path)) appError('保存失败');
         $id = bin2hex(random_bytes(16));
-        Database::update('gallery_' . $classId . '.json', function($latest) use ($id, $fname, $desc) {
+        Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
             if (!is_array($latest)) $latest = [];
             array_unshift($latest, ['id' => $id, 'image' => $fname, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
             return $latest;
@@ -828,10 +828,10 @@ switch ($action) {
 
     case 'delete_gallery':
         $gid = appStrictId($_POST['id'] ?? '', 'id');
-        Database::update('gallery_' . $classId . '.json', function($latest) use ($gid, $classId) {
+        Database::updateClassData($classId, 'gallery', function($latest) use ($gid, $classId) {
             if (!is_array($latest)) return null;
             foreach ($latest as $i => $item) if (($item['id'] ?? '') === $gid) {
-                $p = __DIR__ . '/data/uploads/' . $classId . '/' . ($item['image'] ?? '');
+                $p = Database::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . ($item['image'] ?? '');
                 if (is_file($p)) @unlink($p);
                 array_splice($latest, $i, 1);
                 return $latest;

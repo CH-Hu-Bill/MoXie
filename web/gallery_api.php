@@ -38,8 +38,7 @@ if ($apiKey !== '') {
     }
 }
 
-$galleryFile = 'gallery_' . $classId . '.json';
-$gallery = Database::read($galleryFile);
+$gallery = Database::getClassData($classId, 'gallery');
 if (!is_array($gallery)) $gallery = [];
 
 $page = max(1, (int)($_GET['page'] ?? 1));

@@ -150,24 +150,42 @@
 
 ## 数据存储说明
 
-所有数据以 JSON 文件存于 `data/`，由 `inc/db.php` 统一管理（原子写入：临时文件 + 排他锁 + rename；并发更新用 `.lock` 文件加锁）。
+所有数据以 JSON 文件存于 `data/`，由 `inc/db.php` 统一管理（原子写入：临时文件 + 排他锁 + rename；并发更新用 `.lock` 文件加锁）。**班级相关数据按班级隔离为独立子目录** `data/classes/{classId}/`，全局数据留在 `data/` 根。
 
-| 文件 | 内容 | 敏感级别 |
+```
+data/
+├── classes.json                # 全局班级注册表
+├── settings.json               # 全局设置
+├── app_data.json               # APP 用户（全局）
+├── app_versions.json           # APP 版本发布日志
+├── exports.json + exports/     # 临时导出文件与 token
+├── ratelimit.json              # 限流计数
+└── classes/
+    └── {classId}/
+        ├── words.json              # 单词
+        ├── tasks.json              # 任务
+        ├── history.json            # 班级史记
+        ├── gallery.json            # 图集元数据
+        ├── personal_history_{uid}.json  # 个人列传
+        └── uploads/                # 上传图片
+```
+
+| 路径 | 内容 | 敏感级别 |
 |------|------|----------|
 | `classes.json` | 班级列表（id / name / `password_hash` / `auth_version` / created_at） | 高 |
-| `words_{classId}.json` | 单词数组（id / word / meaning / pos / created_at） | 中 |
-| `tasks_{classId}.json` | 任务（id / date / label / word_ids / status / weekend_week） | 中 |
+| `classes/{classId}/words.json` | 单词数组（id / word / meaning / pos / created_at） | 中 |
+| `classes/{classId}/tasks.json` | 任务（id / date / label / word_ids / status / weekend_week） | 中 |
 | `settings.json` | 全局设置（键名按功能+班级组合，如 `volume_{classId}`、`weekend_week_{classId}`、`gallery_api_key_{classId}`） | 中 |
 | `app_data.json` | APP 用户（name / `password_hash` / tokens / class_ids / wrong_words / consent_map） | **极高** |
 | `app_versions.json` | APP 版本与发布日志（latest / history） | 中 |
-| `history_{classId}.json` | 班级史记正文（key=日期，含 content/title/mood/weather/location/tags） | 中 |
-| `personal_history_{uid}_{classId}.json` | 个人列传（隐私，需 consent 授权） | 高 |
-| `gallery_{classId}.json` | 图集元数据（id / image / description / uploaded_at） | 中 |
+| `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/title/mood/weather/location/tags） | 中 |
+| `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权） | 高 |
+| `classes/{classId}/gallery.json` | 图集元数据（id / image / description / uploaded_at） | 中 |
 | `exports.json` + `exports/` | 临时导出文件与下载 token（短时有效，自动 GC） | 高 |
 | `ratelimit.json` | 限流计数（滑动窗口） | 低 |
-| `uploads/{classId}/` | 上传图片（经 GD 重编码，文件名为随机哈希） | 中 |
+| `classes/{classId}/uploads/` | 上传图片（经 GD 重编码，文件名为随机哈希） | 中 |
 
-> `data/` 及 `data/uploads/` 均有 `.htaccess`（`Deny all`）保护，图片只能通过 `upload.php` 控制访问。Nginx 环境需手动添加 `deny all` 规则。
+> `data/` 目录有 `.htaccess`（`Deny all`）保护，递归禁止所有子目录的 Web 直链，图片只能通过 `upload.php` 控制访问。Nginx 环境需手动配置 `location /data/ { deny all; }`。
 
 ---
 

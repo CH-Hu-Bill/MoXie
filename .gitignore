@@ -2,12 +2,11 @@
 web/inc/config.php
 
 # ── Web 端运行时数据（data/ 下的 JSON、锁文件、上传图片均为运行产生）──
-# 保留 .htaccess 安全配置
+# 保留 .htaccess 安全配置；班级数据子目录 data/classes/ 整体忽略
 web/data/*
 !web/data/.htaccess
-!web/data/uploads/
-web/data/uploads/*
-!web/data/uploads/.htaccess
+web/data/classes/
+web/data/exports/
 *.lock
 
 # ── 诊断/临时脚本（调试遗留，不进仓库）──
