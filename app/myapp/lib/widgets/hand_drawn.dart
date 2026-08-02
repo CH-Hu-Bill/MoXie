@@ -502,10 +502,8 @@ class WordCard extends StatelessWidget {
   final String meaning;
   final String pos;
   final bool isWrong;
-  final bool isFavorite;
   final bool showRemoveButton;
   final VoidCallback? onToggleWrong;
-  final VoidCallback? onToggleFavorite;
   final VoidCallback? onTap;
   final bool highlight;
 
@@ -515,10 +513,8 @@ class WordCard extends StatelessWidget {
     required this.meaning,
     this.pos = '',
     this.isWrong = false,
-    this.isFavorite = false,
     this.showRemoveButton = false,
     this.onToggleWrong,
-    this.onToggleFavorite,
     this.onTap,
     this.highlight = false,
   });
@@ -530,23 +526,6 @@ class WordCard extends StatelessWidget {
     if (len > 9) return 26;
     if (len > 7) return 30;
     return 34;
-  }
-
-  Color _borderColor() {
-    if (isWrong) return AppColors.red;
-    if (isFavorite) return AppColors.blue;
-    return AppColors.pencil;
-  }
-
-  double _borderWidth() {
-    if (isWrong || isFavorite) return 3;
-    return 2;
-  }
-
-  Color _shadowColor() {
-    if (isWrong) return AppColors.red;
-    if (isFavorite) return AppColors.blue;
-    return AppColors.pencil;
   }
 
   @override
@@ -602,8 +581,6 @@ class WordCard extends StatelessWidget {
               const SizedBox(width: 4),
               _buildSpeaker(context),
               const SizedBox(width: 4),
-              _buildFavoriteButton(),
-              const SizedBox(width: 4),
               _buildWrongButton(),
             ],
           ),
@@ -647,26 +624,6 @@ class WordCard extends StatelessWidget {
           boxShadow: AppTheme.hardShadowSm,
         ),
         child: const Icon(Icons.volume_up, size: 16, color: AppColors.blue),
-      ),
-    );
-  }
-
-  Widget _buildFavoriteButton() {
-    return GestureDetector(
-      onTap: onToggleFavorite,
-      child: Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          color: isFavorite ? AppColors.blue : AppColors.white,
-          border: Border.all(color: AppColors.pencil, width: 2),
-          borderRadius: AppTheme.wobblySm,
-          boxShadow: AppTheme.hardShadowSm,
-        ),
-        child: Icon(
-          isFavorite ? Icons.star : Icons.star_border,
-          size: 16,
-          color: isFavorite ? AppColors.white : AppColors.pencil,
-        ),
       ),
     );
   }

@@ -110,19 +110,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  Future<void> _toggleFavorite(Word word) async {
-    try {
-      await _api.toggleFavorite(widget.classId, word.id);
-      _loadDetail();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
-    }
-  }
-
   Future<void> _exportText() async {
     try {
       final res = await _api.exportTaskText(widget.classId, widget.taskId);
@@ -232,10 +219,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           meaning: w.meaning,
                           pos: w.pos,
                           isWrong: w.isWrong,
-                          isFavorite: w.isFavorite,
                           highlight: _shouldHighlight(w),
                           onToggleWrong: () => _toggleWrong(w),
-                          onToggleFavorite: () => _toggleFavorite(w),
                         ),
                       );
                     },

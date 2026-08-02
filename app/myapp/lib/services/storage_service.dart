@@ -92,6 +92,12 @@ class StorageService {
     }
   }
 
+  // ── Consent ──
+
+  Future<void> saveConsent(bool consent) =>
+      _p.setBool('consent', consent);
+  bool getConsent() => _p.getBool('consent') ?? false;
+
   // ── Clear ──
 
   Future<void> clearAll() async {

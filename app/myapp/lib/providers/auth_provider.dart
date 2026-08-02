@@ -79,6 +79,10 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _autoLogin() async {
     final res = await _api.autoLogin();
     final data = res['data'] as Map<String, dynamic>;
+    final consent = _storage.getConsent();
+    if (consent) {
+      data['consent'] = true;
+    }
     _user = User.fromJson(data);
     await _storage.saveUserId(_user!.id);
     await _storage.saveUserName(_user!.name);
@@ -226,6 +230,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _api.setGlobalConsent(allow);
       _user = _user!.copyWith(consent: allow);
+      await _storage.saveConsent(allow);
       notifyListeners();
       return true;
     } catch (_) {

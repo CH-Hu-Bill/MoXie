@@ -26,7 +26,6 @@ class StudyScreenState extends State<StudyScreen> {
 
   List<Word> _words = [];
   List<Word> _wrongWords = [];
-  List<Word> _favoriteWords = [];
   List<Task> _pendingTasks = [];
   List<Task> _historyTasks = [];
   bool _loading = false;
@@ -75,7 +74,6 @@ class StudyScreenState extends State<StudyScreen> {
 
     _loadWords(classId);
     _loadWrongWords(classId);
-    _loadFavorites(classId);
     _loadTasks(classId);
   }
 
@@ -123,18 +121,6 @@ class StudyScreenState extends State<StudyScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadFavorites(String classId) async {
-    try {
-      final res = await _api.getFavorites(classId, perPage: 100);
-      final data = res['data'] as Map<String, dynamic>;
-      setState(() {
-        _favoriteWords = (data['words'] as List)
-            .map((w) => Word.fromJson(w as Map<String, dynamic>))
-            .toList();
-      });
-    } catch (_) {}
-  }
-
   Future<void> _loadTasks(String classId) async {
     try {
       final pendingRes = await _api.getTasks(classId, 'pending');
@@ -163,20 +149,6 @@ class StudyScreenState extends State<StudyScreen> {
       }
       _loadWords(classId);
       _loadWrongWords(classId);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _toggleFavorite(String classId, Word word) async {
-    try {
-      await _api.toggleFavorite(classId, word.id);
-      _loadWords(classId);
-      _loadFavorites(classId);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -321,7 +293,7 @@ class StudyScreenState extends State<StudyScreen> {
         child: Column(
           children: [
             WobblyTabBar(
-              tabs: const ['单词库', '单词本', '错题本', '任务'],
+              tabs: const ['单词库', '错题本', '任务'],
               selectedIndex: _mainTab,
               onTap: (i) => setState(() => _mainTab = i),
             ),
@@ -329,10 +301,8 @@ class StudyScreenState extends State<StudyScreen> {
               child: _mainTab == 0
                   ? _buildWordLibrary(classId)
                   : _mainTab == 1
-                      ? _buildFavorites(classId)
-                      : _mainTab == 2
-                          ? _buildWrongWords(classId)
-                          : _buildTasks(classId),
+                      ? _buildWrongWords(classId)
+                      : _buildTasks(classId),
             ),
           ],
         ),
@@ -382,43 +352,15 @@ class StudyScreenState extends State<StudyScreen> {
           final w = _words[i];
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: WordCard(
+child: WordCard(
               word: w.word,
               meaning: w.meaning,
               pos: w.pos,
               isWrong: w.isWrong,
-              isFavorite: w.isFavorite,
               onToggleWrong: () => _toggleWrong(classId, w),
-              onToggleFavorite: () => _toggleFavorite(classId, w),
-            ),
-          );
+            );
         },
       ),
-    );
-  }
-
-  Widget _buildFavorites(String classId) {
-    if (_favoriteWords.isEmpty) {
-      return const EmptyState(
-          message: '单词本为空，在单词库中点击星标添加', icon: Icons.star_border);
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _favoriteWords.length,
-      itemBuilder: (ctx, i) {
-        final w = _favoriteWords[i];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: WordCard(
-            word: w.word,
-            meaning: w.meaning,
-            pos: w.pos,
-            isFavorite: true,
-            onToggleWrong: () => _toggleWrong(classId, w),
-            onToggleFavorite: () => _toggleFavorite(classId, w),
-          ),
-        );
-      },
     );
   }
 
@@ -454,7 +396,6 @@ class StudyScreenState extends State<StudyScreen> {
                   isWrong: true,
                   showRemoveButton: true,
                   onToggleWrong: () => _toggleWrong(classId, w),
-                  onToggleFavorite: () => _toggleFavorite(classId, w),
                 ),
               );
             },
