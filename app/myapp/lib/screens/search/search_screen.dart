@@ -24,6 +24,7 @@ class _SearchScreenState extends State<SearchScreen> {
   SearchResult? _result;
   bool _loading = false;
   bool _searched = false;
+  final Set<String> _wrongWordIds = {};
 
   @override
   void initState() {
@@ -31,6 +32,28 @@ class _SearchScreenState extends State<SearchScreen> {
     if (widget.initialQuery != null) {
       _controller.text = widget.initialQuery!;
       WidgetsBinding.instance.addPostFrameCallback((_) => _search());
+    }
+  }
+
+  Future<void> _toggleWrong(WordMatch w) async {
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+    final isWrong = _wrongWordIds.contains(w.id);
+    try {
+      if (isWrong) {
+        await _api.unmarkWrong(classId, w.id);
+        setState(() => _wrongWordIds.remove(w.id));
+      } else {
+        await _api.markWrong(classId, w.id, true);
+        setState(() => _wrongWordIds.add(w.id));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e')),
+        );
+      }
     }
   }
 
@@ -151,6 +174,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   meaning: w.meaning,
                   pos: w.pos,
                   highlight: true,
+                  isWrong: _wrongWordIds.contains(w.id),
+                  onToggleWrong: () => _toggleWrong(w),
                   onTap: widget.onWordFound != null
                       ? () => widget.onWordFound!(w.word)
                       : null,

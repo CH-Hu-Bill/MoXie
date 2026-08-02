@@ -530,7 +530,7 @@ class WordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         color: highlight ? AppColors.postIt : AppColors.white,
@@ -580,8 +580,10 @@ class WordCard extends StatelessWidget {
               ],
               const SizedBox(width: 4),
               _buildSpeaker(context),
-              const SizedBox(width: 4),
-              _buildWrongButton(),
+              if (onToggleWrong != null || showRemoveButton) ...[
+                const SizedBox(width: 4),
+                _buildWrongButton(),
+              ],
             ],
           ),
           const SizedBox(height: 4),
@@ -598,6 +600,13 @@ class WordCard extends StatelessWidget {
         ],
       ),
     );
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: card,
+      );
+    }
+    return card;
   }
 
   Widget _buildSpeaker(BuildContext context) {

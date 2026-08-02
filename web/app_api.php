@@ -109,7 +109,7 @@ if ($action === 'login') {
             $latest['users'][$uid]['legacy_claimed_at'] = date('Y-m-d H:i:s');
             list($token, $expires) = appNewToken($latest, $uid);
             $user = $latest['users'][$uid];
-            $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $user['name'], 'class_ids' => $user['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => false]];
+            $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $user['name'], 'class_ids' => $user['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => false, 'consent' => !empty($user['consent']), 'consent_map' => $user['consent_map'] ?? (object)[]]];
             return $latest;
         });
         if ($response === null) appError('登录失败', null, 500);
@@ -122,7 +122,7 @@ if ($action === 'login') {
         if (!isset($latest['users'][$uid])) return null;
         list($token, $expires) = appNewToken($latest, $uid);
         $user = $latest['users'][$uid];
-        $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $user['name'], 'class_ids' => $user['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => false]];
+        $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $user['name'], 'class_ids' => $user['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => false, 'consent' => !empty($user['consent']), 'consent_map' => $user['consent_map'] ?? (object)[]]];
         return $latest;
     });
     if ($response === null) appError('登录失败', null, 500);
@@ -144,6 +144,7 @@ if ($action === 'auto_login') {
     appJson(['success' => true, 'data' => [
         'user_id' => $userId, 'name' => $user['name'] ?? '',
         'class_ids' => $user['class_ids'] ?? [],
+        'consent' => !empty($user['consent']),
         'consent_map' => $user['consent_map'] ?? (object)[],
     ]]);
 }

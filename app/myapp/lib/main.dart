@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'services/storage_service.dart';
@@ -25,6 +27,12 @@ class MyApp extends StatelessWidget {
         title: '默写史记',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.theme,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          FlutterQuillLocalizations.delegate,
+        ],
         home: Consumer<AuthProvider>(
           builder: (_, auth, __) {
             switch (auth.authState) {

@@ -9,6 +9,7 @@ import '../../services/api_service.dart';
 import '../../config/api_config.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
+import '../../widgets/rich_text_editor.dart';
 
 class LifeScreen extends StatefulWidget {
   const LifeScreen({super.key});
@@ -29,12 +30,11 @@ class _LifeScreenState extends State<LifeScreen> {
   String? _selectedDate;
   bool _isEditing = false;
   final _editTitleCtrl = TextEditingController();
-  final _editContentCtrl = TextEditingController();
   final _editLocationCtrl = TextEditingController();
   final _editTagsCtrl = TextEditingController();
+  final _richTextKey = GlobalKey<RichTextEditorState>();
   String _editMood = '😊';
   String _editWeather = '☀️';
-  List<String> _editImageUrls = [];
   bool _saving = false;
 
   static const _moods = ['😊', '🥰', '😌', '😢', '😤', '🤩', '😴'];
@@ -49,7 +49,6 @@ class _LifeScreenState extends State<LifeScreen> {
   @override
   void dispose() {
     _editTitleCtrl.dispose();
-    _editContentCtrl.dispose();
     _editLocationCtrl.dispose();
     _editTagsCtrl.dispose();
     super.dispose();
@@ -123,49 +122,31 @@ class _LifeScreenState extends State<LifeScreen> {
 
   void _startEditing(VlogEntry? existing) {
     _editTitleCtrl.text = existing?.title ?? '';
-    _editContentCtrl.text = existing != null ? _stripHtml(existing.content) : '';
     _editLocationCtrl.text = existing?.location ?? '';
     _editTagsCtrl.text = existing?.tags.join(', ') ?? '';
     _editMood = (existing?.mood.isNotEmpty == true) ? existing!.mood : '😊';
     _editWeather = (existing?.weather.isNotEmpty == true) ? existing!.weather : '☀️';
-    _editImageUrls = [];
-    if (existing != null) {
-      final imgRegex = RegExp(r'<img[^>]+src="([^"]+)"');
-      for (final m in imgRegex.allMatches(existing.content)) {
-        _editImageUrls.add(m.group(1)!);
-      }
-    }
+    final html = existing != null ? _resolveHtmlImages(existing.content) : '';
     setState(() => _isEditing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _richTextKey.currentState?.setHtml(html);
+    });
   }
 
-  String _stripHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<br\s*/?>'), '\n')
-        .replaceAll(RegExp(r'</p>'), '\n')
-        .replaceAll(RegExp(r'<[^>]+>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .trim();
-  }
-
-  String _buildHtml() {
-    final lines = _editContentCtrl.text.split('\n');
-    final htmlParts = <String>[];
-    for (final line in lines) {
-      if (line.trim().isNotEmpty) {
-        htmlParts.add('<p>${_escapeHtml(line.trim())}</p>');
-      }
+  String _resolveHtmlImages(String html) {
+    try {
+      final base = ApiConfig.baseUrl;
+      return html.replaceAllMapped(
+        RegExp(r'(<img[^>]*\bsrc=")([^"]+)("[^>]*>)'),
+        (m) {
+          final src = m.group(2)!;
+          if (src.startsWith('http')) return m.group(0)!;
+          return '${m.group(1)}$base/$src${m.group(3)}';
+        },
+      );
+    } catch (_) {
+      return html;
     }
-    for (final url in _editImageUrls) {
-      htmlParts.add('<p><img src="$url"></p>');
-    }
-    return htmlParts.join('');
-  }
-
-  String _escapeHtml(String text) {
-    return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   }
 
   @override
@@ -415,12 +396,13 @@ class _LifeScreenState extends State<LifeScreen> {
         .map((t) => t.trim())
         .where((t) => t.isNotEmpty)
         .toList();
+    final content = _richTextKey.currentState?.getHtml() ?? '';
 
     setState(() => _saving = true);
     try {
       await _api.savePersonalHistory(classId, {
         'date': _selectedDate!,
-        'content': _buildHtml(),
+        'content': content,
         'title': _editTitleCtrl.text.trim(),
         'mood': _editMood,
         'weather': _editWeather,
@@ -446,65 +428,31 @@ class _LifeScreenState extends State<LifeScreen> {
 
   Widget _buildInlineEditor() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HandDrawnInput(label: '标题', hint: '给今天起个标题', controller: _editTitleCtrl),
-          const SizedBox(height: 16),
-          _buildSelector('心情', _moods, _editMood, (v) => setState(() => _editMood = v)),
           const SizedBox(height: 12),
-          _buildSelector('天气', _weathers, _editWeather, (v) => setState(() => _editWeather = v)),
-          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _buildSelector('心情', _moods, _editMood, (v) => setState(() => _editMood = v))),
+              const SizedBox(width: 12),
+              Expanded(child: _buildSelector('天气', _weathers, _editWeather, (v) => setState(() => _editWeather = v))),
+            ],
+          ),
+          const SizedBox(height: 12),
           HandDrawnInput(label: '位置', hint: '你在哪里？', controller: _editLocationCtrl),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           HandDrawnInput(label: '标签', hint: '用逗号分隔', controller: _editTagsCtrl),
           const SizedBox(height: 16),
-          HandDrawnInput(
-            label: '内容',
-            hint: '记录今天的故事...',
-            controller: _editContentCtrl,
-            maxLines: 8,
+          RichTextEditor(
+            key: _richTextKey,
+            minHeight: 280,
           ),
-          const SizedBox(height: 16),
-          if (_editImageUrls.isNotEmpty) ...[
-            Text('图片', style: TextStyle(fontFamily: AppTheme.fontBody)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: List.generate(_editImageUrls.length, (i) {
-                final url = _api.resolveImageUrl(_editImageUrls[i]);
-                return Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: AppTheme.wobblyRadius,
-                      child: Image.network(url,
-                          width: 100, height: 100, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 100, height: 100, color: AppColors.oldPaper,
-                            child: const Icon(Icons.broken_image))),
-                    ),
-                    Positioned(
-                      top: 0, right: 0,
-                      child: GestureDetector(
-                        onTap: () => setState(() => _editImageUrls.removeAt(i)),
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
-                            color: AppColors.red, shape: BoxShape.circle),
-                          child: const Icon(Icons.close, size: 16, color: AppColors.white),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }),
-            ),
-            const SizedBox(height: 16),
-          ],
+          const SizedBox(height: 12),
           HandDrawnButton(
-            label: '添加图片',
+            label: '插入图片',
             icon: Icons.image,
             isSecondary: true,
             fullWidth: true,
@@ -581,10 +529,9 @@ class _LifeScreenState extends State<LifeScreen> {
       final classId = auth.currentClassId!;
       final res = await _api.uploadImage(classId, File(image.path), image.name);
       final url = res['data']['url'] as String;
-      setState(() {
-        _editImageUrls.add(url);
-        _saving = false;
-      });
+      final fullUrl = _api.resolveImageUrl(url);
+      _richTextKey.currentState?.insertImage(fullUrl);
+      setState(() => _saving = false);
     } catch (e) {
       setState(() => _saving = false);
       if (mounted) {
