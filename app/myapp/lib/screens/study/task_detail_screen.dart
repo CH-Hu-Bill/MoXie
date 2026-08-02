@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/word.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
@@ -133,6 +134,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: text));
+                Navigator.pop(ctx);
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx as BuildContext).showSnackBar(
+                    const SnackBar(content: Text('已复制到剪贴板')),
+                  );
+                }
+              },
+              child: Text('复制', style: TextStyle(fontFamily: AppTheme.fontBody, color: AppColors.blue)),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text('关闭', style: TextStyle(fontFamily: AppTheme.fontBody)),

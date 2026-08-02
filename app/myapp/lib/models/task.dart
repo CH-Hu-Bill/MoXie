@@ -8,6 +8,7 @@ class Task {
   final int wordCount;
   final String? weekendWeek;
   final String? createdAt;
+  final String? updatedAt;
   final List<Word> words;
 
   Task({
@@ -18,6 +19,7 @@ class Task {
     this.wordCount = 0,
     this.weekendWeek,
     this.createdAt,
+    this.updatedAt,
     this.words = const [],
   });
 
@@ -30,6 +32,7 @@ class Task {
       wordCount: json['word_count'] ?? 0,
       weekendWeek: json['weekend_week'],
       createdAt: json['created_at'],
+      updatedAt: json['updated_at'],
       words: (json['words'] as List<dynamic>?)
               ?.map((w) => Word.fromJson(w as Map<String, dynamic>))
               .toList() ??

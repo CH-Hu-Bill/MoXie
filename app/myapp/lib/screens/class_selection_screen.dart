@@ -220,13 +220,17 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                         if (auth.myClasses.isNotEmpty) ...[
                           const StickyNote(text: '已加入的班级'),
                           const SizedBox(height: 12),
-                          ...auth.myClasses.map((c) => Padding(
+                          ...auth.myClasses.map((c) {
+                                final classId = c['class_id']!;
+                                final clsInfo = _allClasses.where((a) => a.id == classId).firstOrNull;
+                                final hasPw = clsInfo?.hasPassword ?? true;
+                                return Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: HandDrawnCard(
                                   onTap: () => _tryEnterClass(ClassInfo(
-                                    id: c['class_id']!,
+                                    id: classId,
                                     name: c['class_name']!,
-                                    hasPassword: false,
+                                    hasPassword: hasPw,
                                   )),
                                   child: Row(
                                     children: [
@@ -248,7 +252,8 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                                     ],
                                   ),
                                 ),
-                              )),
+                              );
+                              }),
                           const SizedBox(height: 20),
                           const Divider(
                             color: AppColors.border,

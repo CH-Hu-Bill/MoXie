@@ -30,6 +30,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _versionInfo = info;
       _checkingUpdate = false;
     });
+    if (info != null && info['has_update'] == true && mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.background,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppTheme.wobblyRadius,
+            side: const BorderSide(color: AppColors.border, width: 2),
+          ),
+          title: Text('发现新版本', style: AppTheme.headingStyle),
+          content: Text(
+            '新版本 ${info['latest']} 可用\n\n请前往 GitHub 下载更新。',
+            style: AppTheme.bodyStyle.copyWith(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('知道了', style: AppTheme.bodyStyle),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override
@@ -96,15 +119,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   );
                 },
               ),
-              ...auth.myClasses.map((c) => _buildItem(
-                    icon: Icons.class_,
-                    title: c['class_name']!,
-                    subtitle: c['class_id'] == auth.currentClassId
-                        ? '当前班级'
-                        : '点击切换',
-                    onTap: () =>
-                        auth.setCurrentClass(c['class_id']!, c['class_name']!),
-                  )),
+              ...auth.myClasses.map((c) {
+                    final isCurrent = c['class_id'] == auth.currentClassId;
+                    return _buildItem(
+                      icon: Icons.class_,
+                      title: c['class_name']!,
+                      subtitle: isCurrent ? '当前班级' : '点击切换',
+                      onTap: isCurrent
+                          ? null
+                          : () => auth.setCurrentClass(
+                              c['class_id']!, c['class_name']!),
+                    );
+                  }),
             ]),
             const SizedBox(height: 16),
             _buildSection('Vlog 授权', [

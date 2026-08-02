@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/word.dart';
 import '../../models/task.dart';
@@ -268,12 +269,29 @@ class StudyScreenState extends State<StudyScreen> {
         ),
         actions: [
           TextButton(
+            onPressed: () {
+              _copyToClipboard(text);
+              Navigator.pop(ctx);
+            },
+            child: Text('复制', style: TextStyle(fontFamily: AppTheme.fontBody, color: AppColors.blue)),
+          ),
+          TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text('关闭', style: TextStyle(fontFamily: AppTheme.fontBody)),
           ),
         ],
       ),
     );
+  }
+
+  void _copyToClipboard(String text) {
+    // ignore: depend_on_referenced_packages
+    Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已复制到剪贴板'), duration: Duration(seconds: 2)),
+      );
+    }
   }
 
   @override
@@ -497,6 +515,15 @@ class StudyScreenState extends State<StudyScreen> {
                       color: AppColors.pencil.withValues(alpha: 0.5),
                     ),
                   ),
+                  if (t.updatedAt != null && t.updatedAt!.isNotEmpty)
+                    Text(
+                      '更新于 ${t.updatedAt}',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        fontSize: 13,
+                        color: AppColors.pencil.withValues(alpha: 0.3),
+                      ),
+                    ),
                 ],
               ),
             ),
