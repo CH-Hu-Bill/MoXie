@@ -41,6 +41,11 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 - `FileProvider` 配置（`res/xml/file_paths.xml`，flutter_quill 图片剪贴板支持）
 - App 图标：自定义图标，5 密度 mipmap（48/72/96/144/192px）
 
+**国际化**：
+- `locale: Locale('zh')`，`supportedLocales: [Locale('zh'), Locale('en')]`
+- `FlutterQuillLocalizations.delegate` → flutter_quill 工具栏中文
+- `flutter_localizations` → Material/Cupertino 组件中文
+
 ## 目录结构
 
 ```
@@ -98,7 +103,7 @@ lib/
 | `MarqueeText` | 长文本自动滚动（用户交互暂停，2 秒后恢复） |
 | `LoadingOverlay` | 加载遮罩 |
 | `EmptyState` | 空状态占位 |
-| `RichTextEditor` | 富文本编辑器（flutter_quill），支持 HTML 导入/导出、自定义图片上传按钮、只读模式 |
+| `RichTextEditor` | 富文本编辑器（flutter_quill），支持 HTML 导入/导出、自定义图片上传按钮、只读模式、光标+中文本地化 |
 
 ## 状态管理与路由
 
@@ -184,4 +189,6 @@ flutter build apk --release
 2. **Vlog 编辑器**：flutter_quill 与网站端 Quill JS 的 Delta 格式存在细微差异，复杂排版迁移可能不完美
 3. **TTS 容错**：有道词典对部分单词无发音记录，已加 SnackBar 提示
 4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
-5. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
+5. **画廊上传**：已实现本地校验（JPEG/PNG/WebP + 12MB 上限），服务器端二次校验
+6. **生活 Tab 状态**：切换到其他 Tab 再回来会重置到初始状态（需重新选择日期），避免编辑态残留
+7. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
