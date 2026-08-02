@@ -8,8 +8,8 @@ class AppColors {
   static const Color oldPaper = Color(0xFFe5e0d8);
   static const Color white = Color(0xFFFFFFFF);
   static const Color postIt = Color(0xFFfff9c4);
+  static const Color favorite = Color(0xFF2d5da1);
 
-  // Backward-compatible aliases
   static const Color background = paper;
   static const Color foreground = pencil;
   static const Color muted = oldPaper;
@@ -142,8 +142,7 @@ class AppTheme {
           color: const Color(0xFF999999),
           fontStyle: FontStyle.italic,
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
     );
   }

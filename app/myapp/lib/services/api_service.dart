@@ -20,6 +20,7 @@ class ApiService {
   ApiService._internal();
 
   String? _token;
+  VoidCallback? onClassAuthExpired;
 
   void setToken(String? token) => _token = token;
   String? get token => _token;
@@ -97,9 +98,13 @@ class ApiService {
       throw ApiException('服务器响应格式错误', statusCode: response.statusCode);
     }
     if (json['success'] != true) {
+      final code = json['code']?.toString();
+      if (code == 'CLASS_AUTH_EXPIRED' || code == 'CLASS_NOT_BOUND') {
+        onClassAuthExpired?.call();
+      }
       throw ApiException(
         json['error']?.toString() ?? '请求失败',
-        code: json['code']?.toString(),
+        code: code,
         statusCode: response.statusCode,
       );
     }
@@ -243,6 +248,15 @@ class ApiService {
     return _post('toggle_favorite', fields: {
       'class_id': classId,
       'word_id': wordId,
+    });
+  }
+
+  Future<Map<String, dynamic>> getFavorites(String classId,
+      {int page = 1, int perPage = 100}) {
+    return _post('get_favorites', fields: {
+      'class_id': classId,
+      'page': page.toString(),
+      'per_page': perPage.toString(),
     });
   }
 

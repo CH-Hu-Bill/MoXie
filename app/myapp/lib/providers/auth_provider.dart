@@ -24,6 +24,17 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   bool _isNewlyBound = false;
 
+  AuthProvider() {
+    _api.onClassAuthExpired = () {
+      if (_currentClassId != null) {
+        _currentClassId = null;
+        _currentClassName = null;
+        _storage.clearCurrentClassId();
+        notifyListeners();
+      }
+    };
+  }
+
   AuthState get authState => _authState;
   User? get user => _user;
   String? get currentClassId => _currentClassId;

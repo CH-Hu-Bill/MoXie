@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -19,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   bool _classExpiredHandled = false;
+  Timer? _classCheckTimer;
 
   final _screens = const [
     StudyScreen(),
@@ -32,6 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkClassValidity());
+    _classCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _checkClassValidity();
+    });
+  }
+
+  @override
+  void dispose() {
+    _classCheckTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkClassValidity() async {
@@ -46,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showClassExpiredDialog() {
     if (_classExpiredHandled) return;
     _classExpiredHandled = true;
+    _classCheckTimer?.cancel();
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -56,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
           side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
         title: Text('班级口令已失效', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
-        content: Text('请重新选择班级并输入口令',
+        content: Text('班级口令已被修改或班级已删除，请重新选择班级',
             style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
         actions: [
           TextButton(

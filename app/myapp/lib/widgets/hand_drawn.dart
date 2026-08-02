@@ -115,12 +115,8 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: AppTheme.wobblyRadius,
-            border: Border.all(
-              color: AppColors.pencil,
-              width: 2,
-            ),
-            boxShadow:
-                _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
+            border: Border.all(color: AppColors.pencil, width: 2),
+            boxShadow: _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
           ),
           child: Row(
             mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
@@ -349,8 +345,7 @@ class WobblyTabBar extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 margin: const EdgeInsets.all(2),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                 decoration: BoxDecoration(
                   color: selected ? AppColors.white : Colors.transparent,
                   borderRadius: AppTheme.wobblyRadius,
@@ -381,7 +376,6 @@ class WobblyTabBar extends StatelessWidget {
   }
 }
 
-/// Auto-scrolling text for long words (marquee effect like web).
 class MarqueeText extends StatefulWidget {
   final String text;
   final double fontSize;
@@ -446,7 +440,7 @@ class _MarqueeTextState extends State<MarqueeText>
     if (oldWidget.text != widget.text) {
       _scrolling = false;
       _userInteracting = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback(() {
         if (_controller.hasClients) _controller.jumpTo(0);
         _checkOverflow();
       });
@@ -472,31 +466,46 @@ class _MarqueeTextState extends State<MarqueeText>
           if (!_userInteracting && mounted) _checkOverflow();
         });
       },
-      child: SingleChildScrollView(
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
-        child: Text(
-          widget.text,
-          style: widget.style ??
-              TextStyle(
-                fontFamily: AppTheme.fontHeading,
-                fontSize: widget.fontSize,
-                color: AppColors.pencil,
-              ),
+      child: ShaderMask(
+        shaderCallback: (bounds) {
+          return LinearGradient(
+            colors: [
+              Colors.transparent,
+              Colors.black,
+              Colors.black,
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.08, 0.92, 1.0],
+          ).createShader(bounds);
+        },
+        blendMode: BlendMode.srcIn,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          child: Text(
+            widget.text,
+            style: widget.style ??
+                TextStyle(
+                  fontFamily: AppTheme.fontHeading,
+                  fontSize: widget.fontSize,
+                  color: AppColors.pencil,
+                ),
+          ),
         ),
       ),
     );
   }
 }
 
-/// Word card with TTS, wrong-word indicator, and action buttons.
 class WordCard extends StatelessWidget {
   final String word;
   final String meaning;
   final String pos;
   final bool isWrong;
+  final bool isFavorite;
   final bool showRemoveButton;
   final VoidCallback? onToggleWrong;
+  final VoidCallback? onToggleFavorite;
   final VoidCallback? onTap;
   final bool highlight;
 
@@ -506,8 +515,10 @@ class WordCard extends StatelessWidget {
     required this.meaning,
     this.pos = '',
     this.isWrong = false,
+    this.isFavorite = false,
     this.showRemoveButton = false,
     this.onToggleWrong,
+    this.onToggleFavorite,
     this.onTap,
     this.highlight = false,
   });
@@ -521,6 +532,23 @@ class WordCard extends StatelessWidget {
     return 34;
   }
 
+  Color _borderColor() {
+    if (isWrong) return AppColors.red;
+    if (isFavorite) return AppColors.blue;
+    return AppColors.pencil;
+  }
+
+  double _borderWidth() {
+    if (isWrong || isFavorite) return 3;
+    return 2;
+  }
+
+  Color _shadowColor() {
+    if (isWrong) return AppColors.red;
+    if (isFavorite) return AppColors.blue;
+    return AppColors.pencil;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -529,12 +557,12 @@ class WordCard extends StatelessWidget {
         color: highlight ? AppColors.postIt : AppColors.white,
         borderRadius: AppTheme.wobblyRadius,
         border: Border.all(
-          color: isWrong ? AppColors.red : AppColors.pencil,
-          width: isWrong ? 3 : 2,
+          color: _borderColor(),
+          width: _borderWidth(),
         ),
         boxShadow: [
           BoxShadow(
-            color: isWrong ? AppColors.red : AppColors.pencil,
+            color: _shadowColor(),
             offset: const Offset(3, 3),
             blurRadius: 0,
           ),
@@ -574,7 +602,9 @@ class WordCard extends StatelessWidget {
               const SizedBox(width: 4),
               _buildSpeaker(context),
               const SizedBox(width: 4),
-              _buildActionButton(),
+              _buildFavoriteButton(),
+              const SizedBox(width: 4),
+              _buildWrongButton(),
             ],
           ),
           const SizedBox(height: 4),
@@ -603,6 +633,7 @@ class WordCard extends StatelessWidget {
             SnackBar(
               content: Text(tts.lastError ?? '发音不可用'),
               duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
             ),
           );
         }
@@ -620,7 +651,27 @@ class WordCard extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton() {
+  Widget _buildFavoriteButton() {
+    return GestureDetector(
+      onTap: onToggleFavorite,
+      child: Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: isFavorite ? AppColors.blue : AppColors.white,
+          border: Border.all(color: AppColors.pencil, width: 2),
+          borderRadius: AppTheme.wobblySm,
+          boxShadow: AppTheme.hardShadowSm,
+        ),
+        child: Icon(
+          isFavorite ? Icons.star : Icons.star_border,
+          size: 16,
+          color: isFavorite ? AppColors.white : AppColors.pencil,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWrongButton() {
     if (showRemoveButton) {
       return GestureDetector(
         onTap: onToggleWrong,

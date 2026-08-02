@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:just_audio/just_audio.dart';
 
 class TTSService {
@@ -17,8 +18,16 @@ class TTSService {
       final url =
           'https://dict.youdao.com/dictvoice?audio=${Uri.encodeComponent(word)}&type=1';
       await _player.setUrl(url);
+      final dur = await _player.duration;
+      if (dur != null && dur.inMilliseconds < 100) {
+        _lastError = '暂无"$word"的发音';
+        return false;
+      }
       await _player.play();
       return true;
+    } on PlayerException catch (e) {
+      _lastError = '暂无"$word"的发音';
+      return false;
     } catch (e) {
       _lastError = '暂无"$word"的发音';
       return false;

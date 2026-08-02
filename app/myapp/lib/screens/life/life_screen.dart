@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../models/vlog_entry.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../config/api_config.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 
@@ -17,7 +18,7 @@ class LifeScreen extends StatefulWidget {
 }
 
 class _LifeScreenState extends State<LifeScreen> {
-  int _tab = 0; // 0=我的, 1=他人, 2=班级
+  int _tab = 0;
   final _api = ApiService();
 
   Map<String, VlogEntry> _personalHistory = {};
@@ -68,12 +69,6 @@ class _LifeScreenState extends State<LifeScreen> {
     _loadData();
   }
 
-  Map<String, VlogEntry> _currentEntries() {
-    if (_tab == 0) return _personalHistory;
-    if (_tab == 2) return _classHistory;
-    return {};
-  }
-
   bool _hasEntryOnDate(String dateStr) {
     if (_tab == 0) return _personalHistory.containsKey(dateStr);
     if (_tab == 2) return _classHistory.containsKey(dateStr);
@@ -86,12 +81,27 @@ class _LifeScreenState extends State<LifeScreen> {
     return false;
   }
 
+  String _todayStr() {
+    final today = DateTime.now();
+    return '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+  }
+
+  void _onDateSelected(String dateStr) {
+    setState(() => _selectedDate = dateStr);
+    if (_tab == 0) {
+      final entry = _personalHistory[dateStr];
+      final isToday = dateStr == _todayStr();
+      if (entry == null && isToday) {
+        _openEditor(dateStr, null);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final today = DateTime.now();
-    final todayStr =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final todayStr = _todayStr();
 
     return Scaffold(
       appBar: AppBar(
@@ -100,17 +110,19 @@ class _LifeScreenState extends State<LifeScreen> {
         shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
       ),
       body: PaperTexture(
-        child: Column(
-          children: [
-            WobblyTabBar(
-              tabs: const ['我的', '他人', '班级'],
-              selectedIndex: _tab,
-              onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
-            ),
-            _buildCalendar(),
-            Expanded(child: _buildContentArea(todayStr)),
-          ],
-        ),
+        child: _loading
+            ? const LoadingOverlay(message: '加载中...')
+            : Column(
+                children: [
+                  WobblyTabBar(
+                    tabs: const ['我的', '他人', '班级'],
+                    selectedIndex: _tab,
+                    onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
+                  ),
+                  _buildCalendar(),
+                  Expanded(child: _buildContentArea(todayStr)),
+                ],
+              ),
       ),
     );
   }
@@ -170,12 +182,12 @@ class _LifeScreenState extends State<LifeScreen> {
               final dateStr =
                   '${_calendarMonth.year}-${_calendarMonth.month.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
               final hasEntry = _hasEntryOnDate(dateStr);
+              final isToday = dateStr == _todayStr();
               final isSelected = dateStr == _selectedDate;
+              final canClick = hasEntry || (_tab == 0 && isToday);
 
               return GestureDetector(
-                onTap: hasEntry || (_tab == 0 && dateStr == _todayStr())
-                    ? () => setState(() => _selectedDate = dateStr)
-                    : null,
+                onTap: canClick ? () => _onDateSelected(dateStr) : null,
                 child: Container(
                   margin: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
@@ -185,10 +197,13 @@ class _LifeScreenState extends State<LifeScreen> {
                             ? AppColors.white
                             : AppColors.oldPaper.withValues(alpha: 0.3),
                     borderRadius: AppTheme.wobblyRadius,
-                    border: hasEntry || isSelected
-                        ? Border.all(color: AppColors.pencil, width: 2)
+                    border: canClick
+                        ? Border.all(
+                            color: isSelected ? AppColors.red : AppColors.pencil,
+                            width: isSelected ? 3 : 2,
+                          )
                         : null,
-                    boxShadow: hasEntry || isSelected ? AppTheme.hardShadowSm : null,
+                    boxShadow: canClick ? AppTheme.hardShadowSm : null,
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -198,7 +213,7 @@ class _LifeScreenState extends State<LifeScreen> {
                         style: TextStyle(
                           fontFamily: AppTheme.fontBody,
                           fontSize: 16,
-                          color: hasEntry || isSelected
+                          color: canClick
                               ? AppColors.pencil
                               : AppColors.pencil.withValues(alpha: 0.3),
                         ),
@@ -217,11 +232,6 @@ class _LifeScreenState extends State<LifeScreen> {
     );
   }
 
-  String _todayStr() {
-    final today = DateTime.now();
-    return '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-  }
-
   Widget _buildContentArea(String todayStr) {
     if (_selectedDate == null) {
       return const EmptyState(
@@ -232,38 +242,13 @@ class _LifeScreenState extends State<LifeScreen> {
 
     if (_tab == 0) {
       final entry = _personalHistory[_selectedDate!];
-      if (entry == null && _selectedDate == todayStr) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: HandDrawnButton(
-              label: '写今天的史记',
-              icon: Icons.edit,
-              fullWidth: true,
-              onPressed: () => _openEditor(todayStr, null),
-            ),
-          ),
-        );
+      if (entry != null) {
+        return _VlogViewer(entry: entry, isToday: _selectedDate == todayStr, onEdit: () => _openEditor(_selectedDate!, entry));
       }
-      if (entry == null) {
-        return const EmptyState(message: '这天没有记录', icon: Icons.event_busy);
+      if (_selectedDate == todayStr) {
+        return const EmptyState(message: '点击日期开始写今天的史记', icon: Icons.edit);
       }
-      return Column(
-        children: [
-          if (_selectedDate == todayStr)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: HandDrawnButton(
-                label: '编辑今天的史记',
-                icon: Icons.edit,
-                isSecondary: true,
-                fullWidth: true,
-                onPressed: () => _openEditor(todayStr, entry),
-              ),
-            ),
-          Expanded(child: _VlogViewer(entry: entry)),
-        ],
-      );
+      return const EmptyState(message: '这天没有记录', icon: Icons.event_busy);
     }
 
     if (_tab == 1) {
@@ -317,7 +302,6 @@ class _LifeScreenState extends State<LifeScreen> {
       );
     }
 
-    // tab == 2, class history
     final entry = _classHistory[_selectedDate!];
     if (entry == null) {
       return const EmptyState(message: '这天没有班级史记', icon: Icons.event_busy);
@@ -341,11 +325,14 @@ class _LifeScreenState extends State<LifeScreen> {
 
 class _VlogViewer extends StatelessWidget {
   final VlogEntry entry;
+  final bool isToday;
+  final VoidCallback? onEdit;
 
-  const _VlogViewer({required this.entry});
+  const _VlogViewer({required this.entry, this.isToday = false, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
+    final resolvedContent = _resolveHtmlImages(entry.content);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: HandDrawnCard(
@@ -353,6 +340,30 @@ class _VlogViewer extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (isToday && onEdit != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: onEdit,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.postIt,
+                      borderRadius: AppTheme.wobblyRadius,
+                      border: Border.all(color: AppColors.pencil, width: 2),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.edit, size: 16, color: AppColors.pencil),
+                        const SizedBox(width: 4),
+                        Text('编辑',
+                            style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             if (entry.title.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -388,18 +399,8 @@ class _VlogViewer extends StatelessWidget {
             ],
             const Divider(height: 24, thickness: 2),
             HtmlWidget(
-              entry.content,
+              resolvedContent,
               textStyle: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16),
-              customWidgetBuilder: (element) {
-                if (element.localName == 'img') {
-                  final src = element.attributes['src'] ?? '';
-                  final fullSrc = src.startsWith('http')
-                      ? src
-                      : ApiService().resolveImageUrl(src);
-                  return Image.network(fullSrc, fit: BoxFit.contain);
-                }
-                return null;
-              },
             ),
             const SizedBox(height: 12),
             Text('更新于 ${entry.updatedAt}',
@@ -422,6 +423,22 @@ class _VlogViewer extends StatelessWidget {
       ),
       child: Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
     );
+  }
+
+  String _resolveHtmlImages(String html) {
+    try {
+      final base = ApiConfig.baseUrl;
+      return html.replaceAllMapped(
+        RegExp(r'(<img[^>]*\bsrc=")([^"]+)("[^>]*>)'),
+        (m) {
+          final src = m.group(2)!;
+          if (src.startsWith('http')) return m.group(0)!;
+          return '${m.group(1)}$base/$src${m.group(3)}';
+        },
+      );
+    } catch (_) {
+      return html;
+    }
   }
 }
 
@@ -468,6 +485,15 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
       _extractImagesFromContent(e.content);
       _contentCtrl.text = _stripHtml(e.content);
     }
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _contentCtrl.dispose();
+    _locationCtrl.dispose();
+    _tagsCtrl.dispose();
+    super.dispose();
   }
 
   void _extractImagesFromContent(String html) {

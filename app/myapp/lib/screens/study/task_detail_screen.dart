@@ -24,16 +24,24 @@ class TaskDetailScreen extends StatefulWidget {
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final _api = ApiService();
+  final _scrollController = ScrollController();
   bool _loading = true;
   String _date = '';
   String _status = '';
   List<Word> _words = [];
   String? _error;
+  int? _highlightIndex;
 
   @override
   void initState() {
     super.initState();
     _loadDetail();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDetail() async {
@@ -44,14 +52,39 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     try {
       final res = await _api.getTaskDetail(widget.classId, widget.taskId);
       final data = res['data'] as Map<String, dynamic>;
+      final words = (data['words'] as List)
+          .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .toList();
+      int? highlightIdx;
+      if (widget.highlightQuery != null && widget.highlightQuery!.isNotEmpty) {
+        final q = widget.highlightQuery!.toLowerCase();
+        for (int i = 0; i < words.length; i++) {
+          if (words[i].word.toLowerCase().contains(q) ||
+              words[i].meaning.toLowerCase().contains(q)) {
+            highlightIdx = i;
+            break;
+          }
+        }
+      }
       setState(() {
         _date = data['date'] ?? '';
         _status = data['status'] ?? '';
-        _words = (data['words'] as List)
-            .map((w) => Word.fromJson(w as Map<String, dynamic>))
-            .toList();
+        _words = words;
+        _highlightIndex = highlightIdx;
         _loading = false;
       });
+      if (highlightIdx != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final offset = highlightIdx! * 140.0;
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+            );
+          }
+        });
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -67,6 +100,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       } else {
         await _api.markWrong(widget.classId, word.id, true);
       }
+      _loadDetail();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleFavorite(Word word) async {
+    try {
+      await _api.toggleFavorite(widget.classId, word.id);
       _loadDetail();
     } catch (e) {
       if (mounted) {
@@ -140,6 +186,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             : _error != null
                 ? Center(child: EmptyState(message: _error!))
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(16),
                     itemCount: _words.length + 1,
                     itemBuilder: (ctx, i) {
@@ -185,8 +232,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           meaning: w.meaning,
                           pos: w.pos,
                           isWrong: w.isWrong,
+                          isFavorite: w.isFavorite,
                           highlight: _shouldHighlight(w),
                           onToggleWrong: () => _toggleWrong(w),
+                          onToggleFavorite: () => _toggleFavorite(w),
                         ),
                       );
                     },
