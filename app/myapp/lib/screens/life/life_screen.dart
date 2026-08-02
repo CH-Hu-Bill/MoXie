@@ -15,10 +15,16 @@ class LifeScreen extends StatefulWidget {
   const LifeScreen({super.key});
 
   @override
-  State<LifeScreen> createState() => _LifeScreenState();
+  State<LifeScreen> createState() => LifeScreenState();
 }
 
-class _LifeScreenState extends State<LifeScreen> {
+class LifeScreenState extends State<LifeScreen> {
+  void resetToInitial() {
+    setState(() {
+      _selectedDate = null;
+      _isEditing = false;
+    });
+  }
   int _tab = 0;
   final _api = ApiService();
 

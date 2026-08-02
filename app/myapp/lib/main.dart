@@ -27,6 +27,11 @@ class MyApp extends StatelessWidget {
         title: '默写史记',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.theme,
+        locale: const Locale('zh'),
+        supportedLocales: const [
+          Locale('zh'),
+          Locale('en'),
+        ],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,

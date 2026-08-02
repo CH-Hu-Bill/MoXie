@@ -17,6 +17,9 @@ class GalleryScreen extends StatefulWidget {
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
+  static const _maxBytes = 12582912; // 12MB
+  static const _allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  static const _allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
   final _api = ApiService();
   final _storage = StorageService();
   List<GalleryItem> _items = [];
@@ -88,6 +91,29 @@ class _GalleryScreenState extends State<GalleryScreen> {
       maxHeight: 1920,
     );
     if (image == null) return;
+
+    final fileSize = await image.length();
+    if (fileSize > _maxBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('图片大小不能超过 12MB')),
+        );
+      }
+      return;
+    }
+
+    final mimeType = image.mimeType;
+    final ext = image.name.split('.').last.toLowerCase();
+    final typeOk = mimeType != null && _allowedTypes.contains(mimeType);
+    final extOk = _allowedExts.contains(ext);
+    if (!typeOk && !extOk) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('仅支持 JPEG、PNG 或 WebP 格式')),
+        );
+      }
+      return;
+    }
 
     final descController = TextEditingController();
     final result = await showDialog<String>(

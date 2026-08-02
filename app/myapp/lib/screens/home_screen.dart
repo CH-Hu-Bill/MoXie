@@ -22,15 +22,23 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _classExpiredHandled = false;
   Timer? _classCheckTimer;
   final _studyKey = GlobalKey<StudyScreenState>();
+  final _lifeKey = GlobalKey<LifeScreenState>();
 
   void _onWordFound(String word) {
     setState(() => _currentIndex = 0);
     _studyKey.currentState?.scrollToWord(word);
   }
 
+  void _onTabChanged(int index) {
+    if (_currentIndex == 1 && index != 1) {
+      _lifeKey.currentState?.resetToInitial();
+    }
+    setState(() => _currentIndex = index);
+  }
+
   late final _screens = [
     StudyScreen(key: _studyKey),
-    const LifeScreen(),
+    LifeScreen(key: _lifeKey),
     SearchScreen(onWordFound: _onWordFound),
     const GalleryScreen(),
     const ProfileScreen(),
@@ -136,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildNavItem(int index, IconData icon) {
     final selected = _currentIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () => _onTabChanged(index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -25,12 +25,16 @@ class RichTextEditor extends StatefulWidget {
 
 class RichTextEditorState extends State<RichTextEditor> {
   late QuillController _controller;
+  late FocusNode _focusNode;
+  late ScrollController _scrollController;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _controller = QuillController.basic();
+    _focusNode = FocusNode();
+    _scrollController = ScrollController();
     _loadHtml(widget.initialHtml);
   }
 
@@ -86,6 +90,8 @@ class RichTextEditorState extends State<RichTextEditor> {
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -139,12 +145,31 @@ class RichTextEditorState extends State<RichTextEditor> {
                 ),
               ),
             ),
-          SizedBox(
-            height: widget.minHeight,
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: widget.minHeight,
+              maxHeight: widget.minHeight * 2.5,
+            ),
             child: QuillEditor.basic(
               controller: _controller,
+              focusNode: _focusNode,
+              scrollController: _scrollController,
               config: QuillEditorConfig(
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                cursorColor: AppColors.red,
+                customStyles: const DefaultStyles(
+                  placeHolder: DefaultTextBlockStyle(
+                    TextStyle(
+                      color: Color(0xFFBDBDBD),
+                      fontSize: 15,
+                    ),
+                    HorizontalSpacing.zero,
+                    VerticalSpacing.zero,
+                    VerticalSpacing.zero,
+                    BoxDecoration.none,
+                  ),
+                ),
               ),
             ),
           ),
