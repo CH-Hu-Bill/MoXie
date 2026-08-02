@@ -60,24 +60,30 @@ class _LifeScreenState extends State<LifeScreen> {
     if (classId == null || classId.isEmpty) return;
 
     setState(() => _loading = true);
-    try {
-      final monthStr =
-          '${_calendarMonth.year}-${_calendarMonth.month.toString().padLeft(2, '0')}';
+    final monthStr =
+        '${_calendarMonth.year}-${_calendarMonth.month.toString().padLeft(2, '0')}';
 
+    try {
       final personalRes =
           await _api.getPersonalHistory(classId, month: monthStr);
       final personalData = personalRes['data'] as Map<String, dynamic>;
       _personalHistory = personalData.map((k, v) =>
           MapEntry(k, VlogEntry.fromJson(k, v as Map<String, dynamic>)));
+    } catch (_) {}
 
+    try {
       final classRes = await _api.getClassHistory(classId, month: monthStr);
       final classData = classRes['data'] as Map<String, dynamic>;
       _classHistory = classData.map((k, v) =>
           MapEntry(k, VlogEntry.fromJson(k, v as Map<String, dynamic>)));
-
-      final vlogsRes = await _api.getAuthorizedVlogs(classId, month: monthStr);
-      _authorizedVlogs = (vlogsRes['data'] as List<dynamic>).cast<Map<String, dynamic>>();
     } catch (_) {}
+
+    try {
+      final vlogsRes = await _api.getAuthorizedVlogs(classId, month: monthStr);
+      _authorizedVlogs =
+          (vlogsRes['data'] as List<dynamic>).cast<Map<String, dynamic>>();
+    } catch (_) {}
+
     setState(() => _loading = false);
   }
 
@@ -114,8 +120,8 @@ class _LifeScreenState extends State<LifeScreen> {
     if (_tab == 0) {
       final entry = _personalHistory[dateStr];
       final isToday = dateStr == _todayStr();
-      if (entry == null && isToday) {
-        _startEditing(null);
+      if (isToday) {
+        _startEditing(entry);
       }
     }
   }
@@ -299,25 +305,16 @@ class _LifeScreenState extends State<LifeScreen> {
         return _buildInlineEditor();
       }
       final entry = _personalHistory[_selectedDate!];
+      final isToday = _selectedDate == todayStr;
+      if (isToday) {
+        return _buildInlineEditor();
+      }
       if (entry != null) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           child: _VlogViewer(
             entry: entry,
-            isToday: _selectedDate == todayStr,
-            onEdit: () => _startEditing(entry),
             scrollable: false,
-          ),
-        );
-      }
-      if (_selectedDate == todayStr) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: HandDrawnButton(
-            label: '写今天的史记',
-            icon: Icons.edit,
-            fullWidth: true,
-            onPressed: () => _startEditing(null),
           ),
         );
       }
@@ -434,29 +431,43 @@ class _LifeScreenState extends State<LifeScreen> {
         children: [
           HandDrawnInput(label: '标题', hint: '给今天起个标题', controller: _editTitleCtrl),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildSelector('心情', _moods, _editMood, (v) => setState(() => _editMood = v))),
-              const SizedBox(width: 12),
-              Expanded(child: _buildSelector('天气', _weathers, _editWeather, (v) => setState(() => _editWeather = v))),
-            ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.paper,
+              borderRadius: AppTheme.wobblyRadius,
+              border: Border.all(color: AppColors.pencil.withValues(alpha: 0.3), width: 1.5),
+            ),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _buildInlineSelector('心情', _moods, _editMood, (v) => setState(() => _editMood = v)),
+                _buildInlineSelector('天气', _weathers, _editWeather, (v) => setState(() => _editWeather = v)),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: _editLocationCtrl,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: '📍 地点',
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      border: OutlineInputBorder(),
+                    ),
+                    style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          HandDrawnInput(label: '位置', hint: '你在哪里？', controller: _editLocationCtrl),
           const SizedBox(height: 12),
           HandDrawnInput(label: '标签', hint: '用逗号分隔', controller: _editTagsCtrl),
           const SizedBox(height: 16),
           RichTextEditor(
             key: _richTextKey,
-            minHeight: 280,
-          ),
-          const SizedBox(height: 12),
-          HandDrawnButton(
-            label: '插入图片',
-            icon: Icons.image,
-            isSecondary: true,
-            fullWidth: true,
-            onPressed: _pickImageInline,
+            minHeight: 400,
+            onImageInsert: _pickAndUploadImage,
           ),
           const SizedBox(height: 16),
           Row(
@@ -484,61 +495,53 @@ class _LifeScreenState extends State<LifeScreen> {
     );
   }
 
-  Widget _buildSelector(String label, List<String> options, String selected, ValueChanged<String> onTap) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildInlineSelector(String label, List<String> options, String selected, ValueChanged<String> onTap) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          children: options.map((opt) {
-            final isSelected = opt == selected;
-            return GestureDetector(
-              onTap: () => onTap(opt),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.postIt : AppColors.white,
-                  borderRadius: AppTheme.wobblyRadius,
-                  border: Border.all(
-                    color: AppColors.pencil,
-                    width: isSelected ? 3 : 2,
-                  ),
-                ),
-                child: Text(opt, style: const TextStyle(fontSize: 20)),
+        Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 13, color: AppColors.pencil.withValues(alpha: 0.6))),
+        const SizedBox(width: 4),
+        ...options.map((opt) {
+          final isSelected = opt == selected;
+          return GestureDetector(
+            onTap: () => onTap(opt),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.postIt : Colors.transparent,
+                borderRadius: AppTheme.wobblySm,
+                border: isSelected ? Border.all(color: AppColors.pencil, width: 2) : null,
               ),
-            );
-          }).toList(),
-        ),
+              child: Text(opt, style: const TextStyle(fontSize: 18)),
+            ),
+          );
+        }),
       ],
     );
   }
 
-  Future<void> _pickImageInline() async {
+  Future<String?> _pickAndUploadImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 1920,
       maxHeight: 1920,
     );
-    if (image == null) return;
-    setState(() => _saving = true);
+    if (image == null) return null;
     try {
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId!;
       final res = await _api.uploadImage(classId, File(image.path), image.name);
       final url = res['data']['url'] as String;
-      final fullUrl = _api.resolveImageUrl(url);
-      _richTextKey.currentState?.insertImage(fullUrl);
-      setState(() => _saving = false);
+      return _api.resolveImageUrl(url);
     } catch (e) {
-      setState(() => _saving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('图片上传失败: $e')),
         );
       }
+      return null;
     }
   }
 }

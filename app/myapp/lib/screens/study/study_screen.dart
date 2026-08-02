@@ -21,6 +21,8 @@ class StudyScreenState extends State<StudyScreen> {
   int _mainTab = 0;
   int _taskTab = 0;
   final _wordListScrollController = ScrollController();
+  final Map<String, GlobalKey> _wordCardKeys = {};
+  String? _highlightWord;
 
   final _api = ApiService();
   final _storage = StorageService();
@@ -35,40 +37,54 @@ class StudyScreenState extends State<StudyScreen> {
   bool _wordsHasMore = false;
 
   void scrollToWord(String word) {
-    setState(() => _mainTab = 0);
-    final idx = _words.indexWhere(
-      (w) => w.word.toLowerCase() == word.toLowerCase());
-    if (idx >= 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_wordListScrollController.hasClients) {
-          _wordListScrollController.animateTo(
-            idx * 140.0,
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOut,
-          );
-        }
-      });
+    setState(() {
+      _mainTab = 0;
+      _highlightWord = word;
+    });
+    final found = _words.any((w) => w.word.toLowerCase() == word.toLowerCase());
+    if (found) {
+      _scrollToHighlight(word);
     } else {
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId;
       if (classId != null && classId.isNotEmpty) {
-        _loadWords(classId, reset: true).then((_) {
-          final idx2 = _words.indexWhere(
-            (w) => w.word.toLowerCase() == word.toLowerCase());
-          if (idx2 >= 0) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_wordListScrollController.hasClients) {
-                _wordListScrollController.animateTo(
-                  idx2 * 140.0,
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeInOut,
-                );
-              }
-            });
-          }
-        });
+        _loadWordsForSearch(classId, word);
       }
     }
+  }
+
+  void _scrollToHighlight(String word) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _wordCardKeys[word.toLowerCase()];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          alignment: 0.4,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _highlightWord = null);
+    });
+  }
+
+  Future<void> _loadWordsForSearch(String classId, String targetWord) async {
+    try {
+      final res = await _api.getWords(classId, page: 1, perPage: 9999);
+      final data = res['data'] as Map<String, dynamic>;
+      final words = (data['words'] as List)
+          .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .toList();
+      setState(() {
+        _words = words;
+        _wordsPage = 1;
+        _wordsTotal = data['total'] ?? 0;
+        _wordsHasMore = false;
+      });
+      _scrollToHighlight(targetWord);
+    } catch (_) {}
   }
 
   @override
@@ -388,13 +404,20 @@ class StudyScreenState extends State<StudyScreen> {
             );
           }
           final w = _words[i];
-          return Padding(
+          final isHighlighted = _highlightWord?.toLowerCase() == w.word.toLowerCase();
+          final key = _wordCardKeys.putIfAbsent(
+            w.word.toLowerCase(),
+            () => GlobalKey(),
+          );
+          return Container(
+            key: key,
             padding: const EdgeInsets.only(bottom: 12),
             child: WordCard(
               word: w.word,
               meaning: w.meaning,
               pos: w.pos,
               isWrong: w.isWrong,
+              highlight: isHighlighted,
               onToggleWrong: () => _toggleWrong(classId, w),
             ),
           );

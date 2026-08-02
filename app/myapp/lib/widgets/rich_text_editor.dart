@@ -9,12 +9,14 @@ class RichTextEditor extends StatefulWidget {
   final String initialHtml;
   final bool readOnly;
   final double minHeight;
+  final Future<String?> Function()? onImageInsert;
 
   const RichTextEditor({
     super.key,
     this.initialHtml = '',
     this.readOnly = false,
     this.minHeight = 200,
+    this.onImageInsert,
   });
 
   @override
@@ -23,16 +25,12 @@ class RichTextEditor extends StatefulWidget {
 
 class RichTextEditorState extends State<RichTextEditor> {
   late QuillController _controller;
-  late FocusNode _focusNode;
-  late ScrollController _scrollController;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _controller = QuillController.basic();
-    _focusNode = FocusNode();
-    _scrollController = ScrollController();
     _loadHtml(widget.initialHtml);
   }
 
@@ -69,6 +67,14 @@ class RichTextEditorState extends State<RichTextEditor> {
     _controller.replaceText(index, 0, BlockEmbed.image(url), null);
   }
 
+  Future<void> _handleImageInsert() async {
+    if (widget.onImageInsert == null) return;
+    final url = await widget.onImageInsert!();
+    if (url != null && url.isNotEmpty) {
+      insertImage(url);
+    }
+  }
+
   @override
   void didUpdateWidget(RichTextEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -80,8 +86,6 @@ class RichTextEditorState extends State<RichTextEditor> {
   @override
   void dispose() {
     _controller.dispose();
-    _focusNode.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -115,7 +119,24 @@ class RichTextEditorState extends State<RichTextEditor> {
               child: QuillSimpleToolbar(
                 controller: _controller,
                 config: QuillSimpleToolbarConfig(
-                  embedButtons: FlutterQuillEmbeds.toolbarButtons(),
+                  embedButtons: widget.onImageInsert != null
+                      ? [
+                          (context, embedContext) => IconButton(
+                                icon: const Icon(Icons.image),
+                                iconSize: kDefaultIconSize,
+                                tooltip: '插入图片',
+                                onPressed: _handleImageInsert,
+                              ),
+                        ]
+                      : FlutterQuillEmbeds.toolbarButtons(),
+                  showCodeBlock: false,
+                  showInlineCode: false,
+                  showSearchButton: false,
+                  showSubscript: false,
+                  showSuperscript: false,
+                  showIndent: false,
+                  showLink: false,
+                  showVideoButton: false,
                 ),
               ),
             ),

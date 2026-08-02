@@ -51,9 +51,10 @@ APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 |------|------|
 | Web 后端 | PHP 7.4+，GD，cURL，JSON 文件存储（无数据库，无 Composer） |
 | Web 前端 | 原生 HTML/CSS/JS，Quill 2.x 富文本编辑器，DeepSeek API（AI 补全） |
-| APP | Flutter（Dart 3.5+），Provider 状态管理 |
+| APP | Flutter（Dart 3.5+），Provider 状态管理，flutter_quill 富文本编辑器 |
 | APP 字体 | ZCOOL KuaiLe（标题）+ Ma Shan Zheng（正文），打包到 APK |
 | APP 音频 | just_audio（有道词典 TTS 在线发音） |
+| APP 图标 | 自定义图标，多密度 mipmap（48~192px） |
 | CI/CD | GitHub Actions（Flutter stable + Java 17） |
 
 ## 设计系统

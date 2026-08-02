@@ -7,8 +7,8 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | Tab | 功能 |
 |-----|------|
 | 学习 | 单词库（卡片+点读+添加）、错题本（标记/移出+导出）、任务（进行中/历史+详情） |
-| 生活 | 个人史记（日历+编辑器+图片上传）、他人史记（授权用户）、班级史记（只读） |
-| 搜索 | 全局搜索单词和任务，点击跳转+高亮 |
+| 生活 | 个人史记（日历+富文本编辑器+图片上传）、他人史记（授权用户）、班级史记（只读） |
+| 搜索 | 全局搜索单词和任务，点击跳转+滚动定位+高亮 |
 | 画廊 | 网格浏览+上传照片+大图查看 |
 | 我的 | 用户信息、切换班级、Vlog 授权、检查更新、退出登录、注销账号 |
 
@@ -17,12 +17,17 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | 依赖 | 版本 | 用途 |
 |------|------|------|
 | flutter | sdk | 框架 |
+| flutter_localizations | sdk | 国际化（flutter_quill 中文支持） |
 | provider | ^6.1.0 | 状态管理 |
 | http | ^1.2.0 | 网络请求（MultipartRequest） |
 | shared_preferences | ^2.2.0 | 本地缓存（token、班级、单词等） |
 | image_picker | ^1.0.0 | 图片选取（Vlog + 画廊） |
 | flutter_widget_from_html | ^0.15.0 | Vlog HTML 内容渲染 |
 | just_audio | ^0.9.39 | 单词发音（有道词典 TTS） |
+| flutter_quill | ^11.5.1 | 富文本编辑器（Vlog 编辑，与网站端 Quill 对齐） |
+| flutter_quill_extensions | ^11.0.0 | Quill 图片嵌入支持 |
+| flutter_quill_delta_from_html | ^1.5.3 | HTML → Quill Delta 转换（加载已有内容） |
+| vsc_quill_delta_to_html | ^1.0.5 | Quill Delta → HTML 转换（保存到服务器） |
 | flutter_lints | ^4.0.0 | 代码规范（dev） |
 
 **字体**（打包到 APK，离线可用）：
@@ -33,6 +38,8 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 - `compileSdk = 36`（`android/app/build.gradle.kts`）
 - `android:usesCleartextTraffic="true"`（`AndroidManifest.xml`，允许 HTTP）
 - `android:label="默写史记"`
+- `FileProvider` 配置（`res/xml/file_paths.xml`，flutter_quill 图片剪贴板支持）
+- App 图标：自定义图标，5 密度 mipmap（48/72/96/144/192px）
 
 ## 目录结构
 
@@ -58,7 +65,8 @@ lib/
 ├── theme/
 │   └── app_theme.dart                 # Hand-Drawn 主题（颜色/字体/阴影/圆角/PaperTexture）
 ├── widgets/
-│   └── hand_drawn.dart                # 通用组件库（见下）
+│   ├── hand_drawn.dart                # 通用组件库（见下）
+│   └── rich_text_editor.dart          # 富文本编辑器（flutter_quill 封装，HTML↔Delta 转换）
 └── screens/
     ├── splash_screen.dart             # 启动页（动画 + init）
     ├── home_screen.dart               # 底部导航 5 Tab（纯图标 + 口令失效检测）
@@ -86,10 +94,11 @@ lib/
 | `HandDrawnInput` | wobbly 边框输入框，聚焦时边框变蓝+加粗 |
 | `WobblyTabBar` | wobbly 风格分段切换栏 |
 | `StickyNote` | 便利贴标签（可旋转） |
-| `WordCard` | 单词卡片：动态字号 + 跑马灯滚动 + 喇叭按钮 + 加/移错题本按钮 + 红色边框标记 |
+| `WordCard` | 单词卡片：动态字号 + 跑马灯滚动 + 喇叭按钮 + 加/移错题本按钮 + 红色边框标记 + 搜索高亮 |
 | `MarqueeText` | 长文本自动滚动（用户交互暂停，2 秒后恢复） |
 | `LoadingOverlay` | 加载遮罩 |
 | `EmptyState` | 空状态占位 |
+| `RichTextEditor` | 富文本编辑器（flutter_quill），支持 HTML 导入/导出、自定义图片上传按钮、只读模式 |
 
 ## 状态管理与路由
 
@@ -167,14 +176,12 @@ flutter build apk --release
 
 - **Token**：`Authorization: Bearer <token>`，30 天 TTL，sha256 哈希存储
 - **班级绑定**：绑定后存储 `auth_version`，口令变更时版本不匹配 → 403 `CLASS_AUTH_EXPIRED` → APP 自动跳转班级选择页
+- **Vlog 授权**：`consent_map` 按班级存储，`set_global_consent` 同步到所有已绑定班级；登录/自动登录返回 consent 状态；SharedPreferences 本地缓存
 
 ## 已知问题与后续待办
 
-以下是用户反馈但尚未完全解决的问题，供后续开发者参考：
-
-1. **UI 细节**：部分界面与网站端风格仍有差异，需继续对照 `风格.md` 和 `web/common.css` 微调
-2. **性能**：整体偏卡，可考虑 `const` 优化、懒加载、减少 `setState` 范围
-3. **Vlog 编辑器**：目前是纯文本+图片，网站端用 Quill 富文本编辑器，如需对齐需引入 Flutter 富文本插件
-4. **TTS 容错**：有道词典对部分单词无发音记录，已加 SnackBar 提示，但跟读场景的容错尚未处理（APP 端暂无跟读功能）
-5. **搜索高亮**：点击任务卡片跳转后高亮匹配单词，但定位滚动到该单词尚未实现
-6. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
+1. **性能**：单词库列表加载全量数据时偏卡，可考虑虚拟列表优化
+2. **Vlog 编辑器**：flutter_quill 与网站端 Quill JS 的 Delta 格式存在细微差异，复杂排版迁移可能不完美
+3. **TTS 容错**：有道词典对部分单词无发音记录，已加 SnackBar 提示
+4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
+5. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
