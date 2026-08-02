@@ -1,12 +1,75 @@
-# APP 端源码占位
+# APP 端源码
 
-本目录用于存放 ListenWrite APP 客户端源码（Android / iOS）。
+ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 
-当前源码暂未纳入仓库，后续补充后替换本文件。
+## 技术栈
+
+- **Flutter** 3.x（Dart 3.12+）
+- **状态管理**：Provider
+- **HTTP 请求**：http
+- **本地存储**：SharedPreferences
+- **字体**：Google Fonts（Kalam + Patrick Hand）
+- **日历**：table_calendar
+- **图片选择**：image_picker
+
+## 快速开始
+
+```bash
+# 1. 安装依赖
+cd app/myapp
+flutter pub get
+
+# 2. 配置 API 地址
+cp lib/config/api_config.example.dart lib/config/api_config.dart
+# 编辑 api_config.dart，修改 baseUrl 为你的服务器地址
+# 本地测试默认：http://localhost:8000/web/app_api.php
+
+# 3. 运行
+flutter run
+```
+
+## 项目结构
+
+```
+lib/
+├── main.dart                   # 入口
+├── config/
+│   ├── api_config.dart         # API 配置（不入库，从 example 复制）
+│   └── api_config.example.dart # 配置模板
+├── theme/
+│   └── app_theme.dart          # Hand-Drawn 手绘风格主题
+├── models/
+│   ├── user.dart               # 用户模型
+│   ├── class_info.dart         # 班级模型
+│   ├── word.dart               # 单词模型
+│   ├── task.dart               # 任务模型
+│   └── gallery_item.dart       # 画廊模型
+├── services/
+│   ├── api_service.dart        # API 请求封装
+│   └── storage_service.dart   # 本地存储
+├── providers/
+│   └── auth_provider.dart      # 认证状态管理
+├── screens/
+│   ├── home/                   # 启动页 + 主页
+│   ├── auth/                   # 登录 / 注册
+│   ├── class_selection/        # 班级选择 / 绑定
+│   ├── study/                  # 学习（单词库/任务/错题本）
+│   ├── life/                   # 生活（Vlog 日历）
+│   ├── search/                 # 搜索
+│   ├── gallery/                # 画廊
+│   └── profile/                # 我的
+└── widgets/
+    └── hand_drawn_widgets.dart # 手绘风格通用组件
+```
+
+## 打包
+
+提交代码到 main 分支后，GitHub Actions 自动构建 APK。
+
+构建产物在 Actions → Build APK → Artifacts 下载。
 
 ## 与后端的对接
 
-- API 入口：`POST https://<你的域名>/web/app_api.php`
-- 鉴权方式：`Authorization: Bearer <token>`（token 由 `login` / `register` 接口返回）
-- 完整接口清单与限流策略见 [`../web/README.md`](../web/README.md) 的「APP API 说明」章节
-- 版本检查：`action=check_version`，版本由管理后台 `web/admin.php` 发布
+- API 入口：`POST http://localhost:8000/web/app_api.php`
+- 鉴权方式：`Authorization: Bearer <token>`
+- 完整接口清单见 [`../web/README.md`](../web/README.md) 的「APP API 说明」章节
