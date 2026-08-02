@@ -45,51 +45,71 @@ class StorageService {
 
   // ── Cache ──
 
-  Future<void> cacheWords(String classId, List<Map<String, dynamic>> words) =>
-      _p.setString('cache_words_$classId', jsonEncode(words));
+  static const _cacheTtl = Duration(seconds: 30);
+
+  Future<void> cacheWords(String classId, List<Map<String, dynamic>> words) async {
+    await _p.setString('cache_words_$classId', jsonEncode(words));
+    await _p.setInt('cache_words_ts_$classId', DateTime.now().millisecondsSinceEpoch);
+  }
 
   List<Map<String, dynamic>>? getCachedWords(String classId) {
-    final raw = _p.getString('cache_words_$classId');
-    if (raw == null) return null;
-    try {
-      return (jsonDecode(raw) as List)
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    } catch (_) {
-      return null;
+    final ts = _p.getInt('cache_words_ts_$classId');
+    if (ts != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) < _cacheTtl) {
+      final raw = _p.getString('cache_words_$classId');
+      if (raw == null) return null;
+      try {
+        return (jsonDecode(raw) as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      } catch (_) {
+        return null;
+      }
     }
+    return null;
   }
 
   Future<void> cacheWrongWords(
-          String classId, List<Map<String, dynamic>> words) =>
-      _p.setString('cache_wrong_words_$classId', jsonEncode(words));
+          String classId, List<Map<String, dynamic>> words) async {
+    await _p.setString('cache_wrong_words_$classId', jsonEncode(words));
+    await _p.setInt('cache_wrong_words_ts_$classId', DateTime.now().millisecondsSinceEpoch);
+  }
 
   List<Map<String, dynamic>>? getCachedWrongWords(String classId) {
-    final raw = _p.getString('cache_wrong_words_$classId');
-    if (raw == null) return null;
-    try {
-      return (jsonDecode(raw) as List)
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    } catch (_) {
-      return null;
+    final ts = _p.getInt('cache_wrong_words_ts_$classId');
+    if (ts != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) < _cacheTtl) {
+      final raw = _p.getString('cache_wrong_words_$classId');
+      if (raw == null) return null;
+      try {
+        return (jsonDecode(raw) as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      } catch (_) {
+        return null;
+      }
     }
+    return null;
   }
 
   Future<void> cacheGallery(
-          String classId, List<Map<String, dynamic>> items) =>
-      _p.setString('cache_gallery_$classId', jsonEncode(items));
+          String classId, List<Map<String, dynamic>> items) async {
+    await _p.setString('cache_gallery_$classId', jsonEncode(items));
+    await _p.setInt('cache_gallery_ts_$classId', DateTime.now().millisecondsSinceEpoch);
+  }
 
   List<Map<String, dynamic>>? getCachedGallery(String classId) {
-    final raw = _p.getString('cache_gallery_$classId');
-    if (raw == null) return null;
-    try {
-      return (jsonDecode(raw) as List)
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    } catch (_) {
-      return null;
+    final ts = _p.getInt('cache_gallery_ts_$classId');
+    if (ts != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) < _cacheTtl) {
+      final raw = _p.getString('cache_gallery_$classId');
+      if (raw == null) return null;
+      try {
+        return (jsonDecode(raw) as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      } catch (_) {
+        return null;
+      }
     }
+    return null;
   }
 
   // ── Consent ──
