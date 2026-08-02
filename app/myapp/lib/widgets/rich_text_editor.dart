@@ -136,7 +136,6 @@ class RichTextEditorState extends State<RichTextEditor> {
                   showSuperscript: false,
                   showIndent: false,
                   showLink: false,
-                  showVideoButton: false,
                 ),
               ),
             ),
