@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 36),
                   HandDrawnCard(
                     padding: const EdgeInsets.all(24),
-                    shadows: AppTheme.hardShadow,
+                    shadows: AppTheme.hardShadowMd,
                     rotation: 0.5,
                     child: Column(
                       children: [

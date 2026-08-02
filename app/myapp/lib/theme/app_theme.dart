@@ -9,6 +9,7 @@ class AppColors {
   static const Color white = Color(0xFFFFFFFF);
   static const Color postIt = Color(0xFFfff9c4);
 
+  // Backward-compatible aliases
   static const Color background = paper;
   static const Color foreground = pencil;
   static const Color muted = oldPaper;
@@ -51,19 +52,19 @@ class AppTheme {
         bottomRight: Radius.circular(25),
       );
 
-  static List<BoxShadow> hardShadowSm => const [
+  static List<BoxShadow> get hardShadowSm => const [
         BoxShadow(color: AppColors.pencil, offset: Offset(3, 3), blurRadius: 0),
       ];
 
-  static List<BoxShadow> hardShadowMd => const [
+  static List<BoxShadow> get hardShadowMd => const [
         BoxShadow(color: AppColors.pencil, offset: Offset(4, 4), blurRadius: 0),
       ];
 
-  static List<BoxShadow> hardShadowLg => const [
+  static List<BoxShadow> get hardShadowLg => const [
         BoxShadow(color: AppColors.pencil, offset: Offset(6, 6), blurRadius: 0),
       ];
 
-  static List<BoxShadow> softShadow => const [
+  static List<BoxShadow> get softShadow => const [
         BoxShadow(color: AppColors.pencil, offset: Offset(3, 3), blurRadius: 0),
       ];
 
