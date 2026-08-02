@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -186,7 +187,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      appBar: AppBar(title: Text(auth.currentClassName ?? '画廊')),
+      appBar: AppBar(
+        title: Text(auth.currentClassName ?? '画廊'),
+        backgroundColor: AppColors.white,
+        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+      ),
       body: PaperTexture(
         child: _items.isEmpty && _loading
             ? const Center(child: CircularProgressIndicator())
@@ -230,14 +235,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                     topLeft: Radius.circular(18),
                                     topRight: Radius.circular(18),
                                   ),
-                                  child: Image.network(
-                                    item.imageUrl,
+                                  child: CachedNetworkImage(
+                                    imageUrl: item.imageUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
+                                    placeholder: (_, __) => Container(
+                                      color: AppColors.oldPaper,
+                                      child: const Center(
+                                        child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2),
+                                      ),
+                                    ),
+                                    errorWidget: (_, __, ___) => Container(
                                       color: AppColors.muted,
                                       child: const Center(
-                                        child: Icon(Icons.broken_image,
-                                            size: 40),
+                                        child: Icon(Icons.broken_image, size: 40),
                                       ),
                                     ),
                                   ),
@@ -299,10 +309,13 @@ class _GalleryViewerScreen extends StatelessWidget {
                     ),
                     child: ClipRRect(
                       borderRadius: AppTheme.wobblyRadius,
-                      child: Image.network(
-                        item.imageUrl,
+                      child: CachedNetworkImage(
+                        imageUrl: item.imageUrl,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        placeholder: (_, __) => const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                        errorWidget: (_, __, ___) => const Icon(
                           Icons.broken_image,
                           size: 64,
                           color: AppColors.muted,

@@ -59,7 +59,12 @@ class RichTextEditorState extends State<RichTextEditor> {
     try {
       final delta = _controller.document.toDelta();
       final ops = delta.toJson().cast<Map<String, dynamic>>();
-      final converter = QuillDeltaToHtmlConverter(ops);
+      final converter = QuillDeltaToHtmlConverter(
+        ops,
+        ConverterOptions(
+          inlineStylesFlag: true,
+        ),
+      );
       return converter.convert();
     } catch (_) {
       return '';

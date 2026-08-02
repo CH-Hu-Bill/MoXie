@@ -23,7 +23,9 @@ class LifeScreenState extends State<LifeScreen> {
     setState(() {
       _selectedDate = null;
       _isEditing = false;
+      _viewMode = false;
     });
+    _loadData();
   }
   int _tab = 0;
   final _api = ApiService();
@@ -35,6 +37,7 @@ class LifeScreenState extends State<LifeScreen> {
   DateTime _calendarMonth = DateTime.now();
   String? _selectedDate;
   bool _isEditing = false;
+  bool _viewMode = false;
   final _editTitleCtrl = TextEditingController();
   final _editLocationCtrl = TextEditingController();
   final _editTagsCtrl = TextEditingController();
@@ -122,6 +125,7 @@ class LifeScreenState extends State<LifeScreen> {
     setState(() {
       _selectedDate = dateStr;
       _isEditing = false;
+      _viewMode = false;
     });
     if (_tab == 0) {
       final entry = _personalHistory[dateStr];
@@ -312,7 +316,7 @@ class LifeScreenState extends State<LifeScreen> {
       }
       final entry = _personalHistory[_selectedDate!];
       final isToday = _selectedDate == todayStr;
-      if (isToday) {
+      if (isToday && !_viewMode && entry == null) {
         return _buildInlineEditor();
       }
       if (entry != null) {
@@ -320,9 +324,14 @@ class LifeScreenState extends State<LifeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           child: _VlogViewer(
             entry: entry,
+            isToday: isToday,
+            onEdit: isToday ? () => setState(() { _isEditing = true; _viewMode = false; _startEditing(entry); }) : null,
             scrollable: false,
           ),
         );
+      }
+      if (isToday) {
+        return _buildInlineEditor();
       }
       return const EmptyState(message: '这天没有记录', icon: Icons.event_busy);
     }
@@ -349,18 +358,27 @@ class LifeScreenState extends State<LifeScreen> {
               _selectedDate!, entries[_selectedDate!] as Map<String, dynamic>);
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: HandDrawnCard(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      appBar: AppBar(title: Text('${author['author_name']} - $_selectedDate')),
-                      body: PaperTexture(child: _VlogViewer(entry: entry)),
+              child: HandDrawnCard(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(
+                          title: Text('${author['author_name']} - $_selectedDate'),
+                          backgroundColor: AppColors.white,
+                          shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+                        ),
+                        body: PaperTexture(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: _VlogViewer(entry: entry, scrollable: false),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
               child: Row(
                 children: [
                   const Icon(Icons.person, size: 28, color: AppColors.blue),
@@ -412,7 +430,10 @@ class LifeScreenState extends State<LifeScreen> {
         'location': _editLocationCtrl.text.trim(),
         'tags': tags,
       });
-      setState(() => _isEditing = false);
+      setState(() {
+        _isEditing = false;
+        _viewMode = true;
+      });
       _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
