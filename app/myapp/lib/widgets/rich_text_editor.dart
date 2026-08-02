@@ -41,7 +41,7 @@ class RichTextEditorState extends State<RichTextEditor> {
     try {
       if (html.isNotEmpty) {
         final delta = HtmlToDelta().convert(html);
-        _controller.setContents(delta, changeSource: ChangeSource.local);
+        _controller.document = Document.fromJson(delta.toJson());
       } else {
         _controller.clear();
       }
@@ -66,12 +66,7 @@ class RichTextEditorState extends State<RichTextEditor> {
 
   void insertImage(String url) {
     final index = _controller.selection.baseOffset;
-    _controller.replaceText(
-      index,
-      0,
-      BlockEmbed.image(url),
-      TextSelection.collapsible(offset: index + 1),
-    );
+    _controller.replaceText(index, 0, BlockEmbed.image(url), null);
   }
 
   @override
@@ -98,6 +93,7 @@ class RichTextEditorState extends State<RichTextEditor> {
         child: Center(child: CircularProgressIndicator(color: AppColors.red)),
       );
     }
+    _controller.readOnly = widget.readOnly;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -128,7 +124,6 @@ class RichTextEditorState extends State<RichTextEditor> {
             child: QuillEditor.basic(
               controller: _controller,
               config: QuillEditorConfig(
-                readOnly: widget.readOnly,
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(),
               ),
             ),
