@@ -440,7 +440,7 @@ class _MarqueeTextState extends State<MarqueeText>
     if (oldWidget.text != widget.text) {
       _scrolling = false;
       _userInteracting = false;
-      WidgetsBinding.instance.addPostFrameCallback(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_controller.hasClients) _controller.jumpTo(0);
         _checkOverflow();
       });
