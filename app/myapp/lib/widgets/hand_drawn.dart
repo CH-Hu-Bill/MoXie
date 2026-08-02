@@ -324,7 +324,7 @@ class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,
     required this.message,
-    this.icon = Icons.sketch_outlined,
+    this.icon = Icons.draw_outlined,
   });
 
   @override

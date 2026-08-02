@@ -75,7 +75,7 @@ class ApiService {
     if (_token != null) {
       request.headers['Authorization'] = 'Bearer $_token';
     }
-    request.files.add(await http.MultipartFile.fromPath(fileField, file,
+    request.files.add(await http.MultipartFile.fromPath(fileField, file.path,
         filename: filename));
 
     final streamedResponse = await request.send().timeout(
