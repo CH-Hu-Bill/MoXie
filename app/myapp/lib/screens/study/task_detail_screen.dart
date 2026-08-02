@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../models/word.dart';
-import '../../widgets/hand_drawn_widgets.dart';
-import '../../theme/app_theme.dart';
+import 'package:listenwrite/providers/auth_provider.dart';
+import 'package:listenwrite/models/word.dart';
+import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
+import 'package:listenwrite/theme/app_theme.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String classId;

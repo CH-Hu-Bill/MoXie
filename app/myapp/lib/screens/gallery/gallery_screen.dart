@@ -3,11 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import '../../providers/auth_provider.dart';
-import '../../models/gallery_item.dart';
-import '../../widgets/hand_drawn_widgets.dart';
-import '../../theme/app_theme.dart';
-import '../../config/api_config.dart';
+import 'package:listenwrite/providers/auth_provider.dart';
+import 'package:listenwrite/models/gallery_item.dart';
+import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
+import 'package:listenwrite/theme/app_theme.dart';
+import 'package:listenwrite/config/api_config.dart';
 
 class GalleryScreen extends StatefulWidget {
   const GalleryScreen({super.key});

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/hand_drawn_widgets.dart';
-import '../study/study_screen.dart';
-import '../life/life_screen.dart';
-import '../search/search_screen.dart';
-import '../gallery/gallery_screen.dart';
-import '../profile/profile_screen.dart';
+import 'package:listenwrite/providers/auth_provider.dart';
+import 'package:listenwrite/theme/app_theme.dart';
+import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
+import 'package:listenwrite/screens/study/study_screen.dart';
+import 'package:listenwrite/screens/life/life_screen.dart';
+import 'package:listenwrite/screens/search/search_screen.dart';
+import 'package:listenwrite/screens/gallery/gallery_screen.dart';
+import 'package:listenwrite/screens/profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../providers/auth_provider.dart';
-import '../../widgets/hand_drawn_widgets.dart';
-import '../../theme/app_theme.dart';
-import '../../config/api_config.dart';
+import 'package:listenwrite/providers/auth_provider.dart';
+import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
+import 'package:listenwrite/theme/app_theme.dart';
+import 'package:listenwrite/config/api_config.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});

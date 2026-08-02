@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/user.dart';
-import '../services/api_service.dart';
-import '../services/storage_service.dart';
+import 'package:listenwrite/models/user.dart';
+import 'package:listenwrite/services/api_service.dart';
+import 'package:listenwrite/services/storage_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final StorageService _storage = StorageService();

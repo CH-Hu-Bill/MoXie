@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../widgets/hand_drawn_widgets.dart';
-import '../../theme/app_theme.dart';
+import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
+import 'package:listenwrite/theme/app_theme.dart';
 
 class WordDetailScreen extends StatelessWidget {
   final String word;

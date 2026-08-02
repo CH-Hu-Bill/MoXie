@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import 'package:listenwrite/theme/app_theme.dart';
 
 class HandDrawnButton extends StatelessWidget {
   final String text;

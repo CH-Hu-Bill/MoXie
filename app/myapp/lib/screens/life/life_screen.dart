@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../providers/auth_provider.dart';
-import '../../widgets/hand_drawn_widgets.dart';
-import '../../theme/app_theme.dart';
+import 'package:listenwrite/providers/auth_provider.dart';
+import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
+import 'package:listenwrite/theme/app_theme.dart';
 
 class LifeScreen extends StatefulWidget {
   const LifeScreen({super.key});

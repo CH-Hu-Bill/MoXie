@@ -1,3 +1,5 @@
+import 'package:listenwrite/models/word.dart';
+
 class Task {
   final String id;
   final String date;

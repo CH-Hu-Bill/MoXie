@@ -27,6 +27,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Create API config from example
+        run: cp lib/config/api_config.example.dart lib/config/api_config.dart
+
       - name: Install dependencies
         run: flutter pub get
 
