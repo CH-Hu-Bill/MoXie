@@ -21,13 +21,19 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   bool _classExpiredHandled = false;
   Timer? _classCheckTimer;
+  final _studyKey = GlobalKey<StudyScreenState>();
 
-  final _screens = const [
-    StudyScreen(),
-    LifeScreen(),
-    SearchScreen(),
-    GalleryScreen(),
-    ProfileScreen(),
+  void _onWordFound(String word) {
+    setState(() => _currentIndex = 0);
+    _studyKey.currentState?.scrollToWord(word);
+  }
+
+  late final _screens = [
+    StudyScreen(key: _studyKey),
+    const LifeScreen(),
+    SearchScreen(onWordFound: _onWordFound),
+    const GalleryScreen(),
+    const ProfileScreen(),
   ];
 
   @override

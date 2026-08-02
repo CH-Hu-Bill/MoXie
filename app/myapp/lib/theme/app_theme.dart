@@ -25,31 +25,31 @@ class AppTheme {
   static const String fontBody = 'MaShanZheng';
 
   static BorderRadius get wobblySm => const BorderRadius.only(
-        topLeft: Radius.circular(128),
-        topRight: Radius.circular(14),
-        bottomLeft: Radius.circular(98),
-        bottomRight: Radius.circular(14),
+        topLeft: Radius.elliptical(128, 14),
+        topRight: Radius.elliptical(14, 88),
+        bottomRight: Radius.elliptical(98, 14),
+        bottomLeft: Radius.elliptical(14, 75),
       );
 
   static BorderRadius get wobblyRadius => const BorderRadius.only(
-        topLeft: Radius.circular(255),
-        topRight: Radius.circular(15),
-        bottomLeft: Radius.circular(225),
-        bottomRight: Radius.circular(15),
+        topLeft: Radius.elliptical(255, 15),
+        topRight: Radius.elliptical(15, 225),
+        bottomRight: Radius.elliptical(225, 15),
+        bottomLeft: Radius.elliptical(15, 255),
       );
 
   static BorderRadius get wobblyRadiusMd => const BorderRadius.only(
-        topLeft: Radius.circular(15),
-        topRight: Radius.circular(225),
-        bottomLeft: Radius.circular(15),
-        bottomRight: Radius.circular(255),
+        topLeft: Radius.elliptical(15, 225),
+        topRight: Radius.elliptical(225, 15),
+        bottomRight: Radius.elliptical(15, 255),
+        bottomLeft: Radius.elliptical(255, 15),
       );
 
   static BorderRadius get wobblyLg => const BorderRadius.only(
-        topLeft: Radius.circular(255),
-        topRight: Radius.circular(25),
-        bottomLeft: Radius.circular(225),
-        bottomRight: Radius.circular(25),
+        topLeft: Radius.elliptical(255, 25),
+        topRight: Radius.elliptical(25, 225),
+        bottomRight: Radius.elliptical(225, 25),
+        bottomLeft: Radius.elliptical(25, 255),
       );
 
   static List<BoxShadow> get hardShadowSm => const [

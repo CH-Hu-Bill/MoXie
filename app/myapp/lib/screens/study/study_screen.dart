@@ -13,12 +13,13 @@ class StudyScreen extends StatefulWidget {
   const StudyScreen({super.key});
 
   @override
-  State<StudyScreen> createState() => _StudyScreenState();
+  State<StudyScreen> createState() => StudyScreenState();
 }
 
-class _StudyScreenState extends State<StudyScreen> {
+class StudyScreenState extends State<StudyScreen> {
   int _mainTab = 0;
   int _taskTab = 0;
+  final _wordListScrollController = ScrollController();
 
   final _api = ApiService();
   final _storage = StorageService();
@@ -32,6 +33,29 @@ class _StudyScreenState extends State<StudyScreen> {
   int _wordsPage = 1;
   int _wordsTotal = 0;
   bool _wordsHasMore = false;
+
+  void scrollToWord(String word) {
+    setState(() => _mainTab = 0);
+    final idx = _words.indexWhere(
+      (w) => w.word.toLowerCase() == word.toLowerCase());
+    if (idx >= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_wordListScrollController.hasClients) {
+          _wordListScrollController.animateTo(
+            idx * 140.0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _wordListScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -345,6 +369,7 @@ class _StudyScreenState extends State<StudyScreen> {
         return false;
       },
       child: ListView.builder(
+        controller: _wordListScrollController,
         padding: const EdgeInsets.all(16),
         itemCount: _words.length + (_wordsHasMore ? 1 : 0),
         itemBuilder: (ctx, i) {

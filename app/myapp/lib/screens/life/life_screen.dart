@@ -112,16 +112,18 @@ class _LifeScreenState extends State<LifeScreen> {
       body: PaperTexture(
         child: _loading
             ? const LoadingOverlay(message: '加载中...')
-            : Column(
-                children: [
-                  WobblyTabBar(
-                    tabs: const ['我的', '他人', '班级'],
-                    selectedIndex: _tab,
-                    onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
-                  ),
-                  _buildCalendar(),
-                  Expanded(child: _buildContentArea(todayStr)),
-                ],
+            : SingleChildScrollView(
+                child: Column(
+                  children: [
+                    WobblyTabBar(
+                      tabs: const ['我的', '他人', '班级'],
+                      selectedIndex: _tab,
+                      onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
+                    ),
+                    _buildCalendar(),
+                    _buildContentArea(todayStr),
+                  ],
+                ),
               ),
       ),
     );
@@ -243,7 +245,7 @@ class _LifeScreenState extends State<LifeScreen> {
     if (_tab == 0) {
       final entry = _personalHistory[_selectedDate!];
       if (entry != null) {
-        return _VlogViewer(entry: entry, isToday: _selectedDate == todayStr, onEdit: () => _openEditor(_selectedDate!, entry));
+        return _VlogViewer(entry: entry, isToday: _selectedDate == todayStr, onEdit: () => _openEditor(_selectedDate!, entry), scrollable: false);
       }
       if (_selectedDate == todayStr) {
         return const EmptyState(message: '点击日期开始写今天的史记', icon: Icons.edit);
@@ -262,6 +264,8 @@ class _LifeScreenState extends State<LifeScreen> {
       }
 
       return ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: authors.length,
         itemBuilder: (ctx, i) {
@@ -306,7 +310,7 @@ class _LifeScreenState extends State<LifeScreen> {
     if (entry == null) {
       return const EmptyState(message: '这天没有班级史记', icon: Icons.event_busy);
     }
-    return _VlogViewer(entry: entry);
+    return _VlogViewer(entry: entry, scrollable: false);
   }
 
   void _openEditor(String date, VlogEntry? existing) {
@@ -327,91 +331,96 @@ class _VlogViewer extends StatelessWidget {
   final VlogEntry entry;
   final bool isToday;
   final VoidCallback? onEdit;
+  final bool scrollable;
 
-  const _VlogViewer({required this.entry, this.isToday = false, this.onEdit});
+  const _VlogViewer({required this.entry, this.isToday = false, this.onEdit, this.scrollable = true});
 
   @override
   Widget build(BuildContext context) {
     final resolvedContent = _resolveHtmlImages(entry.content);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: HandDrawnCard(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isToday && onEdit != null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: GestureDetector(
-                  onTap: onEdit,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.postIt,
-                      borderRadius: AppTheme.wobblyRadius,
-                      border: Border.all(color: AppColors.pencil, width: 2),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.edit, size: 16, color: AppColors.pencil),
-                        const SizedBox(width: 4),
-                        Text('编辑',
-                            style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
-                      ],
-                    ),
+    final card = HandDrawnCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isToday && onEdit != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: onEdit,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.postIt,
+                    borderRadius: AppTheme.wobblyRadius,
+                    border: Border.all(color: AppColors.pencil, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.edit, size: 16, color: AppColors.pencil),
+                      const SizedBox(width: 4),
+                      Text('编辑',
+                          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
+                    ],
                   ),
                 ),
               ),
-            if (entry.title.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(entry.title,
-                    style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 24)),
-              ),
-            Row(
-              children: [
-                if (entry.mood.isNotEmpty) _buildChip(entry.mood),
-                if (entry.weather.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.weather)],
-                if (entry.location.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.location)],
-              ],
             ),
-            if (entry.tags.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: entry.tags
-                    .map((t) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.blue.withValues(alpha: 0.1),
-                            borderRadius: AppTheme.wobblyRadius,
-                          ),
-                          child: Text('#$t',
-                              style: TextStyle(
-                                  fontFamily: AppTheme.fontBody,
-                                  fontSize: 14,
-                                  color: AppColors.blue)),
-                        ))
-                    .toList(),
-              ),
+          if (entry.title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(entry.title,
+                  style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 24)),
+            ),
+          Row(
+            children: [
+              if (entry.mood.isNotEmpty) _buildChip(entry.mood),
+              if (entry.weather.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.weather)],
+              if (entry.location.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.location)],
             ],
-            const Divider(height: 24, thickness: 2),
-            HtmlWidget(
-              resolvedContent,
-              textStyle: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16),
+          ),
+          if (entry.tags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: entry.tags
+                  .map((t) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.blue.withValues(alpha: 0.1),
+                          borderRadius: AppTheme.wobblyRadius,
+                        ),
+                        child: Text('#$t',
+                            style: TextStyle(
+                                fontFamily: AppTheme.fontBody,
+                                fontSize: 14,
+                                color: AppColors.blue)),
+                      ))
+                  .toList(),
             ),
-            const SizedBox(height: 12),
-            Text('更新于 ${entry.updatedAt}',
-                style: TextStyle(
-                    fontFamily: AppTheme.fontBody,
-                    fontSize: 13,
-                    color: AppColors.pencil.withValues(alpha: 0.4))),
           ],
-        ),
+          const Divider(height: 24, thickness: 2),
+          HtmlWidget(
+            resolvedContent,
+            textStyle: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16),
+          ),
+          const SizedBox(height: 12),
+          Text('更新于 ${entry.updatedAt}',
+              style: TextStyle(
+                  fontFamily: AppTheme.fontBody,
+                  fontSize: 13,
+                  color: AppColors.pencil.withValues(alpha: 0.4))),
+        ],
       ),
     );
+    if (scrollable) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: card,
+      );
+    }
+    return card;
   }
 
   Widget _buildChip(String label) {

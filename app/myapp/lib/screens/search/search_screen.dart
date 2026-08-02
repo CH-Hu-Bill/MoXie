@@ -10,8 +10,9 @@ import '../study/task_detail_screen.dart';
 class SearchScreen extends StatefulWidget {
   final String? initialQuery;
   final String? highlightWord;
+  final ValueChanged<String>? onWordFound;
 
-  const SearchScreen({super.key, this.initialQuery, this.highlightWord});
+  const SearchScreen({super.key, this.initialQuery, this.highlightWord, this.onWordFound});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -150,6 +151,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   meaning: w.meaning,
                   pos: w.pos,
                   highlight: true,
+                  onTap: widget.onWordFound != null
+                      ? () => widget.onWordFound!(w.word)
+                      : null,
                 ),
               )),
           const SizedBox(height: 16),
