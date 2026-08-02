@@ -27,11 +27,32 @@ class _LifeScreenState extends State<LifeScreen> {
   bool _loading = false;
   DateTime _calendarMonth = DateTime.now();
   String? _selectedDate;
+  bool _isEditing = false;
+  final _editTitleCtrl = TextEditingController();
+  final _editContentCtrl = TextEditingController();
+  final _editLocationCtrl = TextEditingController();
+  final _editTagsCtrl = TextEditingController();
+  String _editMood = '😊';
+  String _editWeather = '☀️';
+  List<String> _editImageUrls = [];
+  bool _saving = false;
+
+  static const _moods = ['😊', '🥰', '😌', '😢', '😤', '🤩', '😴'];
+  static const _weathers = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '🌨️', '🌬️'];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+  }
+
+  @override
+  void dispose() {
+    _editTitleCtrl.dispose();
+    _editContentCtrl.dispose();
+    _editLocationCtrl.dispose();
+    _editTagsCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -87,14 +108,64 @@ class _LifeScreenState extends State<LifeScreen> {
   }
 
   void _onDateSelected(String dateStr) {
-    setState(() => _selectedDate = dateStr);
+    setState(() {
+      _selectedDate = dateStr;
+      _isEditing = false;
+    });
     if (_tab == 0) {
       final entry = _personalHistory[dateStr];
       final isToday = dateStr == _todayStr();
       if (entry == null && isToday) {
-        _openEditor(dateStr, null);
+        _startEditing(null);
       }
     }
+  }
+
+  void _startEditing(VlogEntry? existing) {
+    _editTitleCtrl.text = existing?.title ?? '';
+    _editContentCtrl.text = existing != null ? _stripHtml(existing.content) : '';
+    _editLocationCtrl.text = existing?.location ?? '';
+    _editTagsCtrl.text = existing?.tags.join(', ') ?? '';
+    _editMood = (existing?.mood.isNotEmpty == true) ? existing!.mood : '😊';
+    _editWeather = (existing?.weather.isNotEmpty == true) ? existing!.weather : '☀️';
+    _editImageUrls = [];
+    if (existing != null) {
+      final imgRegex = RegExp(r'<img[^>]+src="([^"]+)"');
+      for (final m in imgRegex.allMatches(existing.content)) {
+        _editImageUrls.add(m.group(1)!);
+      }
+    }
+    setState(() => _isEditing = true);
+  }
+
+  String _stripHtml(String html) {
+    return html
+        .replaceAll(RegExp(r'<br\s*/?>'), '\n')
+        .replaceAll(RegExp(r'</p>'), '\n')
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .trim();
+  }
+
+  String _buildHtml() {
+    final lines = _editContentCtrl.text.split('\n');
+    final htmlParts = <String>[];
+    for (final line in lines) {
+      if (line.trim().isNotEmpty) {
+        htmlParts.add('<p>${_escapeHtml(line.trim())}</p>');
+      }
+    }
+    for (final url in _editImageUrls) {
+      htmlParts.add('<p><img src="$url"></p>');
+    }
+    return htmlParts.join('');
+  }
+
+  String _escapeHtml(String text) {
+    return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   }
 
   @override
@@ -243,12 +314,28 @@ class _LifeScreenState extends State<LifeScreen> {
     }
 
     if (_tab == 0) {
+      if (_isEditing) {
+        return _buildInlineEditor();
+      }
       final entry = _personalHistory[_selectedDate!];
       if (entry != null) {
-        return _VlogViewer(entry: entry, isToday: _selectedDate == todayStr, onEdit: () => _openEditor(_selectedDate!, entry), scrollable: false);
+        return _VlogViewer(
+          entry: entry,
+          isToday: _selectedDate == todayStr,
+          onEdit: () => _startEditing(entry),
+          scrollable: false,
+        );
       }
       if (_selectedDate == todayStr) {
-        return const EmptyState(message: '点击日期开始写今天的史记', icon: Icons.edit);
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: HandDrawnButton(
+            label: '写今天的史记',
+            icon: Icons.edit,
+            fullWidth: true,
+            onPressed: () => _startEditing(null),
+          ),
+        );
       }
       return const EmptyState(message: '这天没有记录', icon: Icons.event_busy);
     }
@@ -313,17 +400,193 @@ class _LifeScreenState extends State<LifeScreen> {
     return _VlogViewer(entry: entry, scrollable: false);
   }
 
-  void _openEditor(String date, VlogEntry? existing) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _VlogEditorScreen(
-          date: date,
-          existing: existing,
-          onSave: _loadData,
-        ),
+  Future<void> _saveInline() async {
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId!;
+    if (_selectedDate == null) return;
+    final tags = _editTagsCtrl.text
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    setState(() => _saving = true);
+    try {
+      await _api.savePersonalHistory(classId, {
+        'date': _selectedDate!,
+        'content': _buildHtml(),
+        'title': _editTitleCtrl.text.trim(),
+        'mood': _editMood,
+        'weather': _editWeather,
+        'location': _editLocationCtrl.text.trim(),
+        'tags': tags,
+      });
+      setState(() => _isEditing = false);
+      _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存成功')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存失败: $e')),
+        );
+      }
+    }
+    setState(() => _saving = false);
+  }
+
+  Widget _buildInlineEditor() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          HandDrawnInput(label: '标题', hint: '给今天起个标题', controller: _editTitleCtrl),
+          const SizedBox(height: 16),
+          _buildSelector('心情', _moods, _editMood, (v) => setState(() => _editMood = v)),
+          const SizedBox(height: 12),
+          _buildSelector('天气', _weathers, _editWeather, (v) => setState(() => _editWeather = v)),
+          const SizedBox(height: 16),
+          HandDrawnInput(label: '位置', hint: '你在哪里？', controller: _editLocationCtrl),
+          const SizedBox(height: 16),
+          HandDrawnInput(label: '标签', hint: '用逗号分隔', controller: _editTagsCtrl),
+          const SizedBox(height: 16),
+          HandDrawnInput(
+            label: '内容',
+            hint: '记录今天的故事...',
+            controller: _editContentCtrl,
+            maxLines: 8,
+          ),
+          const SizedBox(height: 16),
+          if (_editImageUrls.isNotEmpty) ...[
+            Text('图片', style: TextStyle(fontFamily: AppTheme.fontBody)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: List.generate(_editImageUrls.length, (i) {
+                final url = _api.resolveImageUrl(_editImageUrls[i]);
+                return Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: AppTheme.wobblyRadius,
+                      child: Image.network(url,
+                          width: 100, height: 100, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 100, height: 100, color: AppColors.oldPaper,
+                            child: const Icon(Icons.broken_image))),
+                    ),
+                    Positioned(
+                      top: 0, right: 0,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _editImageUrls.removeAt(i)),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: AppColors.red, shape: BoxShape.circle),
+                          child: const Icon(Icons.close, size: 16, color: AppColors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ),
+            const SizedBox(height: 16),
+          ],
+          HandDrawnButton(
+            label: '添加图片',
+            icon: Icons.image,
+            isSecondary: true,
+            fullWidth: true,
+            onPressed: _pickImageInline,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: HandDrawnButton(
+                  label: '取消',
+                  isSecondary: true,
+                  onPressed: () => setState(() => _isEditing = false),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: HandDrawnButton(
+                  label: _saving ? '保存中...' : '保存',
+                  onPressed: _saving ? null : _saveInline,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
+  }
+
+  Widget _buildSelector(String label, List<String> options, String selected, ValueChanged<String> onTap) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: options.map((opt) {
+            final isSelected = opt == selected;
+            return GestureDetector(
+              onTap: () => onTap(opt),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.postIt : AppColors.white,
+                  borderRadius: AppTheme.wobblyRadius,
+                  border: Border.all(
+                    color: AppColors.pencil,
+                    width: isSelected ? 3 : 2,
+                  ),
+                ),
+                child: Text(opt, style: const TextStyle(fontSize: 20)),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickImageInline() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1920,
+      maxHeight: 1920,
+    );
+    if (image == null) return;
+    setState(() => _saving = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final classId = auth.currentClassId!;
+      final res = await _api.uploadImage(classId, File(image.path), image.name);
+      final url = res['data']['url'] as String;
+      setState(() {
+        _editImageUrls.add(url);
+        _saving = false;
+      });
+    } catch (e) {
+      setState(() => _saving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('图片上传失败: $e')),
+        );
+      }
+    }
   }
 }
 
@@ -451,289 +714,3 @@ class _VlogViewer extends StatelessWidget {
   }
 }
 
-class _VlogEditorScreen extends StatefulWidget {
-  final String date;
-  final VlogEntry? existing;
-  final VoidCallback onSave;
-
-  const _VlogEditorScreen({
-    required this.date,
-    this.existing,
-    required this.onSave,
-  });
-
-  @override
-  State<_VlogEditorScreen> createState() => _VlogEditorScreenState();
-}
-
-class _VlogEditorScreenState extends State<_VlogEditorScreen> {
-  final _api = ApiService();
-  final _titleCtrl = TextEditingController();
-  final _contentCtrl = TextEditingController();
-  final _locationCtrl = TextEditingController();
-  final _tagsCtrl = TextEditingController();
-
-  String _mood = '😊';
-  String _weather = '☀️';
-  List<String> _imageUrls = [];
-  bool _saving = false;
-
-  static const _moods = ['😊', '🥰', '😌', '😢', '😤', '🤩', '😴'];
-  static const _weathers = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '🌨️', '🌬️'];
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.existing != null) {
-      final e = widget.existing!;
-      _titleCtrl.text = e.title;
-      _locationCtrl.text = e.location;
-      _tagsCtrl.text = e.tags.join(', ');
-      _mood = e.mood.isNotEmpty ? e.mood : '😊';
-      _weather = e.weather.isNotEmpty ? e.weather : '☀️';
-      _extractImagesFromContent(e.content);
-      _contentCtrl.text = _stripHtml(e.content);
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _contentCtrl.dispose();
-    _locationCtrl.dispose();
-    _tagsCtrl.dispose();
-    super.dispose();
-  }
-
-  void _extractImagesFromContent(String html) {
-    final imgRegex = RegExp(r'<img[^>]+src="([^"]+)"');
-    for (final m in imgRegex.allMatches(html)) {
-      _imageUrls.add(m.group(1)!);
-    }
-  }
-
-  String _stripHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<br\s*/?>'), '\n')
-        .replaceAll(RegExp(r'</p>'), '\n')
-        .replaceAll(RegExp(r'<[^>]+>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .trim();
-  }
-
-  String _buildHtml() {
-    final lines = _contentCtrl.text.split('\n');
-    final htmlParts = <String>[];
-    for (final line in lines) {
-      if (line.trim().isNotEmpty) {
-        htmlParts.add('<p>${_escapeHtml(line.trim())}</p>');
-      }
-    }
-    for (final url in _imageUrls) {
-      htmlParts.add('<p><img src="$url"></p>');
-    }
-    return htmlParts.join('');
-  }
-
-  String _escapeHtml(String text) {
-    return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  }
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1920,
-      maxHeight: 1920,
-    );
-    if (image == null) return;
-
-    setState(() => _saving = true);
-    try {
-      final auth = context.read<AuthProvider>();
-      final classId = auth.currentClassId!;
-      final res = await _api.uploadImage(classId, File(image.path), image.name);
-      final url = res['data']['url'] as String;
-      setState(() {
-        _imageUrls.add(url);
-        _saving = false;
-      });
-    } catch (e) {
-      setState(() => _saving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('图片上传失败: $e')),
-        );
-      }
-    }
-  }
-
-  void _removeImage(int index) {
-    setState(() => _imageUrls.removeAt(index));
-  }
-
-  Future<void> _save() async {
-    final auth = context.read<AuthProvider>();
-    final classId = auth.currentClassId!;
-    final tags = _tagsCtrl.text
-        .split(',')
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty)
-        .toList();
-
-    setState(() => _saving = true);
-    try {
-      await _api.savePersonalHistory(classId, {
-        'date': widget.date,
-        'content': _buildHtml(),
-        'title': _titleCtrl.text.trim(),
-        'mood': _mood,
-        'weather': _weather,
-        'location': _locationCtrl.text.trim(),
-        'tags': tags,
-      });
-      widget.onSave();
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存成功')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败: $e')),
-        );
-      }
-    }
-    setState(() => _saving = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('编辑 ${widget.date}'),
-        backgroundColor: AppColors.white,
-        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
-        actions: [
-          IconButton(icon: const Icon(Icons.check), onPressed: _saving ? null : _save),
-        ],
-      ),
-      body: PaperTexture(
-        child: _saving
-            ? const LoadingOverlay(message: '保存中...')
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    HandDrawnInput(label: '标题', hint: '给今天起个标题', controller: _titleCtrl),
-                    const SizedBox(height: 16),
-                    _buildSelector('心情', _moods, _mood, (v) => setState(() => _mood = v)),
-                    const SizedBox(height: 12),
-                    _buildSelector('天气', _weathers, _weather, (v) => setState(() => _weather = v)),
-                    const SizedBox(height: 16),
-                    HandDrawnInput(label: '位置', hint: '你在哪里？', controller: _locationCtrl),
-                    const SizedBox(height: 16),
-                    HandDrawnInput(label: '标签', hint: '用逗号分隔', controller: _tagsCtrl),
-                    const SizedBox(height: 16),
-                    HandDrawnInput(
-                      label: '内容',
-                      hint: '记录今天的故事...',
-                      controller: _contentCtrl,
-                      maxLines: 8,
-                    ),
-                    const SizedBox(height: 16),
-                    if (_imageUrls.isNotEmpty) ...[
-                      Text('图片', style: TextStyle(fontFamily: AppTheme.fontBody)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: List.generate(_imageUrls.length, (i) {
-                          final url = _api.resolveImageUrl(_imageUrls[i]);
-                          return Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: AppTheme.wobblyRadius,
-                                child: Image.network(url,
-                                    width: 100, height: 100, fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
-                                      width: 100, height: 100, color: AppColors.oldPaper,
-                                      child: const Icon(Icons.broken_image))),
-                              ),
-                              Positioned(
-                                top: 0, right: 0,
-                                child: GestureDetector(
-                                  onTap: () => _removeImage(i),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.red, shape: BoxShape.circle),
-                                    child: const Icon(Icons.close, size: 16, color: AppColors.white),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    HandDrawnButton(
-                      label: '添加图片',
-                      icon: Icons.image,
-                      isSecondary: true,
-                      fullWidth: true,
-                      onPressed: _pickImage,
-                    ),
-                    const SizedBox(height: 24),
-                    HandDrawnButton(
-                      label: '保存',
-                      icon: Icons.save,
-                      fullWidth: true,
-                      fontSize: 20,
-                      onPressed: _saving ? null : _save,
-                    ),
-                  ],
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildSelector(String label, List<String> options, String selected, ValueChanged<String> onTap) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          children: options.map((opt) {
-            final isSelected = opt == selected;
-            return GestureDetector(
-              onTap: () => onTap(opt),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.postIt : AppColors.white,
-                  borderRadius: AppTheme.wobblyRadius,
-                  border: Border.all(
-                    color: AppColors.pencil,
-                    width: isSelected ? 3 : 2,
-                  ),
-                ),
-                child: Text(opt, style: const TextStyle(fontSize: 20)),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-}
