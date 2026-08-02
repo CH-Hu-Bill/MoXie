@@ -17,6 +17,7 @@ class AuthProvider extends ChangeNotifier {
   List<ClassInfo> _allClasses = [];
   List<Map<String, String>> _myClasses = [];
   String? _error;
+  bool _isNewlyBound = false;
 
   AuthState get authState => _authState;
   User? get user => _user;
@@ -25,10 +26,16 @@ class AuthProvider extends ChangeNotifier {
   List<ClassInfo> get allClasses => _allClasses;
   List<Map<String, String>> get myClasses => _myClasses;
   String? get error => _error;
-  bool get hasClass => _currentClassId != null;
+  bool get hasClass => _currentClassId != null && _currentClassId!.isNotEmpty;
+  bool get isNewlyBound => _isNewlyBound;
 
   void _setError(String? e) {
     _error = e;
+    notifyListeners();
+  }
+
+  void clearNewlyBound() {
+    _isNewlyBound = false;
     notifyListeners();
   }
 
@@ -105,10 +112,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(String username, String password) async {
-    return login(username, password);
-  }
-
   Future<void> logout() async {
     try {
       await _api.logout();
@@ -156,6 +159,8 @@ class AuthProvider extends ChangeNotifier {
         data['class_name'] as String,
       );
       await _loadMyClasses();
+      _isNewlyBound = true;
+      notifyListeners();
       return true;
     } catch (e) {
       _setError(e.toString());
@@ -196,19 +201,6 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _api.setGlobalConsent(allow);
       _user = _user!.copyWith(consent: allow);
-      notifyListeners();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> setClassConsent(String classId, bool allow) async {
-    try {
-      await _api.setConsent(classId, allow);
-      final newMap = Map<String, bool>.from(_user?.consentMap ?? {});
-      newMap[classId] = allow;
-      _user = _user!.copyWith(consentMap: newMap);
       notifyListeners();
       return true;
     } catch (_) {

@@ -30,18 +30,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _checkClassValidity();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkClassValidity());
   }
 
   Future<void> _checkClassValidity() async {
     final auth = context.read<AuthProvider>();
-    if (auth.currentClassId != null &&
-        auth.currentClassId!.isNotEmpty) {
+    if (auth.currentClassId != null && auth.currentClassId!.isNotEmpty) {
       final ok = await auth.checkClassAuth(auth.currentClassId!);
-      if (ok && mounted) return;
-      if (!ok && mounted) {
-        _showClassExpiredDialog();
-      }
+      if (ok || !mounted) return;
+      _showClassExpiredDialog();
     }
   }
 
@@ -49,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -63,11 +60,11 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushReplacement(
+              Navigator.pop(ctx);
+              Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => const ClassSelectionScreen()),
+                    builder: (_) => const ClassSelectionScreen(fromHome: true)),
               );
             },
             child: Text('去选择', style: AppTheme.bodyStyle),
@@ -79,7 +76,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -124,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () => setState(() => _currentIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? AppColors.postItYellow : Colors.transparent,
           borderRadius: AppTheme.wobblyRadius,

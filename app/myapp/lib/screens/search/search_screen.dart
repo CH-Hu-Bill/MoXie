@@ -26,7 +26,12 @@ class _SearchScreenState extends State<SearchScreen> {
     if (query.isEmpty) return;
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
-    if (classId == null || classId.isEmpty) return;
+    if (classId == null || classId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先选择班级')),
+      );
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -34,17 +39,17 @@ class _SearchScreenState extends State<SearchScreen> {
     });
     try {
       final res = await _api.searchAll(classId, query);
+      if (!mounted) return;
       setState(() {
         _result = SearchResult.fromJson(res['data'] as Map<String, dynamic>);
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('搜索失败: $e')),
+      );
     }
   }
 
@@ -64,35 +69,35 @@ class _SearchScreenState extends State<SearchScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(
-                        hintText: '搜索单词、释义或任务...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _controller.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _controller.clear();
-                                  setState(() {
-                                    _result = null;
-                                    _searched = false;
-                                  });
-                                },
-                              )
-                            : null,
-                      ),
-                      onSubmitted: (_) => _search(),
-                      onChanged: (_) => setState(() {}),
+                  TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      hintText: '搜索单词、释义或任务...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _controller.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _controller.clear();
+                                setState(() {
+                                  _result = null;
+                                  _searched = false;
+                                });
+                              },
+                            )
+                          : null,
                     ),
+                    onSubmitted: (_) => _search(),
+                    onChanged: (_) => setState(() {}),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(height: 12),
                   HandDrawnButton(
                     label: '搜索',
-                    onPressed: _search,
+                    icon: Icons.search,
+                    fullWidth: true,
+                    onPressed: _loading ? null : _search,
                   ),
                 ],
               ),
@@ -127,44 +132,10 @@ class _SearchScreenState extends State<SearchScreen> {
           const SizedBox(height: 8),
           ..._result!.words.map((w) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: HandDrawnCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            w.word,
-                            style: AppTheme.headingStyle.copyWith(fontSize: 20),
-                          ),
-                          if (w.pos.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondaryAccent
-                                    .withValues(alpha: 0.1),
-                                borderRadius: AppTheme.wobblyRadius,
-                              ),
-                              child: Text(w.pos,
-                                  style: AppTheme.bodyStyle.copyWith(
-                                      fontSize: 13,
-                                      color: AppColors.secondaryAccent)),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        w.meaning,
-                        style: AppTheme.bodyStyle.copyWith(
-                          fontSize: 16,
-                          color: AppColors.foreground.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
+                child: WordCard(
+                  word: w.word,
+                  meaning: w.meaning,
+                  pos: w.pos,
                 ),
               )),
           const SizedBox(height: 16),
@@ -222,6 +193,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: Text(
                     task.label.isNotEmpty ? task.label : '未命名任务',
                     style: AppTheme.headingStyle.copyWith(fontSize: 18),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
@@ -274,7 +247,6 @@ class _SearchScreenState extends State<SearchScreen> {
               fontSize: 14,
               color: AppColors.accent,
               fontWeight: FontWeight.bold,
-              backgroundColor: AppColors.accent.withValues(alpha: 0.15),
             ),
           ),
           TextSpan(text: text.substring(idx + query.length)),

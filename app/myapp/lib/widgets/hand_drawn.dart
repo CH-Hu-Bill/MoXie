@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/tts_service.dart';
 
 class HandDrawnCard extends StatelessWidget {
   final Widget child;
@@ -10,7 +11,7 @@ class HandDrawnCard extends StatelessWidget {
   final List<BoxShadow>? shadows;
   final double? rotation;
   final double borderWidth;
-  final Decoration? decoration;
+  final Color? borderColor;
   final VoidCallback? onTap;
 
   const HandDrawnCard({
@@ -22,7 +23,7 @@ class HandDrawnCard extends StatelessWidget {
     this.shadows,
     this.rotation,
     this.borderWidth = 2,
-    this.decoration,
+    this.borderColor,
     this.onTap,
   });
 
@@ -30,16 +31,15 @@ class HandDrawnCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final card = Container(
       padding: padding,
-      decoration: decoration ??
-          BoxDecoration(
-            color: backgroundColor ?? AppColors.cardWhite,
-            borderRadius: borderRadius ?? AppTheme.wobblyRadius,
-            border: Border.all(
-              color: AppColors.border,
-              width: borderWidth,
-            ),
-            boxShadow: shadows ?? AppTheme.softShadow,
-          ),
+      decoration: BoxDecoration(
+        color: backgroundColor ?? AppColors.cardWhite,
+        borderRadius: borderRadius ?? AppTheme.wobblyRadius,
+        border: Border.all(
+          color: borderColor ?? AppColors.border,
+          width: borderWidth,
+        ),
+        boxShadow: shadows ?? AppTheme.softShadow,
+      ),
       child: child,
     );
 
@@ -100,13 +100,15 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        if (widget.onPressed != null) widget.onPressed!();
+      },
       onTapCancel: () => setState(() => _pressed = false),
-      onTap: widget.onPressed,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
         transform: _pressed
-            ? (Matrix4.translationValues(4, 4, 0))
+            ? Matrix4.translationValues(4, 4, 0)
             : Matrix4.identity(),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -117,26 +119,25 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
               color: AppColors.border,
               width: 3,
             ),
-            boxShadow: _pressed
-                ? []
-                : (isDisabled ? null : AppTheme.hardShadow),
+            boxShadow: _pressed ? [] : (isDisabled ? null : AppTheme.hardShadow),
           ),
           child: Row(
-            mainAxisSize: widget.fullWidth
-                ? MainAxisSize.max
-                : MainAxisSize.min,
+            mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
                 Icon(widget.icon, size: widget.fontSize + 2, color: fgColor),
                 const SizedBox(width: 8),
               ],
-              Text(
-                widget.label,
-                style: AppTheme.bodyStyle.copyWith(
-                  fontSize: widget.fontSize,
-                  color: fgColor,
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Text(
+                  widget.label,
+                  style: AppTheme.bodyStyle.copyWith(
+                    fontSize: widget.fontSize,
+                    color: fgColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -157,7 +158,6 @@ class HandDrawnInput extends StatelessWidget {
   final Widget? suffix;
   final String? Function(String?)? validator;
   final void Function(String)? onChanged;
-  final FocusNode? focusNode;
 
   const HandDrawnInput({
     super.key,
@@ -170,7 +170,6 @@ class HandDrawnInput extends StatelessWidget {
     this.suffix,
     this.validator,
     this.onChanged,
-    this.focusNode,
   });
 
   @override
@@ -189,7 +188,6 @@ class HandDrawnInput extends StatelessWidget {
           maxLines: maxLines,
           validator: validator,
           onChanged: onChanged,
-          focusNode: focusNode,
           style: AppTheme.bodyStyle.copyWith(fontSize: 16),
           decoration: InputDecoration(
             hintText: hint,
@@ -243,41 +241,6 @@ class StickyNote extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class TapeDecoration extends StatelessWidget {
-  final Widget child;
-  final Color? tapeColor;
-
-  const TapeDecoration({
-    super.key,
-    required this.child,
-    this.tapeColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        Positioned(
-          top: -8,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Transform.rotate(
-              angle: -2 * pi / 180,
-              child: Container(
-                width: 60,
-                height: 20,
-                color: (tapeColor ?? Colors.grey).withValues(alpha: 0.35),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -384,7 +347,7 @@ class WobblyTabBar extends StatelessWidget {
                 duration: const Duration(milliseconds: 150),
                 margin: const EdgeInsets.all(2),
                 padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                 decoration: BoxDecoration(
                   color: selected ? AppColors.cardWhite : Colors.transparent,
                   borderRadius: AppTheme.wobblyRadius,
@@ -396,8 +359,10 @@ class WobblyTabBar extends StatelessWidget {
                 child: Text(
                   tabs[i],
                   textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTheme.bodyStyle.copyWith(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     color: selected
                         ? AppColors.accent
@@ -409,6 +374,157 @@ class WobblyTabBar extends StatelessWidget {
           );
         }),
       ),
+    );
+  }
+}
+
+/// Word card with dynamic font sizing, TTS speaker, and wrong-word indicator.
+class WordCard extends StatelessWidget {
+  final String word;
+  final String meaning;
+  final String pos;
+  final bool isWrong;
+  final VoidCallback? onTap;
+  final VoidCallback? onSpeak;
+
+  const WordCard({
+    super.key,
+    required this.word,
+    required this.meaning,
+    this.pos = '',
+    this.isWrong = false,
+    this.onTap,
+    this.onSpeak,
+  });
+
+  double _wordFontSize(String text) {
+    final len = text.length;
+    if (len > 16) return 16;
+    if (len > 12) return 20;
+    if (len > 9) return 24;
+    if (len > 7) return 28;
+    return 32;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              borderRadius: AppTheme.wobblyRadius,
+              border: Border.all(
+                color: isWrong ? AppColors.accent : AppColors.border,
+                width: isWrong ? 3 : 2,
+              ),
+              boxShadow: isWrong
+                  ? [
+                      const BoxShadow(
+                        color: AppColors.accent,
+                        offset: Offset(3, 3),
+                        blurRadius: 0,
+                      ),
+                    ]
+                  : AppTheme.softShadow,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          word,
+                          style: AppTheme.headingStyle.copyWith(
+                            fontSize: _wordFontSize(word),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (pos.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondaryAccent.withValues(alpha: 0.1),
+                          borderRadius: AppTheme.wobblyRadius,
+                        ),
+                        child: Text(
+                          pos,
+                          style: AppTheme.bodyStyle.copyWith(
+                            fontSize: 13,
+                            color: AppColors.secondaryAccent,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: onSpeak ?? () => TTSService().speak(word),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: AppColors.muted.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.volume_up,
+                          size: 18,
+                          color: AppColors.secondaryAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  meaning,
+                  style: AppTheme.bodyStyle.copyWith(
+                    fontSize: 16,
+                    color: AppColors.foreground.withValues(alpha: 0.7),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (isWrong)
+          Positioned(
+            top: 0,
+            left: 0,
+            child: Transform.rotate(
+              angle: -8 * pi / 180,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  '错',
+                  style: AppTheme.bodyStyle.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

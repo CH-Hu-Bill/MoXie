@@ -35,7 +35,7 @@ class _StudyScreenState extends State<StudyScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
   Future<void> _loadData() async {
@@ -54,9 +54,7 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _loadWords(String classId, {bool reset = true}) async {
-    if (reset) {
-      setState(() => _loading = true);
-    }
+    if (reset) setState(() => _loading = true);
     try {
       final page = reset ? 1 : _wordsPage + 1;
       final res = await _api.getWords(classId, page: page, perPage: 20);
@@ -75,8 +73,8 @@ class _StudyScreenState extends State<StudyScreen> {
         _wordsHasMore = data['has_more'] ?? false;
         _loading = false;
       });
-      _storage.cacheWords(
-          classId, _words.map((w) => {'id': w.id, 'word': w.word, 'meaning': w.meaning, 'pos': w.pos}).toList());
+      _storage.cacheWords(classId,
+          _words.map((w) => {'id': w.id, 'word': w.word, 'meaning': w.meaning, 'pos': w.pos}).toList());
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
@@ -144,7 +142,7 @@ class _StudyScreenState extends State<StudyScreen> {
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -179,7 +177,7 @@ class _StudyScreenState extends State<StudyScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_),
+            onPressed: () => Navigator.pop(ctx),
             child: Text('取消', style: AppTheme.bodyStyle),
           ),
           TextButton(
@@ -188,7 +186,7 @@ class _StudyScreenState extends State<StudyScreen> {
               try {
                 await _api.addWord(classId, wordCtrl.text.trim(),
                     meaningCtrl.text.trim(), posCtrl.text.trim());
-                Navigator.pop(_);
+                if (ctx.mounted) Navigator.pop(ctx);
                 _loadWords(classId);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -228,7 +226,7 @@ class _StudyScreenState extends State<StudyScreen> {
   void _showExportDialog(String title, String text) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -241,14 +239,12 @@ class _StudyScreenState extends State<StudyScreen> {
             readOnly: true,
             maxLines: 15,
             controller: TextEditingController(text: text),
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_),
+            onPressed: () => Navigator.pop(ctx),
             child: Text('关闭', style: AppTheme.bodyStyle),
           ),
         ],
@@ -262,9 +258,7 @@ class _StudyScreenState extends State<StudyScreen> {
     final classId = auth.currentClassId ?? '';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(auth.currentClassName ?? '学习'),
-      ),
+      appBar: AppBar(title: Text(auth.currentClassName ?? '学习')),
       body: PaperTexture(
         child: Column(
           children: [
@@ -323,72 +317,12 @@ class _StudyScreenState extends State<StudyScreen> {
           final w = _words[i];
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: HandDrawnCard(
+            child: WordCard(
+              word: w.word,
+              meaning: w.meaning,
+              pos: w.pos,
+              isWrong: w.isWrong,
               onTap: () => _toggleWrong(classId, w),
-              backgroundColor:
-                  w.isWrong ? AppColors.accent.withValues(alpha: 0.08) : null,
-              borderWidth: w.isWrong ? 3 : 2,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              w.word,
-                              style: AppTheme.headingStyle.copyWith(
-                                fontSize: 22,
-                                decoration: w.isWrong
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                decorationColor: AppColors.accent,
-                                decorationThickness: 2.5,
-                              ),
-                            ),
-                            if (w.pos.isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.secondaryAccent
-                                      .withValues(alpha: 0.1),
-                                  borderRadius: AppTheme.wobblyRadius,
-                                ),
-                                child: Text(
-                                  w.pos,
-                                  style: AppTheme.bodyStyle.copyWith(
-                                    fontSize: 13,
-                                    color: AppColors.secondaryAccent,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          w.meaning,
-                          style: AppTheme.bodyStyle.copyWith(
-                            fontSize: 16,
-                            color: AppColors.foreground
-                                .withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    w.isWrong ? Icons.error : Icons.error_outline,
-                    color: w.isWrong
-                        ? AppColors.accent
-                        : AppColors.foreground.withValues(alpha: 0.3),
-                    size: 28,
-                  ),
-                ],
-              ),
             ),
           );
         },
@@ -398,7 +332,8 @@ class _StudyScreenState extends State<StudyScreen> {
 
   Widget _buildWrongWords(String classId) {
     if (_wrongWords.isEmpty) {
-      return const EmptyState(message: '错题本为空', icon: Icons.check_circle_outline);
+      return const EmptyState(
+          message: '错题本为空', icon: Icons.check_circle_outline);
     }
     return Column(
       children: [
@@ -420,41 +355,12 @@ class _StudyScreenState extends State<StudyScreen> {
               final w = _wrongWords[i];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: HandDrawnCard(
-                  backgroundColor: AppColors.accent.withValues(alpha: 0.05),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              w.word,
-                              style: AppTheme.headingStyle.copyWith(
-                                fontSize: 20,
-                                decoration: TextDecoration.lineThrough,
-                                decorationColor: AppColors.accent,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              w.meaning,
-                              style: AppTheme.bodyStyle.copyWith(
-                                fontSize: 16,
-                                color: AppColors.foreground
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle,
-                            color: AppColors.accent),
-                        onPressed: () => _toggleWrong(classId, w),
-                      ),
-                    ],
-                  ),
+                child: WordCard(
+                  word: w.word,
+                  meaning: w.meaning,
+                  pos: w.pos,
+                  isWrong: true,
+                  onTap: () => _toggleWrong(classId, w),
                 ),
               );
             },
@@ -481,8 +387,7 @@ class _StudyScreenState extends State<StudyScreen> {
     );
   }
 
-  Widget _buildTaskList(
-      String classId, List<Task> tasks, String type) {
+  Widget _buildTaskList(String classId, List<Task> tasks, String type) {
     if (tasks.isEmpty) {
       return EmptyState(
         message: type == 'pending' ? '没有进行中的任务' : '没有历史任务',
@@ -531,6 +436,8 @@ class _StudyScreenState extends State<StudyScreen> {
                         child: Text(
                           t.label.isNotEmpty ? t.label : '未命名任务',
                           style: AppTheme.headingStyle.copyWith(fontSize: 20),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Container(

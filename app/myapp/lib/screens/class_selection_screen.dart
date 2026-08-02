@@ -4,7 +4,6 @@ import '../models/class_info.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hand_drawn.dart';
-import 'home_screen.dart';
 
 class ClassSelectionScreen extends StatefulWidget {
   final bool fromHome;
@@ -20,13 +19,11 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
   bool _loading = true;
   String? _error;
   final _passwordController = TextEditingController();
-  String? _selectedClassId;
-  String? _selectedClassName;
 
   @override
   void initState() {
     super.initState();
-    _loadClasses();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadClasses());
   }
 
   @override
@@ -66,88 +63,119 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
     if (!cls.hasPassword) {
       final success = await auth.bindClass(cls.id, '');
       if (success) {
-        _navigateHome();
+        _showConsentDialog();
       } else {
         _showError(auth.error ?? '绑定失败');
       }
       return;
     }
 
-    setState(() {
-      _selectedClassId = cls.id;
-      _selectedClassName = cls.name;
-      _passwordController.clear();
-    });
+    _showPasswordDialog(cls);
+  }
 
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          backgroundColor: AppColors.background,
-          shape: RoundedRectangleBorder(
-            borderRadius: AppTheme.wobblyRadius,
-            side: const BorderSide(color: AppColors.border, width: 2),
-          ),
-          title: Text('输入班级口令', style: AppTheme.headingStyle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                cls.name,
-                style: AppTheme.bodyStyle.copyWith(fontSize: 18),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                autofocus: true,
-                decoration: const InputDecoration(hintText: '班级口令'),
-                onSubmitted: (_) {
-                  Navigator.pop(context);
-                  _submitPassword();
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('取消', style: AppTheme.bodyStyle),
+  void _showPasswordDialog(ClassInfo cls) {
+    _passwordController.clear();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('输入班级口令', style: AppTheme.headingStyle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              cls.name,
+              style: AppTheme.bodyStyle.copyWith(fontSize: 18),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _submitPassword();
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '班级口令'),
+              onSubmitted: (_) {
+                Navigator.pop(ctx);
+                _submitPassword(cls);
               },
-              child: Text('确定', style: AppTheme.bodyStyle),
             ),
           ],
         ),
-      );
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('取消', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _submitPassword(cls);
+            },
+            child: Text('确定', style: AppTheme.bodyStyle),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _submitPassword() async {
-    if (_selectedClassId == null) return;
+  Future<void> _submitPassword(ClassInfo cls) async {
     final auth = context.read<AuthProvider>();
     final success =
-        await auth.bindClass(_selectedClassId!, _passwordController.text);
+        await auth.bindClass(cls.id, _passwordController.text);
     if (success) {
-      _navigateHome();
+      _showConsentDialog();
     } else {
       _showError(auth.error ?? '口令错误');
     }
   }
 
+  void _showConsentDialog() {
+    final auth = context.read<AuthProvider>();
+    auth.clearNewlyBound();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('Vlog 授权', style: AppTheme.headingStyle),
+        content: Text(
+          '是否授权公开你的 Vlog？\n\n授权后，其他用户和班级成员可以查看你的个人史记。你可以随时在「我的」中更改此设置。',
+          style: AppTheme.bodyStyle.copyWith(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              auth.setGlobalConsent(false);
+              _navigateHome();
+            },
+            child: Text('不授权', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              auth.setGlobalConsent(true);
+              _navigateHome();
+            },
+            child: Text('授权',
+                style: AppTheme.bodyStyle.copyWith(color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _navigateHome() {
     if (widget.fromHome) {
       Navigator.pop(context);
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
     }
   }
 
@@ -190,7 +218,7 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                       padding: const EdgeInsets.all(16),
                       children: [
                         if (auth.myClasses.isNotEmpty) ...[
-                          StickyNote(text: '已加入的班级'),
+                          const StickyNote(text: '已加入的班级'),
                           const SizedBox(height: 12),
                           ...auth.myClasses.map((c) => Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
@@ -200,10 +228,9 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                                     name: c['class_name']!,
                                     hasPassword: false,
                                   )),
-                                  rotation: 0.5,
                                   child: Row(
                                     children: [
-                                      Icon(Icons.class_,
+                                      const Icon(Icons.class_,
                                           size: 32, color: AppColors.accent),
                                       const SizedBox(width: 12),
                                       Expanded(
@@ -213,6 +240,8 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                                             fontSize: 20,
                                             fontWeight: FontWeight.bold,
                                           ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       const Icon(Icons.chevron_right),
@@ -243,8 +272,7 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                             child: HandDrawnCard(
                               onTap: () => _tryEnterClass(cls),
                               backgroundColor: isBound
-                                  ? AppColors.postItYellow.withValues(
-                                      alpha: 0.3)
+                                  ? AppColors.postItYellow.withValues(alpha: 0.3)
                                   : null,
                               child: Row(
                                 children: [
@@ -267,6 +295,8 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
                                           ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         if (isBound)
                                           Text(

@@ -42,40 +42,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TapeDecoration(
-              child: HandDrawnCard(
-                backgroundColor: AppColors.postItYellow,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppColors.cardWhite,
-                        borderRadius: AppTheme.wobblyRadius,
-                        border: Border.all(color: AppColors.border, width: 2),
-                      ),
-                      child: Icon(Icons.person, size: 36),
+            HandDrawnCard(
+              backgroundColor: AppColors.postItYellow,
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: AppColors.cardWhite,
+                      borderRadius: AppTheme.wobblyRadius,
+                      border: Border.all(color: AppColors.border, width: 2),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user?.name ?? '未知用户',
-                            style: AppTheme.headingStyle.copyWith(fontSize: 24),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '当前班级：${auth.currentClassName ?? '未选择'}',
-                            style: AppTheme.bodyStyle.copyWith(fontSize: 15),
-                          ),
-                        ],
-                      ),
+                    child: const Icon(Icons.person, size: 36),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.name ?? '未知用户',
+                          style: AppTheme.headingStyle.copyWith(fontSize: 24),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '当前班级：${auth.currentClassName ?? '未选择'}',
+                          style: AppTheme.bodyStyle.copyWith(fontSize: 15),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 24),
@@ -109,20 +111,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildToggleItem(
                 icon: Icons.visibility,
                 title: '公开我的 Vlog',
-                subtitle: '授权后其他用户可以查看你的个人史记',
-                value: user?.consentMap[auth.currentClassId] ??
-                    user?.consent ??
-                    false,
-                onChanged: (val) {
-                  if (auth.currentClassId != null) {
-                    auth.setClassConsent(auth.currentClassId!, val);
-                  }
-                },
-              ),
-              _buildToggleItem(
-                icon: Icons.public,
-                title: '全局授权',
-                subtitle: '对所有已绑定班级生效',
+                subtitle: '授权后其他用户和班级成员可以查看你的个人史记',
                 value: user?.consent ?? false,
                 onChanged: (val) => auth.setGlobalConsent(val),
               ),
@@ -227,6 +216,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontSize: 14,
                         color: AppColors.foreground.withValues(alpha: 0.5),
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                 ],
               ),
@@ -280,7 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _confirmLogout() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -291,12 +282,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: AppTheme.bodyStyle.copyWith(fontSize: 16)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_),
+            onPressed: () => Navigator.pop(ctx),
             child: Text('取消', style: AppTheme.bodyStyle),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(_);
+              Navigator.pop(ctx);
               context.read<AuthProvider>().logout();
             },
             child: Text('退出', style: AppTheme.bodyStyle),
@@ -309,25 +300,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _confirmDelete() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
           side: const BorderSide(color: AppColors.border, width: 2),
         ),
-        title: Text('注销账号', style: AppTheme.headingStyle.copyWith(color: AppColors.accent)),
+        title: Text('注销账号',
+            style: AppTheme.headingStyle.copyWith(color: AppColors.accent)),
         content: Text(
           '注销后账号数据将永久删除，无法恢复。确定要注销吗？',
           style: AppTheme.bodyStyle.copyWith(fontSize: 16),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_),
+            onPressed: () => Navigator.pop(ctx),
             child: Text('取消', style: AppTheme.bodyStyle),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(_);
+              Navigator.pop(ctx);
               context.read<AuthProvider>().deleteAccount();
             },
             child: Text('确定注销',

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
-import '../class_selection_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,17 +27,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
-    final success = await auth.login(
+    await auth.login(
       _usernameController.text.trim(),
       _passwordController.text,
     );
-    if (!mounted) return;
-    if (success) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ClassSelectionScreen()),
-      );
-    }
   }
 
   @override
@@ -55,14 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 20),
-                  Transform.rotate(
-                    angle: -2 * 3.14159 / 180,
-                    child: StickyNote(
-                      text: '欢迎！',
-                      color: AppColors.postItYellow,
-                      rotation: 0,
-                    ),
-                  ),
+                  const StickyNote(text: '欢迎！'),
                   const SizedBox(height: 16),
                   Text(
                     '默写史记',

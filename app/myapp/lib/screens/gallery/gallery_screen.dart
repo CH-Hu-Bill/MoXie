@@ -27,7 +27,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadGallery();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadGallery());
   }
 
   Future<void> _loadGallery({bool reset = true}) async {
@@ -61,7 +61,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
       });
       _storage.cacheGallery(
-          classId, _items.map((e) => {'id': e.id, 'image_url': e.imageUrl, 'description': e.description, 'uploaded_at': e.uploadedAt}).toList());
+          classId,
+          _items
+              .map((e) => {
+                    'id': e.id,
+                    'image_url': e.imageUrl,
+                    'description': e.description,
+                    'uploaded_at': e.uploadedAt
+                  })
+              .toList());
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
@@ -84,7 +92,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final descController = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -98,11 +106,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_),
+            onPressed: () => Navigator.pop(ctx),
             child: Text('取消', style: AppTheme.bodyStyle),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(_, descController.text.trim()),
+            onPressed: () => Navigator.pop(ctx, descController.text.trim()),
             child: Text('上传', style: AppTheme.bodyStyle),
           ),
         ],
@@ -122,7 +130,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     try {
       await _api.saveGallery(classId, File(image.path), result);
-      Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
       _loadGallery();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -130,25 +138,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
         );
       }
     } catch (e) {
-      Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('上传失败: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteItem(String id) async {
-    final auth = context.read<AuthProvider>();
-    final classId = auth.currentClassId!;
-    try {
-      await _api.deleteGallery(classId, id);
-      _loadGallery();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
         );
       }
     }
@@ -230,8 +223,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                   item.description,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTheme.bodyStyle.copyWith(
-                                      fontSize: 14),
+                                  style:
+                                      AppTheme.bodyStyle.copyWith(fontSize: 14),
                                 ),
                               ),
                             ],
@@ -258,18 +251,62 @@ class _GalleryViewerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.black87,
       appBar: AppBar(
-        title: Text(item.uploadedAt,
-            style: AppTheme.bodyStyle.copyWith(fontSize: 16)),
+        backgroundColor: Colors.transparent,
+        title: Text(
+          item.uploadedAt,
+          style: AppTheme.bodyStyle.copyWith(fontSize: 16, color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Center(
-        child: InteractiveViewer(
-          child: Image.network(
-            item.imageUrl,
-            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image,
-                size: 64, color: AppColors.muted),
-          ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: InteractiveViewer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.border, width: 3),
+                      borderRadius: AppTheme.wobblyRadius,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: AppTheme.wobblyRadius,
+                      child: Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.broken_image,
+                          size: 64,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (item.description.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.all(16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: AppTheme.wobblyRadius,
+                  border: Border.all(color: AppColors.border, width: 2),
+                ),
+                child: Text(
+                  item.description,
+                  textAlign: TextAlign.center,
+                  style: AppTheme.bodyStyle.copyWith(
+                    fontSize: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

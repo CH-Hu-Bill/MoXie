@@ -3,9 +3,6 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hand_drawn.dart';
-import 'auth/login_screen.dart';
-import 'class_selection_screen.dart';
-import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -29,39 +26,9 @@ class _SplashScreenState extends State<SplashScreen>
     _bounceAnimation = Tween<double>(begin: -3, end: 3).animate(
       CurvedAnimation(parent: _bounceController, curve: Curves.elasticInOut),
     );
-    _bootstrap();
-  }
-
-  Future<void> _bootstrap() async {
-    final auth = context.read<AuthProvider>();
-    await auth.init();
-    if (!mounted) return;
-
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    if (!mounted) return;
-    if (auth.authState == AuthState.authenticated) {
-      if (auth.hasClass && auth.currentClassId!.isNotEmpty) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const HomeScreen(),
-            transitionsBuilder: (_, anim, __, child) =>
-                FadeTransition(opacity: anim, child: child),
-          ),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const ClassSelectionScreen()),
-        );
-      }
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().init();
+    });
   }
 
   @override
@@ -92,7 +59,7 @@ class _SplashScreenState extends State<SplashScreen>
                   rotation: -1,
                   child: Column(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.edit_note,
                         size: 72,
                         color: AppColors.foreground,
