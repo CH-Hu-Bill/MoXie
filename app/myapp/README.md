@@ -1,81 +1,134 @@
 # ListenWrite APP
 
-Flutter 客户端，配合 [web/](../../web/) 后端使用。功能包括单词库管理、错题本、任务、个人史记（Vlog）、班级史记、画廊、搜索等。
+Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
+
+## 功能概览
+
+| Tab | 功能 |
+|-----|------|
+| 学习 | 单词库（卡片+点读+添加）、错题本（标记/移出+导出）、任务（进行中/历史+详情） |
+| 生活 | 个人史记（日历+编辑器+图片上传）、他人史记（授权用户）、班级史记（只读） |
+| 搜索 | 全局搜索单词和任务，点击跳转+高亮 |
+| 画廊 | 网格浏览+上传照片+大图查看 |
+| 我的 | 用户信息、切换班级、Vlog 授权、检查更新、退出登录、注销账号 |
 
 ## 技术栈
 
-- **Flutter** (Dart 3.5+)
-- **状态管理**：Provider
-- **网络**：http（MultipartRequest）
-- **本地缓存**：shared_preferences
-- **图片选取**：image_picker
-- **HTML 渲染**：flutter_widget_from_html（Vlog 内容）
-- **字体**：google_fonts（Kalam 标题 + Patrick Hand 正文）
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| flutter | sdk | 框架 |
+| provider | ^6.1.0 | 状态管理 |
+| http | ^1.2.0 | 网络请求（MultipartRequest） |
+| shared_preferences | ^2.2.0 | 本地缓存（token、班级、单词等） |
+| image_picker | ^1.0.0 | 图片选取（Vlog + 画廊） |
+| flutter_widget_from_html | ^0.15.0 | Vlog HTML 内容渲染 |
+| just_audio | ^0.9.39 | 单词发音（有道词典 TTS） |
+| flutter_lints | ^4.0.0 | 代码规范（dev） |
+
+**字体**（打包到 APK，离线可用）：
+- `ZCOOLKuaiLe` → 标题字体（`assets/fonts/ZCOOLKuaiLe-Regular.ttf`）
+- `MaShanZheng` → 正文字体（`assets/fonts/MaShanZheng-Regular.ttf`）
+
+**Android 配置**：
+- `compileSdk = 36`（`android/app/build.gradle.kts`）
+- `android:usesCleartextTraffic="true"`（`AndroidManifest.xml`，允许 HTTP）
+- `android:label="默写史记"`
 
 ## 目录结构
 
 ```
 lib/
-├── main.dart                      # 入口
+├── main.dart                          # 入口，Consumer<AuthProvider> 按 authState 路由
 ├── config/
-│   ├── api_config.dart            # 实际配置（gitignore，CI 从 Secret 生成）
-│   └── api_config.example.dart    # 模板（本机测试用）
-├── models/                        # 数据模型
-│   ├── user.dart
-│   ├── class_info.dart
-│   ├── word.dart
-│   ├── task.dart
-│   ├── gallery_item.dart
-│   └── vlog_entry.dart            # 含 SearchResult / WordMatch / TaskMatch
+│   ├── api_config.dart                # 实际配置（gitignore，CI 从 Secret 生成）
+│   └── api_config.example.dart        # 模板（本机测试用 127.0.0.1:8000）
+├── models/                            # 数据模型
+│   ├── user.dart                      # 用户（id/name/classIds/token/consent/consentMap）
+│   ├── class_info.dart                # 班级（id/name/hasPassword）
+│   ├── word.dart                      # 单词（id/word/meaning/pos/isWrong/isFavorite）
+│   ├── task.dart                      # 任务（id/date/label/status/wordCount/words[]）
+│   ├── gallery_item.dart              # 画廊项（id/imageUrl/description/uploadedAt）
+│   └── vlog_entry.dart                # Vlog 条目 + SearchResult + WordMatch + TaskMatch
 ├── services/
-│   ├── api_service.dart           # HTTP 客户端，封装所有 API 调用
-│   └── storage_service.dart       # 本地缓存（token、班级、单词等）
+│   ├── api_service.dart               # HTTP 客户端，封装全部 33 个 API action
+│   ├── storage_service.dart           # SharedPreferences 缓存
+│   └── tts_service.dart               # 有道词典 TTS（just_audio + 错误提示）
 ├── providers/
-│   └── auth_provider.dart         # 全局状态：登录、班级、授权
+│   └── auth_provider.dart             # 全局状态：AuthState 枚举驱动页面路由
 ├── theme/
-│   └── app_theme.dart             # Hand-Drawn 主题（颜色、字体、阴影）
+│   └── app_theme.dart                 # Hand-Drawn 主题（颜色/字体/阴影/圆角/PaperTexture）
 ├── widgets/
-│   └── hand_drawn.dart            # 通用组件（Card、Button、Input、TabBar 等）
+│   └── hand_drawn.dart                # 通用组件库（见下）
 └── screens/
-    ├── splash_screen.dart         # 启动页（自动登录判断）
-    ├── home_screen.dart           # 底部导航（5 Tab）
-    ├── class_selection_screen.dart # 班级选择/绑定
-    ├── auth/
-    │   └── login_screen.dart      # 登录/注册
+    ├── splash_screen.dart             # 启动页（动画 + init）
+    ├── home_screen.dart               # 底部导航 5 Tab（纯图标 + 口令失效检测）
+    ├── class_selection_screen.dart     # 班级选择/绑定（+ Vlog 授权弹窗）
+    ├── auth/login_screen.dart         # 登录/注册（新用户自动注册）
     ├── study/
-    │   ├── study_screen.dart      # 学习 Tab（单词库/错题本/任务）
-    │   └── task_detail_screen.dart
+    │   ├── study_screen.dart          # 学习 Tab（单词库/错题本/任务 三段切换）
+    │   └── task_detail_screen.dart    # 任务详情（单词列表 + 高亮 + 导出）
     ├── life/
-    │   └── life_screen.dart       # 生活 Tab（我的史记/班级史记）
+    │   └── life_screen.dart           # 生活 Tab（日历在上 + 内容在下，3 子 Tab）
     ├── search/
-    │   └── search_screen.dart     # 搜索 Tab
+    │   └── search_screen.dart         # 搜索 Tab（单词+任务，高亮+跳转）
     ├── gallery/
-    │   └── gallery_screen.dart    # 画廊 Tab
+    │   └── gallery_screen.dart        # 画廊 Tab（网格+上传+灯箱查看）
     └── profile/
-        └── profile_screen.dart    # 我的 Tab
+        └── profile_screen.dart        # 我的 Tab（信息/班级/授权/更新/退出/注销）
 ```
+
+### 通用组件（`widgets/hand_drawn.dart`）
+
+| 组件 | 说明 |
+|------|------|
+| `HandDrawnCard` | wobbly 边框 + 硬阴影卡片，支持 rotation/onTap |
+| `HandDrawnButton` | 手绘按钮，按下时阴影消失+位移（"press flat"效果） |
+| `HandDrawnInput` | wobbly 边框输入框，聚焦时边框变蓝+加粗 |
+| `WobblyTabBar` | wobbly 风格分段切换栏 |
+| `StickyNote` | 便利贴标签（可旋转） |
+| `WordCard` | 单词卡片：动态字号 + 跑马灯滚动 + 喇叭按钮 + 加/移错题本按钮 + 红色边框标记 |
+| `MarqueeText` | 长文本自动滚动（用户交互暂停，2 秒后恢复） |
+| `LoadingOverlay` | 加载遮罩 |
+| `EmptyState` | 空状态占位 |
+
+## 状态管理与路由
+
+```
+main.dart
+  └─ Consumer<AuthProvider>
+       ├─ AuthState.initial / loading → SplashScreen
+       ├─ AuthState.unauthenticated   → LoginScreen
+       └─ AuthState.authenticated
+            ├─ hasClass → HomeScreen
+            └─ no class → ClassSelectionScreen
+```
+
+`AuthProvider` 核心状态：
+- `authState` — 枚举驱动全局路由（退出登录后自动回登录页，不会卡住）
+- `user` — 当前用户信息
+- `currentClassId` / `currentClassName` — 当前班级
+- `myClasses` — 已绑定班级列表
+- `isNewlyBound` — 新绑定标记（触发 Vlog 授权弹窗）
 
 ## 构建 APK
 
 ### 方式一：GitHub Actions（推荐）
 
-无需本地 Flutter 环境，CI 自动构建。
-
-1. **设置 Secret**：仓库 **Settings → Secrets → Actions** → 添加 `API_BASE_URL`，值为后端地址（如 `https://example.com`，不带 `/app_api.php`，不带尾部斜杠）
-2. **触发构建**：推送改动到 `main` 分支（需改动 `app/myapp/**` 下文件），或手动在 Actions 页面 **Run workflow**
-3. **下载 APK**：构建完成后，在 run 详情页底部 Artifacts 下载 `listenwrite-release.apk`
-
-> 如果未设置 `API_BASE_URL` Secret，CI 会使用 `api_config.example.dart` 中的本地地址（`127.0.0.1:8000`），仅适合本机调试。
+1. **设置 Secret**：仓库 Settings → Secrets → Actions → 添加 `API_BASE_URL`
+   - 值为后端地址（如 `http://ceshi.billspace.top`）
+   - 不带 `/app_api.php`，不带尾部斜杠
+2. **触发构建**：推送改动到 `main`（需改动 `app/myapp/**`），或手动 Run workflow
+3. **下载**：run 详情页 → Artifacts → `listenwrite-release.apk`
 
 ### 方式二：本地构建
 
 ```bash
 cd app/myapp
+cp lib/config/api_config.example.dart lib/config/api_config.dart
+# 编辑 api_config.dart，修改 baseUrl 为你的服务器地址
 flutter pub get
 flutter build apk --release
 ```
-
-需先创建 `lib/config/api_config.dart`（从 `api_config.example.dart` 复制并修改 `baseUrl`）。
 
 ## 本机调试
 
@@ -89,13 +142,39 @@ flutter build apk --release
    ```
 3. `flutter run`（需连接 Android 设备或模拟器）
 
-> **注意**：Android 设备上的 `localhost` 指向设备自身，无法访问电脑上的 PHP 服务器。真机测试需将 `baseUrl` 改为电脑局域网 IP，或使用模拟器（`10.0.2.2` 映射宿主机）。
+> **注意**：Android 设备上的 `localhost` / `127.0.0.1` 指向设备自身，无法访问电脑上的 PHP 服务器。真机测试需将 `baseUrl` 改为电脑局域网 IP，或使用模拟器（`10.0.2.2` 映射宿主机）。推荐部署到服务器 + GitHub Secret 方式。
 
 ## API 对接
 
-所有 API 通过 `POST app_api.php` 调用，`action` 字段区分接口。详见 [web/README.md](../../web/README.md) 的「APP API 说明」章节。
+所有 API 通过 `POST app_api.php` 调用，`action` 字段区分接口。完整列表见 [web/README.md](../../web/README.md) 的「APP API 说明」章节。
 
-核心流程：
-- **首次使用**：登录（自动注册）→ 选择班级（有口令需输入）→ 进入功能页
-- **非首次**：自动登录 → 校验班级口令是否变更 → 正常使用或提示重新输入
-- **每次启动**：检查版本更新（Profile 页可手动触发）
+### 核心流程
+
+```
+首次使用：
+  登录（自动注册）→ 选择班级（有口令需输入）
+  → 绑定成功 → 弹窗询问 Vlog 授权 → 进入功能页
+
+非首次：
+  启动 → auto_login 校验 token → check_class 校验班级口令
+  → 正常使用 / 提示口令已失效 → 跳转班级选择
+
+每次进入 Profile：
+  check_version 检查更新
+```
+
+### 认证机制
+
+- **Token**：`Authorization: Bearer <token>`，30 天 TTL，sha256 哈希存储
+- **班级绑定**：绑定后存储 `auth_version`，口令变更时版本不匹配 → 403 `CLASS_AUTH_EXPIRED` → APP 自动跳转班级选择页
+
+## 已知问题与后续待办
+
+以下是用户反馈但尚未完全解决的问题，供后续开发者参考：
+
+1. **UI 细节**：部分界面与网站端风格仍有差异，需继续对照 `风格.md` 和 `web/common.css` 微调
+2. **性能**：整体偏卡，可考虑 `const` 优化、懒加载、减少 `setState` 范围
+3. **Vlog 编辑器**：目前是纯文本+图片，网站端用 Quill 富文本编辑器，如需对齐需引入 Flutter 富文本插件
+4. **TTS 容错**：有道词典对部分单词无发音记录，已加 SnackBar 提示，但跟读场景的容错尚未处理（APP 端暂无跟读功能）
+5. **搜索高亮**：点击任务卡片跳转后高亮匹配单词，但定位滚动到该单词尚未实现
+6. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
