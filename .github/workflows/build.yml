@@ -27,8 +27,23 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create API config from example
-        run: cp lib/config/api_config.example.dart lib/config/api_config.dart
+      - name: Create API config
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "API_BASE_URL secret not set, using example config"
+            cp lib/config/api_config.example.dart lib/config/api_config.dart
+          else
+            echo "Generating api_config.dart from secret"
+            cat > lib/config/api_config.dart <<EOF
+          class ApiConfig {
+            static const String baseUrl = '$API_BASE_URL';
+            static const String apiEndpoint = '\$baseUrl/app_api.php';
+            static const String appVersion = '1.0.0';
+          }
+          EOF
+          fi
 
       - name: Install dependencies
         run: flutter pub get
