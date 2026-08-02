@@ -7,9 +7,9 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | Tab | 功能 |
 |-----|------|
 | 学习 | 单词库（卡片+点读+添加）、错题本（标记/移出+导出）、任务（进行中/历史+详情） |
-| 生活 | 个人史记（日历+富文本编辑器+图片上传）、他人史记（授权用户）、班级史记（只读） |
+| 生活 | 个人史记（日历+富文本编辑器+图片上传，保存后自动切换查看模式）、他人史记（授权用户，可滚动查看）、班级史记（只读） |
 | 搜索 | 全局搜索单词和任务，点击跳转+滚动定位+高亮 |
-| 画廊 | 网格浏览+上传照片+大图查看 |
+| 画廊 | 网格浏览+上传照片（本地校验格式/大小）+大图查看+图片缓存 |
 | 我的 | 用户信息、切换班级、Vlog 授权、检查更新、退出登录、注销账号 |
 
 ## 技术栈
@@ -27,7 +27,8 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | flutter_quill | ^11.5.1 | 富文本编辑器（Vlog 编辑，与网站端 Quill 对齐） |
 | flutter_quill_extensions | ^11.0.0 | Quill 图片嵌入支持 |
 | flutter_quill_delta_from_html | ^1.5.3 | HTML → Quill Delta 转换（加载已有内容） |
-| vsc_quill_delta_to_html | ^1.0.5 | Quill Delta → HTML 转换（保存到服务器） |
+| vsc_quill_delta_to_html | ^1.0.5 | Quill Delta → HTML 转换（保存到服务器，inline styles 模式） |
+| cached_network_image | ^3.4.1 | 图片缓存（画廊网格+大图查看，避免重复下载） |
 | flutter_lints | ^4.0.0 | 代码规范（dev） |
 
 **字体**（打包到 APK，离线可用）：
@@ -129,7 +130,7 @@ main.dart
 ### 方式一：GitHub Actions（推荐）
 
 1. **设置 Secret**：仓库 Settings → Secrets → Actions → 添加 `API_BASE_URL`
-   - 值为后端地址（如 `http://ceshi.billspace.top`）
+   - 值为后端地址（如 `http://moxie.billspace.top`）
    - 不带 `/app_api.php`，不带尾部斜杠
 2. **触发构建**：推送改动到 `main`（需改动 `app/myapp/**`），或手动 Run workflow
 3. **下载**：run 详情页 → Artifacts → `listenwrite-release.apk`
@@ -186,9 +187,10 @@ flutter build apk --release
 ## 已知问题与后续待办
 
 1. **性能**：单词库列表加载全量数据时偏卡，可考虑虚拟列表优化
-2. **Vlog 编辑器**：flutter_quill 与网站端 Quill JS 的 Delta 格式存在细微差异，复杂排版迁移可能不完美
+2. **Vlog 编辑器**：flutter_quill 与网站端 Quill JS 的 Delta 格式存在细微差异，复杂排版迁移可能不完美；字体颜色已通过 inlineStylesFlag 输出为内联样式
 3. **TTS 容错**：有道词典对部分单词无发音记录，已加 SnackBar 提示
 4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
 5. **画廊上传**：已实现本地校验（JPEG/PNG/WebP + 12MB 上限），服务器端二次校验
-6. **生活 Tab 状态**：切换到其他 Tab 再回来会重置到初始状态（需重新选择日期），避免编辑态残留
-7. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
+6. **生活 Tab 状态**：切换到其他 Tab 再回来会重置到初始状态并自动刷新数据，避免编辑态残留
+7. **图片缓存**：画廊使用 cached_network_image 缓存，单词/史记数据使用 SharedPreferences TTL 缓存（30s）
+8. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`

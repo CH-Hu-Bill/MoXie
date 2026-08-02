@@ -37,7 +37,7 @@ cp inc/config.example.php inc/config.php   # 填入真实密钥
 
 APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 
-1. 在仓库 **Settings → Secrets → Actions** 添加 `API_BASE_URL`，值为后端地址（如 `http://ceshi.billspace.top`，不带尾部斜杠，不带 `/app_api.php`）
+1. 在仓库 **Settings → Secrets → Actions** 添加 `API_BASE_URL`，值为后端地址（如 `http://moxie.billspace.top`，不带尾部斜杠，不带 `/app_api.php`）
 2. 推送代码到 `main` 分支（改动 `app/myapp/**` 路径下文件时触发），或在 Actions 页面手动 Run workflow
 3. 构建完成后在 run 详情页底部 Artifacts 下载 `listenwrite-release.apk`
 
