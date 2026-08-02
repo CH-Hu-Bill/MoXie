@@ -157,7 +157,11 @@ class RichTextEditorState extends State<RichTextEditor> {
               config: QuillEditorConfig(
                 embedBuilders: FlutterQuillEmbeds.editorBuilders(),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                cursorColor: AppColors.red,
+                showCursor: true,
+                textSelectionThemeData: TextSelectionThemeData(
+                  cursorColor: AppColors.red,
+                  selectionColor: AppColors.postIt,
+                ),
                 customStyles: const DefaultStyles(
                   placeHolder: DefaultTextBlockStyle(
                     TextStyle(
@@ -167,7 +171,7 @@ class RichTextEditorState extends State<RichTextEditor> {
                     HorizontalSpacing.zero,
                     VerticalSpacing.zero,
                     VerticalSpacing.zero,
-                    BoxDecoration.none,
+                    null,
                   ),
                 ),
               ),
