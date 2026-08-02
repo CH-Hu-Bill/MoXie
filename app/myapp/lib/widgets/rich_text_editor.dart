@@ -62,7 +62,9 @@ class RichTextEditorState extends State<RichTextEditor> {
       final converter = QuillDeltaToHtmlConverter(
         ops,
         ConverterOptions(
-          inlineStylesFlag: true,
+          converterOptions: OpConverterOptions(
+            inlineStylesFlag: true,
+          ),
         ),
       );
       return converter.convert();
