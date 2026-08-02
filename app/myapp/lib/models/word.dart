@@ -25,4 +25,22 @@ class Word {
       isFavorite: json['is_favorite'] ?? false,
     );
   }
+
+  Word copyWith({
+    String? id,
+    String? word,
+    String? meaning,
+    String? pos,
+    bool? isWrong,
+    bool? isFavorite,
+  }) {
+    return Word(
+      id: id ?? this.id,
+      word: word ?? this.word,
+      meaning: meaning ?? this.meaning,
+      pos: pos ?? this.pos,
+      isWrong: isWrong ?? this.isWrong,
+      isFavorite: isFavorite ?? this.isFavorite,
+    );
+  }
 }

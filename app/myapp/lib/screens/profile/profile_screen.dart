@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:listenwrite/providers/auth_provider.dart';
-import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
-import 'package:listenwrite/theme/app_theme.dart';
-import 'package:listenwrite/config/api_config.dart';
+import '../../providers/auth_provider.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/hand_drawn.dart';
+import '../class_selection_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,402 +13,326 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String? _currentClassId;
+  bool _checkingUpdate = false;
+  Map<String, dynamic>? _versionInfo;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      setState(() {
-        _currentClassId = auth.user?.classIds.isNotEmpty == true
-            ? auth.user!.classIds.first
-            : null;
-      });
+    _checkVersion();
+  }
+
+  Future<void> _checkVersion() async {
+    setState(() => _checkingUpdate = true);
+    final auth = context.read<AuthProvider>();
+    final info = await auth.checkVersion();
+    setState(() {
+      _versionInfo = info;
+      _checkingUpdate = false;
     });
-  }
-
-  Future<void> _checkUpdate() async {
-    final auth = context.read<AuthProvider>();
-    try {
-      final result = await auth.api.post('check_version', {
-        'current_version': '1.0.0',
-      });
-      if (result['success'] == true && mounted) {
-        final data = result['data'] ?? {};
-        if (data['has_update'] == true) {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: HandDrawnTheme.warmPaper,
-              shape: RoundedRectangleBorder(
-                borderRadius: HandDrawnTheme.wobblyRadiusMd,
-                side: const BorderSide(color: HandDrawnTheme.pencil, width: 2),
-              ),
-              title: Text(
-                '发现新版本',
-                style: TextStyle(
-                  fontFamily: 'Kalam',
-                  fontWeight: FontWeight.w700,
-                  color: HandDrawnTheme.pencil,
-                ),
-              ),
-              content: Text(
-                '最新版本: ${data['latest']}\n${data['notes'] ?? ''}',
-                style: TextStyle(
-                  fontFamily: 'Patrick Hand',
-                  fontSize: 16,
-                  color: HandDrawnTheme.pencil,
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(
-                    '知道了',
-                    style: TextStyle(
-                      fontFamily: 'Patrick Hand',
-                      color: HandDrawnTheme.blue,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('已是最新版本'),
-              backgroundColor: HandDrawnTheme.blue,
-            ),
-          );
-        }
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _toggleConsent() async {
-    if (_currentClassId == null) return;
-    final auth = context.read<AuthProvider>();
-    final consentMap = auth.user?.consentMap ?? {};
-    final current = consentMap[_currentClassId!] ?? false;
-
-    final allow = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: HandDrawnTheme.warmPaper,
-        shape: RoundedRectangleBorder(
-          borderRadius: HandDrawnTheme.wobblyRadiusMd,
-          side: const BorderSide(color: HandDrawnTheme.pencil, width: 2),
-        ),
-        title: Text(
-          'Vlog授权',
-          style: TextStyle(
-            fontFamily: 'Kalam',
-            fontWeight: FontWeight.w700,
-            color: HandDrawnTheme.pencil,
-          ),
-        ),
-        content: Text(
-          current ? '确定要取消Vlog公开授权吗？' : '确定要允许其他同学查看你的Vlog吗？',
-          style: TextStyle(
-            fontFamily: 'Patrick Hand',
-            fontSize: 16,
-            color: HandDrawnTheme.pencil,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              '取消',
-              style: TextStyle(
-                fontFamily: 'Patrick Hand',
-                color: HandDrawnTheme.pencil,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              '确认',
-              style: TextStyle(
-                fontFamily: 'Patrick Hand',
-                color: HandDrawnTheme.blue,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (allow == true) {
-      try {
-        await auth.api.post('set_consent', {
-          'class_id': _currentClassId!,
-          'consent': current ? '0' : '1',
-        });
-        await auth.refreshProfile();
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: HandDrawnTheme.warmPaper,
-        shape: RoundedRectangleBorder(
-          borderRadius: HandDrawnTheme.wobblyRadiusMd,
-          side: const BorderSide(color: HandDrawnTheme.pencil, width: 2),
-        ),
-        title: Text(
-          '退出登录',
-          style: TextStyle(
-            fontFamily: 'Kalam',
-            fontWeight: FontWeight.w700,
-            color: HandDrawnTheme.pencil,
-          ),
-        ),
-        content: Text(
-          '确定要退出登录吗？',
-          style: TextStyle(
-            fontFamily: 'Patrick Hand',
-            fontSize: 16,
-            color: HandDrawnTheme.pencil,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              '取消',
-              style: TextStyle(
-                fontFamily: 'Patrick Hand',
-                color: HandDrawnTheme.pencil,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              '退出',
-              style: TextStyle(
-                fontFamily: 'Patrick Hand',
-                color: HandDrawnTheme.accent,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      final auth = context.read<AuthProvider>();
-      await auth.logout();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      }
-    }
-  }
-
-  Future<void> _deleteAccount() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: HandDrawnTheme.warmPaper,
-        shape: RoundedRectangleBorder(
-          borderRadius: HandDrawnTheme.wobblyRadiusMd,
-          side: const BorderSide(color: HandDrawnTheme.pencil, width: 2),
-        ),
-        title: Text(
-          '注销账号',
-          style: TextStyle(
-            fontFamily: 'Kalam',
-            fontWeight: FontWeight.w700,
-            color: HandDrawnTheme.accent,
-          ),
-        ),
-        content: Text(
-          '此操作不可撤销，确定要注销账号吗？',
-          style: TextStyle(
-            fontFamily: 'Patrick Hand',
-            fontSize: 16,
-            color: HandDrawnTheme.pencil,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              '取消',
-              style: TextStyle(
-                fontFamily: 'Patrick Hand',
-                color: HandDrawnTheme.pencil,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              '确认注销',
-              style: TextStyle(
-                fontFamily: 'Patrick Hand',
-                color: HandDrawnTheme.accent,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      final auth = context.read<AuthProvider>();
-      await auth.deleteAccount();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final user = auth.user;
-    final consentMap = user?.consentMap ?? {};
-    final currentConsent = _currentClassId != null
-        ? (consentMap[_currentClassId!] ?? false)
-        : false;
-
-    if (user == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
-      children: [
-        const SizedBox(height: 24),
-        HandDrawnCard(
-          decoration: 'tack',
-          child: Column(
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: HandDrawnTheme.postItYellow,
-                  borderRadius: HandDrawnTheme.wobblyRadius,
-                  border: Border.all(
-                      color: HandDrawnTheme.pencil, width: 3),
-                ),
-                child: Center(
-                  child: Text(
-                    user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      fontFamily: 'Kalam',
-                      fontSize: 40,
-                      fontWeight: FontWeight.w700,
-                      color: HandDrawnTheme.pencil,
+    return Scaffold(
+      appBar: AppBar(title: const Text('我的')),
+      body: PaperTexture(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            TapeDecoration(
+              child: HandDrawnCard(
+                backgroundColor: AppColors.postItYellow,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppColors.cardWhite,
+                        borderRadius: AppTheme.wobblyRadius,
+                        border: Border.all(color: AppColors.border, width: 2),
+                      ),
+                      child: Icon(Icons.person, size: 36),
                     ),
-                  ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user?.name ?? '未知用户',
+                            style: AppTheme.headingStyle.copyWith(fontSize: 24),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '当前班级：${auth.currentClassName ?? '未选择'}',
+                            style: AppTheme.bodyStyle.copyWith(fontSize: 15),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                user.name,
-                style: TextStyle(
-                  fontFamily: 'Kalam',
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: HandDrawnTheme.pencil,
-                ),
+            ),
+            const SizedBox(height: 24),
+            _buildSection('班级管理', [
+              _buildItem(
+                icon: Icons.swap_horiz,
+                title: '切换班级',
+                subtitle: auth.currentClassName ?? '未选择',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const ClassSelectionScreen(fromHome: true),
+                    ),
+                  );
+                },
               ),
-              Text(
-                '已绑定 ${user.classIds.length} 个班级',
-                style: TextStyle(
-                  fontFamily: 'Patrick Hand',
+              ...auth.myClasses.map((c) => _buildItem(
+                    icon: Icons.class_,
+                    title: c['class_name']!,
+                    subtitle: c['class_id'] == auth.currentClassId
+                        ? '当前班级'
+                        : '点击切换',
+                    onTap: () =>
+                        auth.setCurrentClass(c['class_id']!, c['class_name']!),
+                  )),
+            ]),
+            const SizedBox(height: 16),
+            _buildSection('Vlog 授权', [
+              _buildToggleItem(
+                icon: Icons.visibility,
+                title: '公开我的 Vlog',
+                subtitle: '授权后其他用户可以查看你的个人史记',
+                value: user?.consentMap[auth.currentClassId] ??
+                    user?.consent ??
+                    false,
+                onChanged: (val) {
+                  if (auth.currentClassId != null) {
+                    auth.setClassConsent(auth.currentClassId!, val);
+                  }
+                },
+              ),
+              _buildToggleItem(
+                icon: Icons.public,
+                title: '全局授权',
+                subtitle: '对所有已绑定班级生效',
+                value: user?.consent ?? false,
+                onChanged: (val) => auth.setGlobalConsent(val),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _buildSection('关于', [
+              _buildItem(
+                icon: Icons.system_update,
+                title: '检查更新',
+                subtitle: _checkingUpdate
+                    ? '检查中...'
+                    : _versionInfo != null
+                        ? (_versionInfo!['has_update'] == true
+                            ? '发现新版本 ${_versionInfo!['latest']}'
+                            : '已是最新版本')
+                        : '点击检查',
+                onTap: _checkVersion,
+              ),
+              _buildItem(
+                icon: Icons.info_outline,
+                title: '版本',
+                subtitle: '1.0.0',
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _buildSection('账号', [
+              _buildItem(
+                icon: Icons.logout,
+                title: '退出登录',
+                titleColor: AppColors.accent,
+                onTap: () => _confirmLogout(),
+              ),
+              _buildItem(
+                icon: Icons.delete_forever,
+                title: '注销账号',
+                titleColor: AppColors.accent,
+                onTap: () => _confirmDelete(),
+              ),
+            ]),
+            const SizedBox(height: 32),
+            Center(
+              child: Text(
+                '默写史记 ListenWrite',
+                style: AppTheme.bodyStyle.copyWith(
                   fontSize: 14,
-                  color: HandDrawnTheme.pencil.withValues(alpha: 0.6),
+                  color: AppColors.foreground.withValues(alpha: 0.3),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 24),
-        _buildMenuItem(
-          icon: Icons.swap_horiz,
-          title: '切换班级',
-          onTap: () {
-            Navigator.of(context).pushReplacementNamed('/class_selection');
-          },
-        ),
-        _buildMenuItem(
-          icon: Icons.visibility,
-          title: 'Vlog权限',
-          subtitle: currentConsent ? '已公开' : '未公开',
-          onTap: _toggleConsent,
-        ),
-        _buildMenuItem(
-          icon: Icons.system_update,
-          title: '检查更新',
-          onTap: _checkUpdate,
-        ),
-        _buildMenuItem(
-          icon: Icons.logout,
-          title: '退出登录',
-          textColor: HandDrawnTheme.accent,
-          onTap: _logout,
-        ),
-        _buildMenuItem(
-          icon: Icons.delete_forever,
-          title: '注销账号',
-          textColor: HandDrawnTheme.accent,
-          onTap: _deleteAccount,
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        StickyNote(text: title),
+        const SizedBox(height: 8),
+        HandDrawnCard(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(children: children),
         ),
       ],
     );
   }
 
-  Widget _buildMenuItem({
+  Widget _buildItem({
     required IconData icon,
     required String title,
     String? subtitle,
-    Color? textColor,
-    required VoidCallback onTap,
+    Color? titleColor,
+    VoidCallback? onTap,
   }) {
-    return HandDrawnCard(
+    return InkWell(
       onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      borderRadius: AppTheme.wobblyRadius,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 24, color: titleColor ?? AppColors.foreground),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTheme.bodyStyle.copyWith(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: titleColor ?? AppColors.foreground,
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: AppTheme.bodyStyle.copyWith(
+                        fontSize: 14,
+                        color: AppColors.foreground.withValues(alpha: 0.5),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              const Icon(Icons.chevron_right,
+                  color: AppColors.foreground, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       child: Row(
         children: [
-          Icon(icon, color: textColor ?? HandDrawnTheme.pencil, size: 24),
-          const SizedBox(width: 16),
+          Icon(icon, size: 24),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontFamily: 'Patrick Hand',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: textColor ?? HandDrawnTheme.pencil,
-                  ),
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontFamily: 'Patrick Hand',
-                      fontSize: 14,
-                      color: HandDrawnTheme.pencil.withValues(alpha: 0.5),
-                    ),
-                  ),
+                Text(title,
+                    style: AppTheme.bodyStyle.copyWith(
+                        fontSize: 17, fontWeight: FontWeight.bold)),
+                Text(subtitle,
+                    style: AppTheme.bodyStyle.copyWith(
+                        fontSize: 14,
+                        color: AppColors.foreground.withValues(alpha: 0.5))),
               ],
             ),
           ),
-          Icon(Icons.chevron_right, color: HandDrawnTheme.pencil),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.accent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('退出登录', style: AppTheme.headingStyle),
+        content: Text('确定要退出登录吗？',
+            style: AppTheme.bodyStyle.copyWith(fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_),
+            child: Text('取消', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(_);
+              context.read<AuthProvider>().logout();
+            },
+            child: Text('退出', style: AppTheme.bodyStyle),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('注销账号', style: AppTheme.headingStyle.copyWith(color: AppColors.accent)),
+        content: Text(
+          '注销后账号数据将永久删除，无法恢复。确定要注销吗？',
+          style: AppTheme.bodyStyle.copyWith(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_),
+            child: Text('取消', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(_);
+              context.read<AuthProvider>().deleteAccount();
+            },
+            child: Text('确定注销',
+                style: AppTheme.bodyStyle.copyWith(color: AppColors.accent)),
+          ),
         ],
       ),
     );

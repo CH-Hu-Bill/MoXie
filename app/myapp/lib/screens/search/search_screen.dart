@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:listenwrite/providers/auth_provider.dart';
-import 'package:listenwrite/models/word.dart';
-import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
-import 'package:listenwrite/theme/app_theme.dart';
-import 'package:listenwrite/screens/study/task_detail_screen.dart';
+import '../../models/vlog_entry.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/hand_drawn.dart';
+import '../study/task_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -14,259 +15,269 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final _searchController = TextEditingController();
-  String? _currentClassId;
-  Map<String, dynamic>? _results;
+  final _api = ApiService();
+  final _controller = TextEditingController();
+  SearchResult? _result;
   bool _loading = false;
   bool _searched = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      setState(() {
-        _currentClassId = auth.user?.classIds.isNotEmpty == true
-            ? auth.user!.classIds.first
-            : null;
-      });
+  Future<void> _search() async {
+    final query = _controller.text.trim();
+    if (query.isEmpty) return;
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _searched = true;
     });
+    try {
+      final res = await _api.searchAll(classId, query);
+      setState(() {
+        _result = SearchResult.fromJson(res['data'] as Map<String, dynamic>);
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _controller.dispose();
     super.dispose();
-  }
-
-  Future<void> _search() async {
-    final query = _searchController.text.trim();
-    if (query.isEmpty || _currentClassId == null) return;
-
-    setState(() => _loading = true);
-    final auth = context.read<AuthProvider>();
-    try {
-      final result = await auth.api.post('search_all', {
-        'class_id': _currentClassId!,
-        'query': query,
-      });
-      if (result['success'] == true) {
-        setState(() {
-          _results = result['data'] ?? {};
-          _loading = false;
-          _searched = true;
-        });
-      }
-    } catch (_) {
-      setState(() => _loading = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: HandDrawnInput(
-            hint: '搜索单词或任务...',
-            controller: _searchController,
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.search, color: HandDrawnTheme.pencil),
-              onPressed: _search,
-            ),
-          ),
-        ),
-        Expanded(
-          child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                      color: HandDrawnTheme.pencil),
-                )
-              : !_searched
-                  ? Center(
-                      child: Text(
-                        '输入关键词搜索',
-                        style: TextStyle(
-                          fontFamily: 'Patrick Hand',
-                          fontSize: 16,
-                          color: HandDrawnTheme.pencil
-                              .withValues(alpha: 0.5),
-                        ),
+    final auth = context.watch<AuthProvider>();
+    return Scaffold(
+      appBar: AppBar(title: Text(auth.currentClassName ?? '搜索')),
+      body: PaperTexture(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      decoration: InputDecoration(
+                        hintText: '搜索单词、释义或任务...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _controller.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _controller.clear();
+                                  setState(() {
+                                    _result = null;
+                                    _searched = false;
+                                  });
+                                },
+                              )
+                            : null,
                       ),
-                    )
-                  : _buildResults(),
+                      onSubmitted: (_) => _search(),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  HandDrawnButton(
+                    label: '搜索',
+                    onPressed: _search,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : !_searched
+                      ? const EmptyState(
+                          message: '输入关键词开始搜索',
+                          icon: Icons.search,
+                        )
+                      : _result == null || _result!.total == 0
+                          ? const EmptyState(
+                              message: '没有找到结果',
+                              icon: Icons.sentiment_dissatisfied,
+                            )
+                          : _buildResults(),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildResults() {
-    if (_results == null) return const SizedBox();
-
-    final words = _results!['words']?['items'] as List? ?? [];
-    final pendingTasks = _results!['pending_tasks']?['items'] as List? ?? [];
-    final historyTasks = _results!['history_tasks']?['items'] as List? ?? [];
-    final total = _results!['total'] ?? 0;
-
-    if (total == 0) {
-      return Center(
-        child: Text(
-          '没有找到相关结果',
-          style: TextStyle(
-            fontFamily: 'Patrick Hand',
-            fontSize: 16,
-            color: HandDrawnTheme.pencil.withValues(alpha: 0.5),
-          ),
-        ),
-      );
-    }
-
     return ListView(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
       children: [
-        if (words.isNotEmpty) ...[
-          _sectionHeader('单词 (${_results!['words']['total']})'),
-          ...words.map((w) => _buildWordCard(w)),
+        if (_result!.words.isNotEmpty) ...[
+          StickyNote(text: '单词 (${_result!.words.length})'),
+          const SizedBox(height: 8),
+          ..._result!.words.map((w) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: HandDrawnCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            w.word,
+                            style: AppTheme.headingStyle.copyWith(fontSize: 20),
+                          ),
+                          if (w.pos.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.secondaryAccent
+                                    .withValues(alpha: 0.1),
+                                borderRadius: AppTheme.wobblyRadius,
+                              ),
+                              child: Text(w.pos,
+                                  style: AppTheme.bodyStyle.copyWith(
+                                      fontSize: 13,
+                                      color: AppColors.secondaryAccent)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        w.meaning,
+                        style: AppTheme.bodyStyle.copyWith(
+                          fontSize: 16,
+                          color: AppColors.foreground.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+          const SizedBox(height: 16),
         ],
-        if (pendingTasks.isNotEmpty) ...[
-          _sectionHeader('进行中的任务 (${_results!['pending_tasks']['total']})'),
-          ...pendingTasks.map((t) => _buildTaskCard(t)),
+        if (_result!.pendingTasks.isNotEmpty) ...[
+          StickyNote(
+              text: '进行中任务 (${_result!.pendingTasks.length})',
+              color: AppColors.postItYellow),
+          const SizedBox(height: 8),
+          ..._result!.pendingTasks.map((t) => _buildTaskCard(t, 'pending')),
+          const SizedBox(height: 16),
         ],
-        if (historyTasks.isNotEmpty) ...[
-          _sectionHeader('历史任务 (${_results!['history_tasks']['total']})'),
-          ...historyTasks.map((t) => _buildTaskCard(t)),
+        if (_result!.historyTasks.isNotEmpty) ...[
+          StickyNote(
+              text: '历史任务 (${_result!.historyTasks.length})',
+              color: AppColors.postItYellow),
+          const SizedBox(height: 8),
+          ..._result!.historyTasks.map((t) => _buildTaskCard(t, 'history')),
         ],
       ],
     );
   }
 
-  Widget _sectionHeader(String title) {
+  Widget _buildTaskCard(TaskMatch task, String type) {
+    final auth = context.read<AuthProvider>();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontFamily: 'Kalam',
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: HandDrawnTheme.pencil,
+      padding: const EdgeInsets.only(bottom: 12),
+      child: HandDrawnCard(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TaskDetailScreen(
+                classId: auth.currentClassId!,
+                taskId: task.id,
+                taskLabel: task.label,
+              ),
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  type == 'pending' ? Icons.play_circle : Icons.history,
+                  size: 24,
+                  color: type == 'pending'
+                      ? AppColors.secondaryAccent
+                      : AppColors.foreground.withValues(alpha: 0.4),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    task.label.isNotEmpty ? task.label : '未命名任务',
+                    style: AppTheme.headingStyle.copyWith(fontSize: 18),
+                  ),
+                ),
+                Text(
+                  task.date,
+                  style: AppTheme.bodyStyle.copyWith(
+                    fontSize: 14,
+                    color: AppColors.foreground.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              children: task.matchedWords.map((w) {
+                final query = _controller.text.trim();
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.1),
+                    borderRadius: AppTheme.wobblyRadius,
+                  ),
+                  child: _highlightText(w.word, query),
+                );
+              }).toList(),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildWordCard(dynamic word) {
-    return HandDrawnCard(
-      child: Row(
+  Widget _highlightText(String text, String query) {
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final idx = lowerText.indexOf(lowerQuery);
+    if (idx < 0) {
+      return Text(text,
+          style: AppTheme.bodyStyle.copyWith(fontSize: 14));
+    }
+    return RichText(
+      text: TextSpan(
+        style: AppTheme.bodyStyle.copyWith(fontSize: 14),
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  word['word'] ?? '',
-                  style: TextStyle(
-                    fontFamily: 'Kalam',
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: HandDrawnTheme.pencil,
-                  ),
-                ),
-                Text(
-                  word['meaning'] ?? '',
-                  style: TextStyle(
-                    fontFamily: 'Patrick Hand',
-                    fontSize: 16,
-                    color: HandDrawnTheme.pencil,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.volume_up, color: HandDrawnTheme.blue),
-            onPressed: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTaskCard(dynamic task) {
-    final matchedWords = task['matched_words'] as List? ?? [];
-    return HandDrawnCard(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => TaskDetailScreen(
-              classId: _currentClassId!,
-              taskId: task['id'] ?? '',
-            ),
-          ),
-        );
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            task['label'] ?? '默写任务',
-            style: TextStyle(
-              fontFamily: 'Kalam',
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: HandDrawnTheme.pencil,
-            ),
-          ),
-          Text(
-            task['date'] ?? '',
-            style: TextStyle(
-              fontFamily: 'Patrick Hand',
+          TextSpan(text: text.substring(0, idx)),
+          TextSpan(
+            text: text.substring(idx, idx + query.length),
+            style: AppTheme.bodyStyle.copyWith(
               fontSize: 14,
-              color: HandDrawnTheme.pencil.withValues(alpha: 0.6),
+              color: AppColors.accent,
+              fontWeight: FontWeight.bold,
+              backgroundColor: AppColors.accent.withValues(alpha: 0.15),
             ),
           ),
-          if (matchedWords.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...matchedWords.map((w) => Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: HandDrawnTheme.postItYellow,
-                          borderRadius: HandDrawnTheme.wobblyRadiusSm,
-                          border: Border.all(
-                              color: HandDrawnTheme.pencil, width: 1),
-                        ),
-                        child: Text(
-                          w['word'] ?? '',
-                          style: TextStyle(
-                            fontFamily: 'Patrick Hand',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: HandDrawnTheme.pencil,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          w['meaning'] ?? '',
-                          style: TextStyle(
-                            fontFamily: 'Patrick Hand',
-                            fontSize: 14,
-                            color: HandDrawnTheme.pencil,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-          ],
+          TextSpan(text: text.substring(idx + query.length)),
         ],
       ),
     );

@@ -1,59 +1,100 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:listenwrite/models/user.dart';
 
 class StorageService {
-  static const _keyUser = 'user_data';
-  static const _keyCurrentClassId = 'current_class_id';
-  static const _keyCurrentClassName = 'current_class_name';
+  static final StorageService _instance = StorageService._internal();
+  factory StorageService() => _instance;
+  StorageService._internal();
 
-  Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
+  SharedPreferences? _prefs;
 
-  Future<void> saveUser(User user) async {
-    final prefs = await _prefs;
-    await prefs.setString(_keyUser, json.encode(user.toJson()));
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
   }
 
-  Future<User?> getUser() async {
-    final prefs = await _prefs;
-    final raw = prefs.getString(_keyUser);
+  SharedPreferences get _p {
+    if (_prefs == null) {
+      throw StateError('StorageService not initialized. Call init() first.');
+    }
+    return _prefs!;
+  }
+
+  // ── Auth ──
+
+  Future<void> saveToken(String token) => _p.setString('auth_token', token);
+  String? getToken() => _p.getString('auth_token');
+  Future<void> clearToken() => _p.remove('auth_token');
+
+  Future<void> saveUserId(String userId) =>
+      _p.setString('user_id', userId);
+  String? getUserId() => _p.getString('user_id');
+
+  Future<void> saveUserName(String name) => _p.setString('user_name', name);
+  String? getUserName() => _p.getString('user_name');
+
+  // ── Current Class ──
+
+  Future<void> saveCurrentClassId(String classId) =>
+      _p.setString('current_class_id', classId);
+  String? getCurrentClassId() => _p.getString('current_class_id');
+  Future<void> clearCurrentClassId() => _p.remove('current_class_id');
+
+  Future<void> saveCurrentClassName(String name) =>
+      _p.setString('current_class_name', name);
+  String? getCurrentClassName() => _p.getString('current_class_name');
+
+  // ── Cache ──
+
+  Future<void> cacheWords(String classId, List<Map<String, dynamic>> words) =>
+      _p.setString('cache_words_$classId', jsonEncode(words));
+
+  List<Map<String, dynamic>>? getCachedWords(String classId) {
+    final raw = _p.getString('cache_words_$classId');
     if (raw == null) return null;
     try {
-      return User.fromJson(json.decode(raw));
+      return (jsonDecode(raw) as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> clearUser() async {
-    final prefs = await _prefs;
-    await prefs.remove(_keyUser);
+  Future<void> cacheWrongWords(
+          String classId, List<Map<String, dynamic>> words) =>
+      _p.setString('cache_wrong_words_$classId', jsonEncode(words));
+
+  List<Map<String, dynamic>>? getCachedWrongWords(String classId) {
+    final raw = _p.getString('cache_wrong_words_$classId');
+    if (raw == null) return null;
+    try {
+      return (jsonDecode(raw) as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<String?> getToken() async {
-    final user = await getUser();
-    return user?.token;
+  Future<void> cacheGallery(
+          String classId, List<Map<String, dynamic>> items) =>
+      _p.setString('cache_gallery_$classId', jsonEncode(items));
+
+  List<Map<String, dynamic>>? getCachedGallery(String classId) {
+    final raw = _p.getString('cache_gallery_$classId');
+    if (raw == null) return null;
+    try {
+      return (jsonDecode(raw) as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<void> saveCurrentClass(String classId, String className) async {
-    final prefs = await _prefs;
-    await prefs.setString(_keyCurrentClassId, classId);
-    await prefs.setString(_keyCurrentClassName, className);
-  }
+  // ── Clear ──
 
-  Future<String?> getCurrentClassId() async {
-    final prefs = await _prefs;
-    return prefs.getString(_keyCurrentClassId);
-  }
-
-  Future<String?> getCurrentClassName() async {
-    final prefs = await _prefs;
-    return prefs.getString(_keyCurrentClassName);
-  }
-
-  Future<void> clearCurrentClass() async {
-    final prefs = await _prefs;
-    await prefs.remove(_keyCurrentClassId);
-    await prefs.remove(_keyCurrentClassName);
+  Future<void> clearAll() async {
+    await _p.clear();
   }
 }

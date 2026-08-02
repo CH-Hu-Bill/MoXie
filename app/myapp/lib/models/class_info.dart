@@ -3,7 +3,11 @@ class ClassInfo {
   final String name;
   final bool hasPassword;
 
-  ClassInfo({required this.id, required this.name, this.hasPassword = false});
+  ClassInfo({
+    required this.id,
+    required this.name,
+    this.hasPassword = false,
+  });
 
   factory ClassInfo.fromJson(Map<String, dynamic> json) {
     return ClassInfo(

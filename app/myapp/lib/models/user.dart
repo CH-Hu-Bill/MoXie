@@ -1,64 +1,59 @@
 class User {
-  final String userId;
+  final String id;
   final String name;
   final List<String> classIds;
-  final String token;
-  final DateTime expiresAt;
+  final String? token;
+  final int? expiresAt;
   final bool isNew;
-  final Map<String, bool>? consentMap;
+  final bool consent;
+  final Map<String, bool> consentMap;
 
   User({
-    required this.userId,
+    required this.id,
     required this.name,
-    required this.classIds,
-    required this.token,
-    required this.expiresAt,
+    this.classIds = const [],
+    this.token,
+    this.expiresAt,
     this.isNew = false,
-    this.consentMap,
+    this.consent = false,
+    this.consentMap = const {},
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      userId: json['user_id'] ?? '',
+      id: json['user_id'] ?? json['id'] ?? '',
       name: json['name'] ?? '',
       classIds: List<String>.from(json['class_ids'] ?? []),
-      token: json['token'] ?? '',
-      expiresAt: DateTime.parse(json['expires_at'] ?? DateTime.now().toIso8601String()),
+      token: json['token'],
+      expiresAt: json['expires_at'] is int
+          ? json['expires_at'] as int
+          : int.tryParse(json['expires_at']?.toString() ?? '') ?? null,
       isNew: json['is_new'] ?? false,
-      consentMap: json['consent_map'] != null
-          ? Map<String, bool>.from(json['consent_map'])
-          : null,
+      consent: json['consent'] ?? false,
+      consentMap: Map<String, bool>.from(
+        (json['consent_map'] ?? {}).map((k, v) => MapEntry(k, v == true)),
+      ),
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'user_id': userId,
-      'name': name,
-      'class_ids': classIds,
-      'token': token,
-      'expires_at': expiresAt.toIso8601String(),
-      'is_new': isNew,
-      'consent_map': consentMap,
-    };
-  }
-
   User copyWith({
-    String? userId,
+    String? id,
     String? name,
     List<String>? classIds,
     String? token,
-    DateTime? expiresAt,
+    int? expiresAt,
     bool? isNew,
+    bool? consent,
     Map<String, bool>? consentMap,
   }) {
     return User(
-      userId: userId ?? this.userId,
+      id: id ?? this.id,
       name: name ?? this.name,
       classIds: classIds ?? this.classIds,
       token: token ?? this.token,
       expiresAt: expiresAt ?? this.expiresAt,
       isNew: isNew ?? this.isNew,
+      consent: consent ?? this.consent,
       consentMap: consentMap ?? this.consentMap,
     );
   }

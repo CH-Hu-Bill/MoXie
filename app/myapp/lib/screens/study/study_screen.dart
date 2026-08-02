@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:listenwrite/providers/auth_provider.dart';
-import 'package:listenwrite/models/word.dart';
-import 'package:listenwrite/models/task.dart';
-import 'package:listenwrite/widgets/hand_drawn_widgets.dart';
-import 'package:listenwrite/theme/app_theme.dart';
-import 'word_detail_screen.dart';
+import '../../models/word.dart';
+import '../../models/task.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
+import '../../services/storage_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/hand_drawn.dart';
 import 'task_detail_screen.dart';
 
 class StudyScreen extends StatefulWidget {
@@ -15,726 +16,555 @@ class StudyScreen extends StatefulWidget {
   State<StudyScreen> createState() => _StudyScreenState();
 }
 
-class _StudyScreenState extends State<StudyScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  String? _currentClassId;
+class _StudyScreenState extends State<StudyScreen> {
+  int _mainTab = 0;
+  int _taskTab = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadClassId();
-    });
-  }
+  final _api = ApiService();
+  final _storage = StorageService();
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  void _loadClassId() {
-    final auth = context.read<AuthProvider>();
-    setState(() {
-      _currentClassId = auth.user?.classIds.isNotEmpty == true
-          ? auth.user!.classIds.first
-          : null;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final classIds = auth.user?.classIds ?? [];
-
-    if (classIds.isEmpty) {
-      return Center(
-        child: HandDrawnCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.class_outlined, size: 48, color: HandDrawnTheme.pencil),
-              const SizedBox(height: 16),
-              Text(
-                '请先选择班级',
-                style: TextStyle(
-                  fontFamily: 'Patrick Hand',
-                  fontSize: 18,
-                  color: HandDrawnTheme.pencil,
-                ),
-              ),
-              const SizedBox(height: 16),
-              HandDrawnButton(
-                text: '选择班级',
-                onPressed: () {
-                  Navigator.of(context).pushReplacementNamed('/class_selection');
-                },
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final cid = _currentClassId ?? classIds.first;
-
-    return Column(
-      children: [
-        if (classIds.length > 1)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: HandDrawnCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: cid,
-                  isExpanded: true,
-                  style: TextStyle(
-                    fontFamily: 'Patrick Hand',
-                    fontSize: 16,
-                    color: HandDrawnTheme.pencil,
-                  ),
-                  items: classIds.map((id) {
-                    return DropdownMenuItem(
-                      value: id,
-                      child: Text('班级 $id'),
-                    );
-                  }).toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => _currentClassId = v);
-                  },
-                ),
-              ),
-            ),
-          ),
-        Container(
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: HandDrawnTheme.pencil, width: 2),
-            ),
-          ),
-          child: TabBar(
-            controller: _tabController,
-            labelColor: HandDrawnTheme.pencil,
-            unselectedLabelColor: HandDrawnTheme.muted,
-            indicatorColor: HandDrawnTheme.accent,
-            indicatorWeight: 3,
-            labelStyle: TextStyle(
-              fontFamily: 'Kalam',
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-            unselectedLabelStyle: TextStyle(
-              fontFamily: 'Patrick Hand',
-              fontSize: 16,
-            ),
-            tabs: const [
-              Tab(text: '单词库'),
-              Tab(text: '任务'),
-              Tab(text: '错题本'),
-            ],
-          ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _WordListView(classId: cid),
-              _TaskListView(classId: cid),
-              _WrongWordsView(classId: cid),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WordListView extends StatefulWidget {
-  final String classId;
-  const _WordListView({required this.classId});
-
-  @override
-  State<_WordListView> createState() => _WordListViewState();
-}
-
-class _WordListViewState extends State<_WordListView> {
   List<Word> _words = [];
-  bool _loading = true;
-  int _page = 1;
-  bool _hasMore = true;
-  final _scrollController = ScrollController();
+  List<Word> _wrongWords = [];
+  List<Task> _pendingTasks = [];
+  List<Task> _historyTasks = [];
+  bool _loading = false;
+  int _wordsPage = 1;
+  int _wordsTotal = 0;
+  bool _wordsHasMore = false;
 
   @override
   void initState() {
     super.initState();
-    _loadWords();
-    _scrollController.addListener(_onScroll);
+    _loadData();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        !_loading &&
-        _hasMore) {
-      _loadWords();
-    }
-  }
-
-  Future<void> _loadWords() async {
-    if (_loading) return;
-    setState(() => _loading = true);
+  Future<void> _loadData() async {
     final auth = context.read<AuthProvider>();
-    try {
-      final result = await auth.api.post('get_words', {
-        'class_id': widget.classId,
-        'page': _page.toString(),
-        'per_page': '20',
-      });
-      if (result['success'] == true) {
-        final data = result['data'] ?? {};
-        final list = (data['words'] as List?)
-                ?.map((j) => Word.fromJson(j))
-                .toList() ??
-            [];
-        setState(() {
-          _words.addAll(list);
-          _page++;
-          _hasMore = data['has_more'] ?? false;
-          _loading = false;
-        });
-      } else {
-        setState(() => _loading = false);
-      }
-    } catch (_) {
-      setState(() => _loading = false);
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+
+    final cachedWords = _storage.getCachedWords(classId);
+    if (cachedWords != null) {
+      setState(() => _words = cachedWords.map((w) => Word.fromJson(w)).toList());
     }
+
+    _loadWords(classId);
+    _loadWrongWords(classId);
+    _loadTasks(classId);
   }
 
-  Future<void> _toggleWrong(Word word) async {
-    final auth = context.read<AuthProvider>();
+  Future<void> _loadWords(String classId, {bool reset = true}) async {
+    if (reset) {
+      setState(() => _loading = true);
+    }
     try {
-      await auth.api.post(word.isWrong ? 'unmark_wrong' : 'mark_wrong', {
-        'class_id': widget.classId,
-        'word_id': word.id,
-      });
+      final page = reset ? 1 : _wordsPage + 1;
+      final res = await _api.getWords(classId, page: page, perPage: 20);
+      final data = res['data'] as Map<String, dynamic>;
+      final words = (data['words'] as List)
+          .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .toList();
       setState(() {
-        final idx = _words.indexWhere((w) => w.id == word.id);
-        if (idx >= 0) {
-          _words[idx] = Word(
-            id: word.id,
-            word: word.word,
-            meaning: word.meaning,
-            pos: word.pos,
-            isWrong: !word.isWrong,
-            isFavorite: word.isFavorite,
-          );
+        if (reset) {
+          _words = words;
+        } else {
+          _words.addAll(words);
         }
+        _wordsPage = page;
+        _wordsTotal = data['total'] ?? 0;
+        _wordsHasMore = data['has_more'] ?? false;
+        _loading = false;
+      });
+      _storage.cacheWords(
+          classId, _words.map((w) => {'id': w.id, 'word': w.word, 'meaning': w.meaning, 'pos': w.pos}).toList());
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载单词失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadWrongWords(String classId) async {
+    try {
+      final res = await _api.getWrongWords(classId, perPage: 100);
+      final data = res['data'] as Map<String, dynamic>;
+      setState(() {
+        _wrongWords = (data['words'] as List)
+            .map((w) => Word.fromJson(w as Map<String, dynamic>))
+            .toList();
       });
     } catch (_) {}
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_loading && _words.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: HandDrawnTheme.pencil),
-      );
-    }
-
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.only(top: 8, bottom: 16),
-      itemCount: _words.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index >= _words.length) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final word = _words[index];
-        return _buildWordCard(word);
-      },
-    );
+  Future<void> _loadTasks(String classId) async {
+    try {
+      final pendingRes = await _api.getTasks(classId, 'pending');
+      final pendingData = pendingRes['data'] as Map<String, dynamic>;
+      setState(() {
+        _pendingTasks = (pendingData['tasks'] as List)
+            .map((t) => Task.fromJson(t as Map<String, dynamic>))
+            .toList();
+      });
+      final historyRes = await _api.getTasks(classId, 'history');
+      final historyData = historyRes['data'] as Map<String, dynamic>;
+      setState(() {
+        _historyTasks = (historyData['tasks'] as List)
+            .map((t) => Task.fromJson(t as Map<String, dynamic>))
+            .toList();
+      });
+    } catch (_) {}
   }
 
-  Widget _buildWordCard(Word word) {
-    return HandDrawnCard(
-      rotation: (word.id.hashCode % 3 - 1).toDouble(),
-      backgroundColor: word.isWrong ? HandDrawnTheme.postItYellow : null,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  word.word,
-                  style: TextStyle(
-                    fontFamily: 'Kalam',
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: HandDrawnTheme.pencil,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  word.meaning,
-                  style: TextStyle(
-                    fontFamily: 'Patrick Hand',
-                    fontSize: 16,
-                    color: HandDrawnTheme.pencil,
-                  ),
-                ),
-                if (word.pos.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: HandDrawnTheme.muted,
-                      borderRadius: HandDrawnTheme.wobblyRadiusSm,
-                      border: Border.all(color: HandDrawnTheme.pencil, width: 1),
-                    ),
-                    child: Text(
-                      word.pos,
-                      style: TextStyle(
-                        fontFamily: 'Patrick Hand',
-                        fontSize: 12,
-                        color: HandDrawnTheme.pencil,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Column(
+  Future<void> _toggleWrong(String classId, Word word) async {
+    try {
+      if (word.isWrong) {
+        await _api.unmarkWrong(classId, word.id);
+      } else {
+        await _api.markWrong(classId, word.id, true);
+      }
+      _loadWords(classId);
+      _loadWrongWords(classId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddWordDialog(String classId) async {
+    final wordCtrl = TextEditingController();
+    final meaningCtrl = TextEditingController();
+    final posCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('添加单词', style: AppTheme.headingStyle),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(
-                  word.isWrong ? Icons.error : Icons.error_outline,
-                  color: word.isWrong
-                      ? HandDrawnTheme.accent
-                      : HandDrawnTheme.pencil,
-                ),
-                onPressed: () => _toggleWrong(word),
-                tooltip: '错题本',
+              TextFormField(
+                controller: wordCtrl,
+                decoration: const InputDecoration(labelText: '单词'),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? '请输入单词' : null,
               ),
-              IconButton(
-                icon: Icon(
-                  Icons.volume_up,
-                  color: HandDrawnTheme.blue,
-                ),
-                onPressed: () {},
-                tooltip: '发音',
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: meaningCtrl,
+                decoration: const InputDecoration(labelText: '释义'),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? '请输入释义' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: posCtrl,
+                decoration: const InputDecoration(labelText: '词性（可选）'),
               ),
             ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_),
+            child: Text('取消', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              try {
+                await _api.addWord(classId, wordCtrl.text.trim(),
+                    meaningCtrl.text.trim(), posCtrl.text.trim());
+                Navigator.pop(_);
+                _loadWords(classId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('添加成功')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('添加失败: $e')),
+                  );
+                }
+              }
+            },
+            child: Text('添加', style: AppTheme.bodyStyle),
           ),
         ],
       ),
     );
   }
-}
 
-class _TaskListView extends StatefulWidget {
-  final String classId;
-  const _TaskListView({required this.classId});
-
-  @override
-  State<_TaskListView> createState() => _TaskListViewState();
-}
-
-class _TaskListViewState extends State<_TaskListView>
-    with SingleTickerProviderStateMixin {
-  late TabController _taskTabController;
-  List<Task> _pendingTasks = [];
-  List<Task> _historyTasks = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _taskTabController = TabController(length: 2, vsync: this);
-    _loadTasks();
-  }
-
-  @override
-  void dispose() {
-    _taskTabController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadTasks() async {
-    final auth = context.read<AuthProvider>();
+  Future<void> _exportWrongWords(String classId) async {
     try {
-      final pending = await auth.api.post('get_tasks', {
-        'class_id': widget.classId,
-        'type': 'pending',
-      });
-      final history = await auth.api.post('get_tasks', {
-        'class_id': widget.classId,
-        'type': 'history',
-      });
-      setState(() {
-        if (pending['success'] == true) {
-          _pendingTasks = (pending['data']['tasks'] as List?)
-                  ?.map((j) => Task.fromJson(j))
-                  .toList() ??
-              [];
-        }
-        if (history['success'] == true) {
-          _historyTasks = (history['data']['tasks'] as List?)
-                  ?.map((j) => Task.fromJson(j))
-                  .toList() ??
-              [];
-        }
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
+      final res = await _api.exportWrongText(classId);
+      final text = res['data']['text'] as String;
+      if (!mounted) return;
+      _showExportDialog('错题本导出', text);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
     }
+  }
+
+  void _showExportDialog(String title, String text) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text(title, style: AppTheme.headingStyle),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            readOnly: true,
+            maxLines: 15,
+            controller: TextEditingController(text: text),
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_),
+            child: Text('关闭', style: AppTheme.bodyStyle),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: HandDrawnTheme.pencil),
-      );
-    }
+    final auth = context.watch<AuthProvider>();
+    final classId = auth.currentClassId ?? '';
 
-    return Column(
-      children: [
-        Container(
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: HandDrawnTheme.pencil, width: 1),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(auth.currentClassName ?? '学习'),
+      ),
+      body: PaperTexture(
+        child: Column(
+          children: [
+            WobblyTabBar(
+              tabs: const ['单词库', '错题本', '任务'],
+              selectedIndex: _mainTab,
+              onTap: (i) => setState(() => _mainTab = i),
             ),
-          ),
-          child: TabBar(
-            controller: _taskTabController,
-            labelColor: HandDrawnTheme.pencil,
-            unselectedLabelColor: HandDrawnTheme.muted,
-            indicatorColor: HandDrawnTheme.blue,
-            indicatorWeight: 2,
-            labelStyle: const TextStyle(
-              fontFamily: 'Patrick Hand',
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+            Expanded(
+              child: _mainTab == 0
+                  ? _buildWordLibrary(classId)
+                  : _mainTab == 1
+                      ? _buildWrongWords(classId)
+                      : _buildTasks(classId),
             ),
-            tabs: const [
-              Tab(text: '进行中'),
-              Tab(text: '历史'),
-            ],
-          ),
+          ],
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _taskTabController,
-            children: [
-              _buildTaskList(_pendingTasks, isHistory: false),
-              _buildTaskList(_historyTasks, isHistory: true),
-            ],
-          ),
-        ),
-      ],
+      ),
+      floatingActionButton: _mainTab == 0
+          ? FloatingActionButton(
+              onPressed: () => _showAddWordDialog(classId),
+              backgroundColor: AppColors.accent,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
     );
   }
 
-  Widget _buildTaskList(List<Task> tasks, {required bool isHistory}) {
-    if (tasks.isEmpty) {
-      return Center(
-        child: Text(
-          isHistory ? '暂无历史任务' : '暂无进行中的任务',
-          style: TextStyle(
-            fontFamily: 'Patrick Hand',
-            fontSize: 16,
-            color: HandDrawnTheme.pencil.withValues(alpha: 0.5),
-          ),
-        ),
-      );
+  Widget _buildWordLibrary(String classId) {
+    if (_loading && _words.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
     }
-
-    return RefreshIndicator(
-      onRefresh: _loadTasks,
+    if (_words.isEmpty) {
+      return const EmptyState(message: '还没有单词，点击右下角添加');
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notif) {
+        if (notif is ScrollEndNotification &&
+            notif.metrics.pixels >= notif.metrics.maxScrollExtent - 100 &&
+            _wordsHasMore &&
+            !_loading) {
+          _loadWords(classId, reset: false);
+        }
+        return false;
+      },
       child: ListView.builder(
-        padding: const EdgeInsets.only(top: 8, bottom: 16),
-        itemCount: tasks.length,
-        itemBuilder: (context, index) {
-          final task = tasks[index];
-          return HandDrawnCard(
-            rotation: index % 2 == 0 ? 0.5 : -0.5,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      TaskDetailScreen(classId: widget.classId, taskId: task.id),
-                ),
-              );
-            },
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.label.isNotEmpty ? task.label : '默写任务',
-                        style: TextStyle(
-                          fontFamily: 'Kalam',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: HandDrawnTheme.pencil,
+        padding: const EdgeInsets.all(16),
+        itemCount: _words.length + (_wordsHasMore ? 1 : 0),
+        itemBuilder: (ctx, i) {
+          if (i >= _words.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final w = _words[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: HandDrawnCard(
+              onTap: () => _toggleWrong(classId, w),
+              backgroundColor:
+                  w.isWrong ? AppColors.accent.withValues(alpha: 0.08) : null,
+              borderWidth: w.isWrong ? 3 : 2,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              w.word,
+                              style: AppTheme.headingStyle.copyWith(
+                                fontSize: 22,
+                                decoration: w.isWrong
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                decorationColor: AppColors.accent,
+                                decorationThickness: 2.5,
+                              ),
+                            ),
+                            if (w.pos.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondaryAccent
+                                      .withValues(alpha: 0.1),
+                                  borderRadius: AppTheme.wobblyRadius,
+                                ),
+                                child: Text(
+                                  w.pos,
+                                  style: AppTheme.bodyStyle.copyWith(
+                                    fontSize: 13,
+                                    color: AppColors.secondaryAccent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${task.date}  ·  ${task.wordCount} 个单词',
-                        style: TextStyle(
-                          fontFamily: 'Patrick Hand',
-                          fontSize: 14,
-                          color: HandDrawnTheme.pencil.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      if (task.weekendWeek.isNotEmpty)
+                        const SizedBox(height: 4),
                         Text(
-                          '周末大礼包 ${task.weekendWeek}',
-                          style: TextStyle(
-                            fontFamily: 'Patrick Hand',
-                            fontSize: 12,
-                            color: HandDrawnTheme.accent,
+                          w.meaning,
+                          style: AppTheme.bodyStyle.copyWith(
+                            fontSize: 16,
+                            color: AppColors.foreground
+                                .withValues(alpha: 0.7),
                           ),
                         ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: task.status == 'completed'
-                        ? HandDrawnTheme.postItYellow
-                        : HandDrawnTheme.muted,
-                    borderRadius: HandDrawnTheme.wobblyRadiusSm,
-                    border: Border.all(color: HandDrawnTheme.pencil, width: 1),
-                  ),
-                  child: Text(
-                    task.status == 'completed'
-                        ? '已完成'
-                        : task.status == 'cancelled'
-                            ? '已取消'
-                            : '进行中',
-                    style: TextStyle(
-                      fontFamily: 'Patrick Hand',
-                      fontSize: 14,
-                      color: HandDrawnTheme.pencil,
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  Icon(
+                    w.isWrong ? Icons.error : Icons.error_outline,
+                    color: w.isWrong
+                        ? AppColors.accent
+                        : AppColors.foreground.withValues(alpha: 0.3),
+                    size: 28,
+                  ),
+                ],
+              ),
             ),
           );
         },
       ),
     );
   }
-}
 
-class _WrongWordsView extends StatefulWidget {
-  final String classId;
-  const _WrongWordsView({required this.classId});
-
-  @override
-  State<_WrongWordsView> createState() => _WrongWordsViewState();
-}
-
-class _WrongWordsViewState extends State<_WrongWordsView> {
-  List<Word> _words = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadWrongWords();
-  }
-
-  Future<void> _loadWrongWords() async {
-    final auth = context.read<AuthProvider>();
-    try {
-      final result = await auth.api.post('get_wrong_words', {
-        'class_id': widget.classId,
-      });
-      if (result['success'] == true) {
-        setState(() {
-          _words = (result['data']['words'] as List?)
-                  ?.map((j) => Word.fromJson(j))
-                  .toList() ??
-              [];
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      setState(() => _loading = false);
+  Widget _buildWrongWords(String classId) {
+    if (_wrongWords.isEmpty) {
+      return const EmptyState(message: '错题本为空', icon: Icons.check_circle_outline);
     }
-  }
-
-  Future<void> _removeFromWrong(Word word) async {
-    final auth = context.read<AuthProvider>();
-    try {
-      await auth.api.post('unmark_wrong', {
-        'class_id': widget.classId,
-        'word_id': word.id,
-      });
-      setState(() => _words.removeWhere((w) => w.id == word.id));
-    } catch (_) {}
-  }
-
-  Future<void> _exportWrongWords() async {
-    final auth = context.read<AuthProvider>();
-    try {
-      final result = await auth.api.post('export_wrong_text', {
-        'class_id': widget.classId,
-      });
-      if (result['success'] == true) {
-        final text = result['data']['text'] ?? '';
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: HandDrawnTheme.warmPaper,
-              shape: RoundedRectangleBorder(
-                borderRadius: HandDrawnTheme.wobblyRadiusMd,
-                side:
-                    const BorderSide(color: HandDrawnTheme.pencil, width: 2),
-              ),
-              title: Text(
-                '导出错题本',
-                style: TextStyle(
-                  fontFamily: 'Kalam',
-                  fontWeight: FontWeight.w700,
-                  color: HandDrawnTheme.pencil,
-                ),
-              ),
-              content: Text(
-                text,
-                style: TextStyle(
-                  fontFamily: 'Patrick Hand',
-                  fontSize: 14,
-                  color: HandDrawnTheme.pencil,
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(
-                    '关闭',
-                    style: TextStyle(
-                      fontFamily: 'Patrick Hand',
-                      color: HandDrawnTheme.blue,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: HandDrawnTheme.pencil),
-      );
-    }
-
     return Column(
       children: [
-        if (_words.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: HandDrawnButton(
-              text: '导出错题本',
-              icon: Icons.copy,
-              onPressed: _exportWrongWords,
-              secondary: true,
-              small: true,
-            ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: HandDrawnButton(
+            label: '复制导出文本',
+            icon: Icons.copy,
+            isSecondary: true,
+            fullWidth: true,
+            onPressed: () => _exportWrongWords(classId),
           ),
+        ),
         Expanded(
-          child: _words.isEmpty
-              ? Center(
-                  child: Text(
-                    '错题本为空，加油！',
-                    style: TextStyle(
-                      fontFamily: 'Patrick Hand',
-                      fontSize: 16,
-                      color:
-                          HandDrawnTheme.pencil.withValues(alpha: 0.5),
-                    ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadWrongWords,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: _words.length,
-                    itemBuilder: (context, index) {
-                      final word = _words[index];
-                      return HandDrawnCard(
-                        backgroundColor: HandDrawnTheme.postItYellow,
-                        child: Row(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _wrongWords.length,
+            itemBuilder: (ctx, i) {
+              final w = _wrongWords[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: HandDrawnCard(
+                  backgroundColor: AppColors.accent.withValues(alpha: 0.05),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    word.word,
-                                    style: TextStyle(
-                                      fontFamily: 'Kalam',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
-                                      color: HandDrawnTheme.pencil,
-                                    ),
-                                  ),
-                                  Text(
-                                    word.meaning,
-                                    style: TextStyle(
-                                      fontFamily: 'Patrick Hand',
-                                      fontSize: 16,
-                                      color: HandDrawnTheme.pencil,
-                                    ),
-                                  ),
-                                ],
+                            Text(
+                              w.word,
+                              style: AppTheme.headingStyle.copyWith(
+                                fontSize: 20,
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: AppColors.accent,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.check_circle_outline,
-                                color: HandDrawnTheme.blue,
+                            const SizedBox(height: 4),
+                            Text(
+                              w.meaning,
+                              style: AppTheme.bodyStyle.copyWith(
+                                fontSize: 16,
+                                color: AppColors.foreground
+                                    .withValues(alpha: 0.7),
                               ),
-                              onPressed: () => _removeFromWrong(word),
-                              tooltip: '移出错题本',
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle,
+                            color: AppColors.accent),
+                        onPressed: () => _toggleWrong(classId, w),
+                      ),
+                    ],
                   ),
                 ),
+              );
+            },
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTasks(String classId) {
+    return Column(
+      children: [
+        WobblyTabBar(
+          tabs: const ['进行中', '历史'],
+          selectedIndex: _taskTab,
+          onTap: (i) => setState(() => _taskTab = i),
+        ),
+        Expanded(
+          child: _taskTab == 0
+              ? _buildTaskList(classId, _pendingTasks, 'pending')
+              : _buildTaskList(classId, _historyTasks, 'history'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTaskList(
+      String classId, List<Task> tasks, String type) {
+    if (tasks.isEmpty) {
+      return EmptyState(
+        message: type == 'pending' ? '没有进行中的任务' : '没有历史任务',
+        icon: Icons.task_outlined,
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () => _loadTasks(classId),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: tasks.length,
+        itemBuilder: (ctx, i) {
+          final t = tasks[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: HandDrawnCard(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TaskDetailScreen(
+                      classId: classId,
+                      taskId: t.id,
+                      taskLabel: t.label,
+                    ),
+                  ),
+                );
+                _loadTasks(classId);
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        type == 'pending'
+                            ? Icons.play_circle
+                            : Icons.check_circle,
+                        size: 28,
+                        color: type == 'pending'
+                            ? AppColors.secondaryAccent
+                            : AppColors.foreground.withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          t.label.isNotEmpty ? t.label : '未命名任务',
+                          style: AppTheme.headingStyle.copyWith(fontSize: 20),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.postItYellow,
+                          borderRadius: AppTheme.wobblyRadius,
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Text(
+                          '${t.wordCount}词',
+                          style: AppTheme.bodyStyle.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    t.date,
+                    style: AppTheme.bodyStyle.copyWith(
+                      fontSize: 15,
+                      color: AppColors.foreground.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

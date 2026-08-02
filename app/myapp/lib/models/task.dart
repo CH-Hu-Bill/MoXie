@@ -1,4 +1,4 @@
-import 'package:listenwrite/models/word.dart';
+import 'word.dart';
 
 class Task {
   final String id;
@@ -6,19 +6,19 @@ class Task {
   final String label;
   final String status;
   final int wordCount;
-  final String weekendWeek;
-  final String createdAt;
-  final List<Word>? words;
+  final String? weekendWeek;
+  final String? createdAt;
+  final List<Word> words;
 
   Task({
     required this.id,
     required this.date,
     this.label = '',
-    this.status = 'pending',
+    this.status = '',
     this.wordCount = 0,
-    this.weekendWeek = '',
-    this.createdAt = '',
-    this.words,
+    this.weekendWeek,
+    this.createdAt,
+    this.words = const [],
   });
 
   factory Task.fromJson(Map<String, dynamic> json) {
@@ -28,11 +28,12 @@ class Task {
       label: json['label'] ?? '',
       status: json['status'] ?? '',
       wordCount: json['word_count'] ?? 0,
-      weekendWeek: json['weekend_week'] ?? '',
-      createdAt: json['created_at'] ?? '',
-      words: json['words'] != null
-          ? (json['words'] as List).map((w) => Word.fromJson(w)).toList()
-          : null,
+      weekendWeek: json['weekend_week'],
+      createdAt: json['created_at'],
+      words: (json['words'] as List<dynamic>?)
+              ?.map((w) => Word.fromJson(w as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 }

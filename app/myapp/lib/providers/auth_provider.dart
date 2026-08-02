@@ -1,216 +1,232 @@
 import 'package:flutter/material.dart';
-import 'package:listenwrite/models/user.dart';
-import 'package:listenwrite/services/api_service.dart';
-import 'package:listenwrite/services/storage_service.dart';
+import '../models/user.dart';
+import '../models/class_info.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
+
+enum AuthState { initial, authenticated, unauthenticated, loading }
 
 class AuthProvider extends ChangeNotifier {
+  final ApiService _api = ApiService();
   final StorageService _storage = StorageService();
-  ApiService? _api;
+
+  AuthState _authState = AuthState.initial;
   User? _user;
-  bool _loading = false;
+  String? _currentClassId;
+  String? _currentClassName;
+  List<ClassInfo> _allClasses = [];
+  List<Map<String, String>> _myClasses = [];
   String? _error;
 
+  AuthState get authState => _authState;
   User? get user => _user;
-  bool get loading => _loading;
+  String? get currentClassId => _currentClassId;
+  String? get currentClassName => _currentClassName;
+  List<ClassInfo> get allClasses => _allClasses;
+  List<Map<String, String>> get myClasses => _myClasses;
   String? get error => _error;
-  bool get isLoggedIn => _user != null;
-  String? get currentClassId => _user?.classIds.isNotEmpty == true
-      ? _user!.classIds.first
-      : null;
+  bool get hasClass => _currentClassId != null;
 
-  ApiService get api {
-    _api ??= ApiService(token: _user?.token);
-    return _api!;
+  void _setError(String? e) {
+    _error = e;
+    notifyListeners();
   }
 
   Future<void> init() async {
-    _loading = true;
-    notifyListeners();
-
-    try {
-      _user = await _storage.getUser();
-      if (_user != null) {
-        _api = ApiService(token: _user!.token);
-        final result = await _api!.post('auto_login', {});
-        if (result['success'] == true) {
-          final data = result['data'] ?? {};
-          _user = _user!.copyWith(
-            classIds: List<String>.from(data['class_ids'] ?? []),
-            consentMap: data['consent_map'] != null
-                ? Map<String, bool>.from(data['consent_map'])
-                : null,
-          );
-          await _storage.saveUser(_user!);
-        } else {
-          await _storage.clearUser();
-          _user = null;
-          _api = null;
-        }
-      }
-    } catch (_) {
-      _user = null;
-    }
-
-    _loading = false;
-    notifyListeners();
-  }
-
-  Future<bool> login(String name, String password) async {
-    _loading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final api = ApiService();
-      final result = await api.post('login', {
-        'name': name,
-        'password': password,
-      });
-
-      if (result['success'] == true) {
-        _user = User.fromJson(result['data'] ?? {});
-        _api = ApiService(token: _user!.token);
-        await _storage.saveUser(_user!);
-        _loading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = result['error'] ?? '登录失败';
-        _loading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _error = '网络连接失败，请检查网络';
-      _loading = false;
+    final token = _storage.getToken();
+    if (token == null) {
+      _authState = AuthState.unauthenticated;
       notifyListeners();
-      return false;
+      return;
     }
-  }
-
-  Future<bool> register(String name, String password) async {
-    _loading = true;
-    _error = null;
-    notifyListeners();
-
+    _api.setToken(token);
     try {
-      final api = ApiService();
-      final result = await api.post('register', {
-        'name': name,
-        'password': password,
-      });
-
-      if (result['success'] == true) {
-        _user = User.fromJson(result['data'] ?? {});
-        _api = ApiService(token: _user!.token);
-        await _storage.saveUser(_user!);
-        _loading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = result['error'] ?? '注册失败';
-        _loading = false;
-        notifyListeners();
-        return false;
-      }
+      await _autoLogin();
+      _currentClassId = _storage.getCurrentClassId();
+      _currentClassName = _storage.getCurrentClassName();
+      _authState = AuthState.authenticated;
     } catch (e) {
-      _error = '网络连接失败，请检查网络';
-      _loading = false;
-      notifyListeners();
-      return false;
+      await _storage.clearToken();
+      _api.setToken(null);
+      _authState = AuthState.unauthenticated;
     }
-  }
-
-  Future<bool> bindClass(String classId, String password) async {
-    _loading = true;
-    _error = null;
     notifyListeners();
-
-    try {
-      final result = await api.post('bind_class', {
-        'class_id': classId,
-        'password': password,
-      });
-
-      if (result['success'] == true) {
-        if (!_user!.classIds.contains(classId)) {
-          _user!.classIds.add(classId);
-          await _storage.saveUser(_user!);
-        }
-        _loading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = result['error'] ?? '绑定失败';
-        _loading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _error = '网络连接失败';
-      _loading = false;
-      notifyListeners();
-      return false;
-    }
   }
 
-  Future<bool> checkClass(String classId) async {
+  Future<void> _autoLogin() async {
+    final res = await _api.autoLogin();
+    final data = res['data'] as Map<String, dynamic>;
+    _user = User.fromJson(data);
+    await _storage.saveUserId(_user!.id);
+    await _storage.saveUserName(_user!.name);
+    await _loadMyClasses();
+  }
+
+  Future<void> _loadMyClasses() async {
+    if (_user == null) return;
     try {
-      final result = await api.post('check_class', {
-        'class_id': classId,
-      });
-      if (result['success'] == true) {
-        final data = result['data'] ?? {};
-        return data['ok'] == true;
+      final res = await _api.getMyClasses();
+      final classes = (res['data']['classes'] as List<dynamic>)
+          .map((c) => Map<String, String>.from(c))
+          .toList();
+      _myClasses = classes;
+      if (_currentClassId == null && classes.isNotEmpty) {
+        await setCurrentClass(
+          classes.first['class_id']!,
+          classes.first['class_name']!,
+        );
       }
+    } catch (_) {}
+  }
+
+  Future<bool> login(String username, String password) async {
+    _authState = AuthState.loading;
+    _setError(null);
+    notifyListeners();
+    try {
+      final res = await _api.login(username, password);
+      final data = res['data'] as Map<String, dynamic>;
+      _user = User.fromJson(data);
+      _api.setToken(_user!.token);
+      await _storage.saveToken(_user!.token!);
+      await _storage.saveUserId(_user!.id);
+      await _storage.saveUserName(_user!.name);
+      await _loadMyClasses();
+      _currentClassId = _storage.getCurrentClassId();
+      _currentClassName = _storage.getCurrentClassName();
+      _authState = AuthState.authenticated;
+      notifyListeners();
       return true;
-    } catch (_) {
-      return true;
+    } catch (e) {
+      _setError(e.toString());
+      _authState = AuthState.unauthenticated;
+      notifyListeners();
+      return false;
     }
+  }
+
+  Future<bool> register(String username, String password) async {
+    return login(username, password);
   }
 
   Future<void> logout() async {
     try {
-      await api.post('logout', {});
+      await _api.logout();
     } catch (_) {}
+    await _storage.clearToken();
+    await _storage.clearCurrentClassId();
+    _api.setToken(null);
     _user = null;
-    _api = null;
-    await _storage.clearUser();
+    _currentClassId = null;
+    _currentClassName = null;
+    _myClasses = [];
+    _authState = AuthState.unauthenticated;
     notifyListeners();
   }
 
   Future<void> deleteAccount() async {
     try {
-      await api.post('delete_account', {});
+      await _api.deleteAccount();
     } catch (_) {}
+    await _storage.clearAll();
+    _api.setToken(null);
     _user = null;
-    _api = null;
-    await _storage.clearUser();
+    _currentClassId = null;
+    _currentClassName = null;
+    _myClasses = [];
+    _authState = AuthState.unauthenticated;
     notifyListeners();
   }
 
-  Future<void> updateUserClassIds(List<String> classIds) async {
-    if (_user != null) {
-      _user = _user!.copyWith(classIds: classIds);
-      await _storage.saveUser(_user!);
-      notifyListeners();
+  Future<List<ClassInfo>> loadAllClasses() async {
+    final list = await _api.getClasses();
+    _allClasses = list
+        .map((c) => ClassInfo.fromJson(c as Map<String, dynamic>))
+        .toList();
+    notifyListeners();
+    return _allClasses;
+  }
+
+  Future<bool> bindClass(String classId, String password) async {
+    try {
+      final res = await _api.bindClass(classId, password);
+      final data = res['data'] as Map<String, dynamic>;
+      await setCurrentClass(
+        data['class_id'] as String,
+        data['class_name'] as String,
+      );
+      await _loadMyClasses();
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      return false;
     }
   }
 
-  Future<void> refreshProfile() async {
+  Future<void> unbindClass(String classId) async {
+    await _api.unbindClass(classId);
+    if (_currentClassId == classId) {
+      await setCurrentClass(
+        _myClasses.isNotEmpty ? _myClasses.first['class_id']! : '',
+        _myClasses.isNotEmpty ? _myClasses.first['class_name']! : '',
+      );
+    }
+    await _loadMyClasses();
+  }
+
+  Future<void> setCurrentClass(String classId, String className) async {
+    _currentClassId = classId;
+    _currentClassName = className;
+    await _storage.saveCurrentClassId(classId);
+    await _storage.saveCurrentClassName(className);
+    notifyListeners();
+  }
+
+  Future<bool> checkClassAuth(String classId) async {
     try {
-      final result = await api.post('get_profile', {});
-      if (result['success'] == true) {
-        final data = result['data'] ?? {};
-        _user = _user!.copyWith(
-          classIds: List<String>.from(data['class_ids'] ?? []),
-          consentMap: data['consent_map'] != null
-              ? Map<String, bool>.from(data['consent_map'])
-              : null,
-        );
-        await _storage.saveUser(_user!);
-        notifyListeners();
-      }
-    } catch (_) {}
+      final res = await _api.checkClass(classId);
+      final data = res['data'] as Map<String, dynamic>;
+      return data['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> setGlobalConsent(bool allow) async {
+    try {
+      await _api.setGlobalConsent(allow);
+      _user = _user!.copyWith(consent: allow);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> setClassConsent(String classId, bool allow) async {
+    try {
+      await _api.setConsent(classId, allow);
+      final newMap = Map<String, bool>.from(_user?.consentMap ?? {});
+      newMap[classId] = allow;
+      _user = _user!.copyWith(consentMap: newMap);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> checkVersion() async {
+    try {
+      final res = await _api.checkVersion();
+      return res['data'] as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
   }
 }

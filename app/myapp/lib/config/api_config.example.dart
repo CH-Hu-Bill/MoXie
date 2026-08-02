@@ -1,13 +1,5 @@
 class ApiConfig {
-  static const String baseUrl =
-      'https://your-domain.com/web/app_api.php';
-
-  static const String downloadBaseUrl =
-      'https://your-domain.com/web/';
-
-  static const String uploadBaseUrl =
-      'https://your-domain.com/web/';
-
-  static const Duration requestTimeout = Duration(seconds: 30);
-  static const int tokenExpiryDays = 30;
+  static const String baseUrl = 'http://localhost:8000/web';
+  static const String apiEndpoint = '$baseUrl/app_api.php';
+  static const String appVersion = '1.0.0';
 }
