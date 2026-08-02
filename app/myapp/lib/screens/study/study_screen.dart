@@ -48,6 +48,26 @@ class StudyScreenState extends State<StudyScreen> {
           );
         }
       });
+    } else {
+      final auth = context.read<AuthProvider>();
+      final classId = auth.currentClassId;
+      if (classId != null && classId.isNotEmpty) {
+        _loadWords(classId, reset: true).then((_) {
+          final idx2 = _words.indexWhere(
+            (w) => w.word.toLowerCase() == word.toLowerCase());
+          if (idx2 >= 0) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_wordListScrollController.hasClients) {
+                _wordListScrollController.animateTo(
+                  idx2 * 140.0,
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeInOut,
+                );
+              }
+            });
+          }
+        });
+      }
     }
   }
 

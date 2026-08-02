@@ -79,10 +79,8 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _autoLogin() async {
     final res = await _api.autoLogin();
     final data = res['data'] as Map<String, dynamic>;
-    final consent = _storage.getConsent();
-    if (consent) {
-      data['consent'] = true;
-    }
+    final cachedConsent = _storage.getConsent();
+    data['consent'] = cachedConsent;
     _user = User.fromJson(data);
     await _storage.saveUserId(_user!.id);
     await _storage.saveUserName(_user!.name);

@@ -319,11 +319,14 @@ class _LifeScreenState extends State<LifeScreen> {
       }
       final entry = _personalHistory[_selectedDate!];
       if (entry != null) {
-        return _VlogViewer(
-          entry: entry,
-          isToday: _selectedDate == todayStr,
-          onEdit: () => _startEditing(entry),
-          scrollable: false,
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: _VlogViewer(
+            entry: entry,
+            isToday: _selectedDate == todayStr,
+            onEdit: () => _startEditing(entry),
+            scrollable: false,
+          ),
         );
       }
       if (_selectedDate == todayStr) {
@@ -397,7 +400,10 @@ class _LifeScreenState extends State<LifeScreen> {
     if (entry == null) {
       return const EmptyState(message: '这天没有班级史记', icon: Icons.event_busy);
     }
-    return _VlogViewer(entry: entry, scrollable: false);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: _VlogViewer(entry: entry, scrollable: false),
+    );
   }
 
   Future<void> _saveInline() async {
