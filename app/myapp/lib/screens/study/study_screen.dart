@@ -352,13 +352,14 @@ class StudyScreenState extends State<StudyScreen> {
           final w = _words[i];
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-child: WordCard(
+            child: WordCard(
               word: w.word,
               meaning: w.meaning,
               pos: w.pos,
               isWrong: w.isWrong,
               onToggleWrong: () => _toggleWrong(classId, w),
-            );
+            ),
+          );
         },
       ),
     );

@@ -536,12 +536,12 @@ class WordCard extends StatelessWidget {
         color: highlight ? AppColors.postIt : AppColors.white,
         borderRadius: AppTheme.wobblyRadius,
         border: Border.all(
-          color: _borderColor(),
-          width: _borderWidth(),
+          color: isWrong ? AppColors.red : AppColors.pencil,
+          width: isWrong ? 3 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: _shadowColor(),
+            color: isWrong ? AppColors.red : AppColors.pencil,
             offset: const Offset(3, 3),
             blurRadius: 0,
           ),
