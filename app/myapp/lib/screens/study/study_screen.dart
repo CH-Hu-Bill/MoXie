@@ -143,12 +143,12 @@ class _StudyScreenState extends State<StudyScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.paper,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
-          side: const BorderSide(color: AppColors.border, width: 2),
+          side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
-        title: Text('添加单词', style: AppTheme.headingStyle),
+        title: Text('添加单词', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
         content: Form(
           key: formKey,
           child: Column(
@@ -178,7 +178,7 @@ class _StudyScreenState extends State<StudyScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: AppTheme.bodyStyle),
+            child: Text('取消', style: TextStyle(fontFamily: AppTheme.fontBody)),
           ),
           TextButton(
             onPressed: () async {
@@ -201,7 +201,7 @@ class _StudyScreenState extends State<StudyScreen> {
                 }
               }
             },
-            child: Text('添加', style: AppTheme.bodyStyle),
+            child: Text('添加', style: TextStyle(fontFamily: AppTheme.fontBody)),
           ),
         ],
       ),
@@ -227,12 +227,12 @@ class _StudyScreenState extends State<StudyScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.paper,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
-          side: const BorderSide(color: AppColors.border, width: 2),
+          side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
-        title: Text(title, style: AppTheme.headingStyle),
+        title: Text(title, style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
         content: SizedBox(
           width: double.maxFinite,
           child: TextField(
@@ -245,7 +245,7 @@ class _StudyScreenState extends State<StudyScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('关闭', style: AppTheme.bodyStyle),
+            child: Text('关闭', style: TextStyle(fontFamily: AppTheme.fontBody)),
           ),
         ],
       ),
@@ -258,7 +258,13 @@ class _StudyScreenState extends State<StudyScreen> {
     final classId = auth.currentClassId ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: Text(auth.currentClassName ?? '学习')),
+      appBar: AppBar(
+        title: Text(auth.currentClassName ?? '学习'),
+        backgroundColor: AppColors.white,
+        shape: const Border(
+          bottom: BorderSide(color: AppColors.pencil, width: 3),
+        ),
+      ),
       body: PaperTexture(
         child: Column(
           children: [
@@ -280,8 +286,12 @@ class _StudyScreenState extends State<StudyScreen> {
       floatingActionButton: _mainTab == 0
           ? FloatingActionButton(
               onPressed: () => _showAddWordDialog(classId),
-              backgroundColor: AppColors.accent,
-              child: const Icon(Icons.add, color: Colors.white),
+              backgroundColor: AppColors.pencil,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppTheme.wobblyRadius,
+                side: const BorderSide(color: AppColors.pencil, width: 2),
+              ),
+              child: const Icon(Icons.add, color: AppColors.white),
             )
           : null,
     );
@@ -289,7 +299,7 @@ class _StudyScreenState extends State<StudyScreen> {
 
   Widget _buildWordLibrary(String classId) {
     if (_loading && _words.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: AppColors.red));
     }
     if (_words.isEmpty) {
       return const EmptyState(message: '还没有单词，点击右下角添加');
@@ -311,7 +321,7 @@ class _StudyScreenState extends State<StudyScreen> {
           if (i >= _words.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: CircularProgressIndicator(color: AppColors.red)),
             );
           }
           final w = _words[i];
@@ -322,7 +332,7 @@ class _StudyScreenState extends State<StudyScreen> {
               meaning: w.meaning,
               pos: w.pos,
               isWrong: w.isWrong,
-              onTap: () => _toggleWrong(classId, w),
+              onToggleWrong: () => _toggleWrong(classId, w),
             ),
           );
         },
@@ -360,7 +370,8 @@ class _StudyScreenState extends State<StudyScreen> {
                   meaning: w.meaning,
                   pos: w.pos,
                   isWrong: true,
-                  onTap: () => _toggleWrong(classId, w),
+                  showRemoveButton: true,
+                  onToggleWrong: () => _toggleWrong(classId, w),
                 ),
               );
             },
@@ -423,37 +434,31 @@ class _StudyScreenState extends State<StudyScreen> {
                   Row(
                     children: [
                       Icon(
-                        type == 'pending'
-                            ? Icons.play_circle
-                            : Icons.check_circle,
+                        type == 'pending' ? Icons.play_circle : Icons.check_circle,
                         size: 28,
                         color: type == 'pending'
-                            ? AppColors.secondaryAccent
-                            : AppColors.foreground.withValues(alpha: 0.4),
+                            ? AppColors.blue
+                            : AppColors.pencil.withValues(alpha: 0.4),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           t.label.isNotEmpty ? t.label : '未命名任务',
-                          style: AppTheme.headingStyle.copyWith(fontSize: 20),
+                          style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 20),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: AppColors.postItYellow,
+                          color: AppColors.postIt,
                           borderRadius: AppTheme.wobblyRadius,
-                          border: Border.all(color: AppColors.border),
+                          border: Border.all(color: AppColors.pencil),
                         ),
                         child: Text(
                           '${t.wordCount}词',
-                          style: AppTheme.bodyStyle.copyWith(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
                         ),
                       ),
                     ],
@@ -461,9 +466,10 @@ class _StudyScreenState extends State<StudyScreen> {
                   const SizedBox(height: 8),
                   Text(
                     t.date,
-                    style: AppTheme.bodyStyle.copyWith(
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontBody,
                       fontSize: 15,
-                      color: AppColors.foreground.withValues(alpha: 0.5),
+                      color: AppColors.pencil.withValues(alpha: 0.5),
                     ),
                   ),
                 ],

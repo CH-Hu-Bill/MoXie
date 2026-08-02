@@ -1,23 +1,36 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  static const Color background = Color(0xFFfdfbf7);
-  static const Color foreground = Color(0xFF2d2d2d);
-  static const Color muted = Color(0xFFe5e0d8);
-  static const Color accent = Color(0xFFff4d4d);
-  static const Color border = Color(0xFF2d2d2d);
-  static const Color secondaryAccent = Color(0xFF2d5da1);
-  static const Color postItYellow = Color(0xFFfff9c4);
-  static const Color cardWhite = Color(0xFFFFFFFF);
+  static const Color paper = Color(0xFFfdfbf7);
+  static const Color pencil = Color(0xFF2d2d2d);
+  static const Color red = Color(0xFFff4d4d);
+  static const Color blue = Color(0xFF2d5da1);
+  static const Color oldPaper = Color(0xFFe5e0d8);
+  static const Color white = Color(0xFFFFFFFF);
+  static const Color postIt = Color(0xFFfff9c4);
+
+  static const Color background = paper;
+  static const Color foreground = pencil;
+  static const Color muted = oldPaper;
+  static const Color accent = red;
+  static const Color border = pencil;
+  static const Color secondaryAccent = blue;
+  static const Color cardWhite = white;
+  static const Color postItYellow = postIt;
 }
 
 class AppTheme {
-  static BorderRadius get wobblyRadius => const BorderRadius.all(
-        Radius.elliptical(20, 18),
+  static const String fontHeading = 'ZCOOLKuaiLe';
+  static const String fontBody = 'MaShanZheng';
+
+  static BorderRadius get wobblySm => const BorderRadius.only(
+        topLeft: Radius.circular(128),
+        topRight: Radius.circular(14),
+        bottomLeft: Radius.circular(98),
+        bottomRight: Radius.circular(14),
       );
 
-  static BorderRadius get wobblyRadiusLg => const BorderRadius.only(
+  static BorderRadius get wobblyRadius => const BorderRadius.only(
         topLeft: Radius.circular(255),
         topRight: Radius.circular(15),
         bottomLeft: Radius.circular(225),
@@ -31,78 +44,68 @@ class AppTheme {
         bottomRight: Radius.circular(255),
       );
 
-  static List<BoxShadow> get hardShadow => [
-        const BoxShadow(
-          color: AppColors.foreground,
-          offset: Offset(4, 4),
-          blurRadius: 0,
-        ),
-      ];
-
-  static List<BoxShadow> get hardShadowSm => [
-        const BoxShadow(
-          color: AppColors.foreground,
-          offset: Offset(2, 2),
-          blurRadius: 0,
-        ),
-      ];
-
-  static List<BoxShadow> get hardShadowLg => [
-        const BoxShadow(
-          color: AppColors.foreground,
-          offset: Offset(8, 8),
-          blurRadius: 0,
-        ),
-      ];
-
-  static List<BoxShadow> get softShadow => [
-        BoxShadow(
-          color: AppColors.foreground.withValues(alpha: 0.1),
-          offset: const Offset(3, 3),
-          blurRadius: 0,
-        ),
-      ];
-
-  static TextStyle get headingStyle => GoogleFonts.kalam(
-        fontWeight: FontWeight.w700,
-        color: AppColors.foreground,
+  static BorderRadius get wobblyLg => const BorderRadius.only(
+        topLeft: Radius.circular(255),
+        topRight: Radius.circular(25),
+        bottomLeft: Radius.circular(225),
+        bottomRight: Radius.circular(25),
       );
 
-  static TextStyle get bodyStyle => GoogleFonts.patrickHand(
-        color: AppColors.foreground,
+  static List<BoxShadow> hardShadowSm => const [
+        BoxShadow(color: AppColors.pencil, offset: Offset(3, 3), blurRadius: 0),
+      ];
+
+  static List<BoxShadow> hardShadowMd => const [
+        BoxShadow(color: AppColors.pencil, offset: Offset(4, 4), blurRadius: 0),
+      ];
+
+  static List<BoxShadow> hardShadowLg => const [
+        BoxShadow(color: AppColors.pencil, offset: Offset(6, 6), blurRadius: 0),
+      ];
+
+  static List<BoxShadow> softShadow => const [
+        BoxShadow(color: AppColors.pencil, offset: Offset(3, 3), blurRadius: 0),
+      ];
+
+  static TextStyle get headingStyle => const TextStyle(
+        fontFamily: fontHeading,
+        color: AppColors.pencil,
+      );
+
+  static TextStyle get bodyStyle => const TextStyle(
+        fontFamily: fontBody,
+        color: AppColors.pencil,
       );
 
   static ThemeData get theme {
     return ThemeData(
       useMaterial3: true,
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: AppColors.paper,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.accent,
-        background: AppColors.background,
-        surface: AppColors.cardWhite,
-        primary: AppColors.accent,
-        secondary: AppColors.secondaryAccent,
-        onBackground: AppColors.foreground,
-        onSurface: AppColors.foreground,
+        seedColor: AppColors.red,
+        background: AppColors.paper,
+        surface: AppColors.white,
+        primary: AppColors.red,
+        secondary: AppColors.blue,
+        onBackground: AppColors.pencil,
+        onSurface: AppColors.pencil,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.foreground,
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.pencil,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.kalam(
-          fontSize: 24,
-          fontWeight: FontWeight.w700,
-          color: AppColors.foreground,
+        titleTextStyle: const TextStyle(
+          fontFamily: fontHeading,
+          fontSize: 18,
+          color: AppColors.pencil,
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: AppColors.cardWhite,
-        selectedItemColor: AppColors.accent,
-        unselectedItemColor: AppColors.foreground,
+        backgroundColor: AppColors.white,
+        selectedItemColor: AppColors.red,
+        unselectedItemColor: AppColors.pencil,
         type: BottomNavigationBarType.fixed,
-        selectedIconTheme: IconThemeData(size: 28),
-        unselectedIconTheme: IconThemeData(size: 24),
       ),
       textTheme: TextTheme(
         displayLarge: headingStyle.copyWith(fontSize: 48),
@@ -113,32 +116,33 @@ class AppTheme {
         headlineSmall: headingStyle.copyWith(fontSize: 20),
         titleLarge: headingStyle.copyWith(fontSize: 18),
         titleMedium: headingStyle.copyWith(fontSize: 16),
-        titleSmall: bodyStyle.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
+        titleSmall: bodyStyle.copyWith(fontSize: 14),
         bodyLarge: bodyStyle.copyWith(fontSize: 18),
         bodyMedium: bodyStyle.copyWith(fontSize: 16),
         bodySmall: bodyStyle.copyWith(fontSize: 14),
-        labelLarge: bodyStyle.copyWith(fontSize: 16, fontWeight: FontWeight.bold),
+        labelLarge: bodyStyle.copyWith(fontSize: 16),
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: wobblyRadius,
-          borderSide: const BorderSide(color: AppColors.border, width: 2),
+          borderSide: const BorderSide(color: AppColors.pencil, width: 2),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: wobblyRadius,
-          borderSide: const BorderSide(color: AppColors.border, width: 2),
+          borderSide: const BorderSide(color: AppColors.pencil, width: 2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: wobblyRadius,
-          borderSide: const BorderSide(color: AppColors.secondaryAccent, width: 2.5),
+          borderSide: const BorderSide(color: AppColors.blue, width: 3),
         ),
-        labelStyle: bodyStyle.copyWith(fontSize: 16),
+        labelStyle: bodyStyle.copyWith(fontSize: 15),
         hintStyle: bodyStyle.copyWith(
-          fontSize: 16,
-          color: AppColors.foreground.withValues(alpha: 0.4),
+          fontSize: 15,
+          color: const Color(0xFF999999),
+          fontStyle: FontStyle.italic,
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
     );
   }
@@ -152,7 +156,7 @@ class PaperTexture extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.background,
+      color: AppColors.paper,
       child: CustomPaint(
         painter: _DotPatternPainter(),
         child: child,
@@ -165,12 +169,10 @@ class _DotPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const spacing = 24.0;
-    const dotSize = 1.0;
-    final paint = Paint()..color = AppColors.muted;
-
+    final paint = Paint()..color = AppColors.oldPaper;
     for (double x = 0; x < size.width; x += spacing) {
       for (double y = 0; y < size.height; y += spacing) {
-        canvas.drawCircle(Offset(x, y), dotSize, paint);
+        canvas.drawCircle(Offset(x, y), 1.0, paint);
       }
     }
   }

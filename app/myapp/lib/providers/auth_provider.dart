@@ -6,6 +6,11 @@ import '../services/storage_service.dart';
 
 enum AuthState { initial, authenticated, unauthenticated, loading }
 
+class ClassAuthExpiredException implements Exception {
+  final String message;
+  ClassAuthExpiredException(this.message);
+}
+
 class AuthProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
   final StorageService _storage = StorageService();
@@ -195,6 +200,15 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Called when an API returns CLASS_AUTH_EXPIRED or CLASS_NOT_BOUND.
+  /// Clears the current class and triggers navigation to class selection.
+  Future<void> handleClassAuthExpired() async {
+    _currentClassId = null;
+    _currentClassName = null;
+    await _storage.clearCurrentClassId();
+    notifyListeners();
   }
 
   Future<bool> setGlobalConsent(bool allow) async {

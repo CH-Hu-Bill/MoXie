@@ -32,10 +32,10 @@ class HandDrawnCard extends StatelessWidget {
     final card = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.cardWhite,
+        color: backgroundColor ?? AppColors.white,
         borderRadius: borderRadius ?? AppTheme.wobblyRadius,
         border: Border.all(
-          color: borderColor ?? AppColors.border,
+          color: borderColor ?? AppColors.pencil,
           width: borderWidth,
         ),
         boxShadow: shadows ?? AppTheme.softShadow,
@@ -91,12 +91,12 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
   Widget build(BuildContext context) {
     final isDisabled = widget.onPressed == null;
     final bgColor = isDisabled
-        ? AppColors.muted
+        ? AppColors.oldPaper
         : (widget.backgroundColor ??
-            (widget.isSecondary ? AppColors.muted : AppColors.cardWhite));
+            (widget.isSecondary ? AppColors.oldPaper : AppColors.white));
     final fgColor = isDisabled
-        ? AppColors.foreground.withValues(alpha: 0.4)
-        : (widget.textColor ?? AppColors.foreground);
+        ? AppColors.pencil.withValues(alpha: 0.4)
+        : (widget.textColor ?? AppColors.pencil);
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -108,18 +108,19 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
         transform: _pressed
-            ? Matrix4.translationValues(4, 4, 0)
+            ? Matrix4.translationValues(3, 3, 0)
             : Matrix4.identity(),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: AppTheme.wobblyRadius,
             border: Border.all(
-              color: AppColors.border,
-              width: 3,
+              color: AppColors.pencil,
+              width: 2,
             ),
-            boxShadow: _pressed ? [] : (isDisabled ? null : AppTheme.hardShadow),
+            boxShadow:
+                _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
           ),
           child: Row(
             mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
@@ -132,10 +133,10 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
               Flexible(
                 child: Text(
                   widget.label,
-                  style: AppTheme.bodyStyle.copyWith(
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontHeading,
                     fontSize: widget.fontSize,
                     color: fgColor,
-                    fontWeight: FontWeight.bold,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -178,7 +179,7 @@ class HandDrawnInput extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null) ...[
-          Text(label!, style: AppTheme.bodyStyle.copyWith(fontSize: 16)),
+          Text(label!, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
           const SizedBox(height: 6),
         ],
         TextFormField(
@@ -188,7 +189,7 @@ class HandDrawnInput extends StatelessWidget {
           maxLines: maxLines,
           validator: validator,
           onChanged: onChanged,
-          style: AppTheme.bodyStyle.copyWith(fontSize: 16),
+          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15),
           decoration: InputDecoration(
             hintText: hint,
             suffixIcon: suffix,
@@ -218,7 +219,7 @@ class StickyNote extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: color ?? AppColors.postItYellow,
+          color: color ?? AppColors.postIt,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(4),
             topRight: Radius.circular(4),
@@ -227,7 +228,7 @@ class StickyNote extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.foreground.withValues(alpha: 0.15),
+              color: AppColors.pencil.withValues(alpha: 0.15),
               offset: const Offset(3, 3),
               blurRadius: 0,
             ),
@@ -235,9 +236,10 @@ class StickyNote extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: AppTheme.bodyStyle.copyWith(
+          style: TextStyle(
+            fontFamily: AppTheme.fontHeading,
             fontSize: 16,
-            fontWeight: FontWeight.bold,
+            color: AppColors.pencil,
           ),
         ),
       ),
@@ -253,7 +255,7 @@ class LoadingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.background.withValues(alpha: 0.8),
+      color: AppColors.paper.withValues(alpha: 0.8),
       child: Center(
         child: HandDrawnCard(
           padding: const EdgeInsets.all(24),
@@ -264,13 +266,13 @@ class LoadingOverlay extends StatelessWidget {
                 width: 32,
                 height: 32,
                 child: CircularProgressIndicator(
-                  color: AppColors.accent,
+                  color: AppColors.red,
                   strokeWidth: 3,
                 ),
               ),
               if (message != null) ...[
                 const SizedBox(height: 16),
-                Text(message!, style: AppTheme.bodyStyle.copyWith(fontSize: 16)),
+                Text(message!, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
               ],
             ],
           ),
@@ -298,14 +300,15 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64, color: AppColors.muted),
+            Icon(icon, size: 64, color: AppColors.oldPaper),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: AppTheme.bodyStyle.copyWith(
+              style: TextStyle(
+                fontFamily: AppTheme.fontBody,
                 fontSize: 18,
-                color: AppColors.foreground.withValues(alpha: 0.5),
+                color: AppColors.pencil.withValues(alpha: 0.5),
               ),
             ),
           ],
@@ -333,9 +336,9 @@ class WobblyTabBar extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.muted.withValues(alpha: 0.5),
+        color: AppColors.oldPaper.withValues(alpha: 0.5),
         borderRadius: AppTheme.wobblyRadius,
-        border: Border.all(color: AppColors.border, width: 2),
+        border: Border.all(color: AppColors.pencil, width: 2),
       ),
       child: Row(
         children: List.generate(tabs.length, (i) {
@@ -349,10 +352,10 @@ class WobblyTabBar extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                 decoration: BoxDecoration(
-                  color: selected ? AppColors.cardWhite : Colors.transparent,
+                  color: selected ? AppColors.white : Colors.transparent,
                   borderRadius: AppTheme.wobblyRadius,
                   border: selected
-                      ? Border.all(color: AppColors.border, width: 2)
+                      ? Border.all(color: AppColors.pencil, width: 2)
                       : null,
                   boxShadow: selected ? AppTheme.hardShadowSm : null,
                 ),
@@ -361,12 +364,12 @@ class WobblyTabBar extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTheme.bodyStyle.copyWith(
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontHeading,
                     fontSize: 14,
-                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     color: selected
-                        ? AppColors.accent
-                        : AppColors.foreground.withValues(alpha: 0.6),
+                        ? AppColors.red
+                        : AppColors.pencil.withValues(alpha: 0.6),
                   ),
                 ),
               ),
@@ -378,14 +381,124 @@ class WobblyTabBar extends StatelessWidget {
   }
 }
 
-/// Word card with dynamic font sizing, TTS speaker, and wrong-word indicator.
+/// Auto-scrolling text for long words (marquee effect like web).
+class MarqueeText extends StatefulWidget {
+  final String text;
+  final double fontSize;
+  final TextStyle? style;
+
+  const MarqueeText({
+    super.key,
+    required this.text,
+    this.fontSize = 32,
+    this.style,
+  });
+
+  @override
+  State<MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<MarqueeText>
+    with TickerProviderStateMixin {
+  late ScrollController _controller;
+  bool _scrolling = false;
+  bool _userInteracting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+  }
+
+  void _checkOverflow() {
+    if (!_controller.hasClients) return;
+    final maxScroll = _controller.position.maxScrollExtent;
+    if (maxScroll > 4 && !_scrolling && !_userInteracting) {
+      _startScrolling();
+    }
+  }
+
+  void _startScrolling() {
+    if (!_controller.hasClients) return;
+    setState(() => _scrolling = true);
+    final maxScroll = _controller.position.maxScrollExtent;
+    _controller
+        .animateTo(maxScroll,
+            duration: Duration(milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
+            curve: Curves.easeInOut)
+        .then((_) {
+      if (!_userInteracting && mounted) {
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (!_userInteracting && _controller.hasClients && mounted) {
+            _controller.animateTo(0,
+                duration: Duration(milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
+                curve: Curves.easeInOut);
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(MarqueeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _scrolling = false;
+      _userInteracting = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_controller.hasClients) _controller.jumpTo(0);
+        _checkOverflow();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragStart: (_) {
+        _userInteracting = true;
+        setState(() => _scrolling = false);
+      },
+      onHorizontalDragEnd: (_) {
+        _userInteracting = false;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_userInteracting && mounted) _checkOverflow();
+        });
+      },
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        child: Text(
+          widget.text,
+          style: widget.style ??
+              TextStyle(
+                fontFamily: AppTheme.fontHeading,
+                fontSize: widget.fontSize,
+                color: AppColors.pencil,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Word card with TTS, wrong-word indicator, and action buttons.
 class WordCard extends StatelessWidget {
   final String word;
   final String meaning;
   final String pos;
   final bool isWrong;
+  final bool showRemoveButton;
+  final VoidCallback? onToggleWrong;
   final VoidCallback? onTap;
-  final VoidCallback? onSpeak;
+  final bool highlight;
 
   const WordCard({
     super.key,
@@ -393,138 +506,152 @@ class WordCard extends StatelessWidget {
     required this.meaning,
     this.pos = '',
     this.isWrong = false,
+    this.showRemoveButton = false,
+    this.onToggleWrong,
     this.onTap,
-    this.onSpeak,
+    this.highlight = false,
   });
 
   double _wordFontSize(String text) {
     final len = text.length;
-    if (len > 16) return 16;
-    if (len > 12) return 20;
-    if (len > 9) return 24;
-    if (len > 7) return 28;
-    return 32;
+    if (len > 16) return 18;
+    if (len > 12) return 22;
+    if (len > 9) return 26;
+    if (len > 7) return 30;
+    return 34;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            decoration: BoxDecoration(
-              color: AppColors.cardWhite,
-              borderRadius: AppTheme.wobblyRadius,
-              border: Border.all(
-                color: isWrong ? AppColors.accent : AppColors.border,
-                width: isWrong ? 3 : 2,
-              ),
-              boxShadow: isWrong
-                  ? [
-                      const BoxShadow(
-                        color: AppColors.accent,
-                        offset: Offset(3, 3),
-                        blurRadius: 0,
-                      ),
-                    ]
-                  : AppTheme.softShadow,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Text(
-                          word,
-                          style: AppTheme.headingStyle.copyWith(
-                            fontSize: _wordFontSize(word),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (pos.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.secondaryAccent.withValues(alpha: 0.1),
-                          borderRadius: AppTheme.wobblyRadius,
-                        ),
-                        child: Text(
-                          pos,
-                          style: AppTheme.bodyStyle.copyWith(
-                            fontSize: 13,
-                            color: AppColors.secondaryAccent,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: onSpeak ?? () => TTSService().speak(word),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: AppColors.muted.withValues(alpha: 0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.volume_up,
-                          size: 18,
-                          color: AppColors.secondaryAccent,
-                        ),
-                      ),
-                    ),
-                  ],
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: highlight ? AppColors.postIt : AppColors.white,
+        borderRadius: AppTheme.wobblyRadius,
+        border: Border.all(
+          color: isWrong ? AppColors.red : AppColors.pencil,
+          width: isWrong ? 3 : 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isWrong ? AppColors.red : AppColors.pencil,
+            offset: const Offset(3, 3),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: MarqueeText(
+                  text: word,
+                  fontSize: _wordFontSize(word),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  meaning,
-                  style: AppTheme.bodyStyle.copyWith(
-                    fontSize: 16,
-                    color: AppColors.foreground.withValues(alpha: 0.7),
+              ),
+              if (pos.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.blue.withValues(alpha: 0.1),
+                    borderRadius: AppTheme.wobblyRadius,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  child: Text(
+                    pos,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontHeading,
+                      fontSize: 13,
+                      color: AppColors.blue,
+                    ),
+                  ),
                 ),
               ],
-            ),
+              const SizedBox(width: 4),
+              _buildSpeaker(context),
+              const SizedBox(width: 4),
+              _buildActionButton(),
+            ],
           ),
+          const SizedBox(height: 4),
+          Text(
+            meaning,
+            style: TextStyle(
+              fontFamily: AppTheme.fontBody,
+              fontSize: 16,
+              color: AppColors.pencil.withValues(alpha: 0.7),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpeaker(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        final tts = TTSService();
+        final ok = await tts.speak(word);
+        if (!ok && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(tts.lastError ?? '发音不可用'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          border: Border.all(color: AppColors.pencil, width: 2),
+          borderRadius: AppTheme.wobblySm,
+          boxShadow: AppTheme.hardShadowSm,
         ),
-        if (isWrong)
-          Positioned(
-            top: 0,
-            left: 0,
-            child: Transform.rotate(
-              angle: -8 * pi / 180,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.accent,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    bottomRight: Radius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  '错',
-                  style: AppTheme.bodyStyle.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
+        child: const Icon(Icons.volume_up, size: 16, color: AppColors.blue),
+      ),
+    );
+  }
+
+  Widget _buildActionButton() {
+    if (showRemoveButton) {
+      return GestureDetector(
+        onTap: onToggleWrong,
+        child: Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: AppColors.red,
+            border: Border.all(color: AppColors.pencil, width: 2),
+            borderRadius: AppTheme.wobblySm,
+            boxShadow: AppTheme.hardShadowSm,
           ),
-      ],
+          child: const Icon(Icons.remove, size: 16, color: AppColors.white),
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: onToggleWrong,
+      child: Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: isWrong ? AppColors.red : AppColors.white,
+          border: Border.all(color: AppColors.pencil, width: 2),
+          borderRadius: AppTheme.wobblySm,
+          boxShadow: AppTheme.hardShadowSm,
+        ),
+        child: Icon(
+          isWrong ? Icons.check : Icons.add,
+          size: 16,
+          color: isWrong ? AppColors.white : AppColors.pencil,
+        ),
+      ),
     );
   }
 }

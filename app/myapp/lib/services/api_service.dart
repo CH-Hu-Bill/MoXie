@@ -343,6 +343,14 @@ class ApiService {
     });
   }
 
+  Future<Map<String, dynamic>> getAuthorizedVlogs(String classId,
+      {String? month}) {
+    return _post('get_authorized_vlogs', fields: {
+      'class_id': classId,
+      if (month != null) 'month': month,
+    });
+  }
+
   Future<Map<String, dynamic>> uploadImage(String classId, File file,
       String filename) {
     return _postWithFile(

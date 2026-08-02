@@ -18,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _classExpiredHandled = false;
 
   final _screens = const [
     StudyScreen(),
@@ -43,31 +44,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showClassExpiredDialog() {
+    if (_classExpiredHandled) return;
+    _classExpiredHandled = true;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.paper,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
-          side: const BorderSide(color: AppColors.border, width: 2),
+          side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
-        title: Text('班级口令已变更', style: AppTheme.headingStyle),
-        content: Text(
-          '请重新选择班级并输入口令',
-          style: AppTheme.bodyStyle.copyWith(fontSize: 16),
-        ),
+        title: Text('班级口令已失效', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
+        content: Text('请重新选择班级并输入口令',
+            style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const ClassSelectionScreen(fromHome: true)),
-              );
+              context.read<AuthProvider>().handleClassAuthExpired();
             },
-            child: Text('去选择', style: AppTheme.bodyStyle),
+            child: Text('去选择', style: TextStyle(fontFamily: AppTheme.fontBody)),
           ),
         ],
       ),
@@ -76,6 +73,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+
+    if (auth.currentClassId == null || auth.currentClassId!.isEmpty) {
+      return const ClassSelectionScreen(fromHome: true);
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -83,13 +86,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppColors.cardWhite,
-          border: const Border(
-            top: BorderSide(color: AppColors.border, width: 2),
-          ),
+          color: AppColors.white,
+          border: const Border(top: BorderSide(color: AppColors.pencil, width: 2)),
           boxShadow: [
             BoxShadow(
-              color: AppColors.foreground.withValues(alpha: 0.1),
+              color: AppColors.pencil.withValues(alpha: 0.1),
               offset: const Offset(0, -2),
               blurRadius: 0,
             ),
@@ -97,15 +98,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(0, Icons.menu_book, '学习'),
-                _buildNavItem(1, Icons.edit_note, '生活'),
-                _buildNavItem(2, Icons.search, '搜索'),
-                _buildNavItem(3, Icons.photo_library, '画廊'),
-                _buildNavItem(4, Icons.person, '我的'),
+                _buildNavItem(0, Icons.menu_book),
+                _buildNavItem(1, Icons.edit_note),
+                _buildNavItem(2, Icons.search),
+                _buildNavItem(3, Icons.photo_library),
+                _buildNavItem(4, Icons.person),
               ],
             ),
           ),
@@ -114,38 +115,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label) {
+  Widget _buildNavItem(int index, IconData icon) {
     final selected = _currentIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.postItYellow : Colors.transparent,
+          color: selected ? AppColors.postIt : Colors.transparent,
           borderRadius: AppTheme.wobblyRadius,
-          border: selected
-              ? Border.all(color: AppColors.border, width: 2)
-              : null,
+          border: selected ? Border.all(color: AppColors.pencil, width: 2) : null,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 26,
-              color: selected ? AppColors.accent : AppColors.foreground,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: AppTheme.bodyStyle.copyWith(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                color: selected ? AppColors.accent : AppColors.foreground,
-              ),
-            ),
-          ],
+        child: Icon(
+          icon,
+          size: 28,
+          color: selected ? AppColors.red : AppColors.pencil,
         ),
       ),
     );

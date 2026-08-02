@@ -17,18 +17,20 @@ class LifeScreen extends StatefulWidget {
 }
 
 class _LifeScreenState extends State<LifeScreen> {
-  int _tab = 0;
+  int _tab = 0; // 0=我的, 1=他人, 2=班级
   final _api = ApiService();
 
   Map<String, VlogEntry> _personalHistory = {};
   Map<String, VlogEntry> _classHistory = {};
+  List<Map<String, dynamic>> _authorizedVlogs = [];
   bool _loading = false;
   DateTime _calendarMonth = DateTime.now();
+  String? _selectedDate;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
   Future<void> _loadData() async {
@@ -51,54 +53,78 @@ class _LifeScreenState extends State<LifeScreen> {
       final classData = classRes['data'] as Map<String, dynamic>;
       _classHistory = classData.map((k, v) =>
           MapEntry(k, VlogEntry.fromJson(k, v as Map<String, dynamic>)));
+
+      final vlogsRes = await _api.getAuthorizedVlogs(classId, month: monthStr);
+      _authorizedVlogs = (vlogsRes['data'] as List<dynamic>).cast<Map<String, dynamic>>();
     } catch (_) {}
     setState(() => _loading = false);
   }
 
   void _changeMonth(int delta) {
     setState(() {
-      _calendarMonth = DateTime(
-        _calendarMonth.year,
-        _calendarMonth.month + delta,
-      );
+      _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month + delta);
+      _selectedDate = null;
     });
     _loadData();
+  }
+
+  Map<String, VlogEntry> _currentEntries() {
+    if (_tab == 0) return _personalHistory;
+    if (_tab == 2) return _classHistory;
+    return {};
+  }
+
+  bool _hasEntryOnDate(String dateStr) {
+    if (_tab == 0) return _personalHistory.containsKey(dateStr);
+    if (_tab == 2) return _classHistory.containsKey(dateStr);
+    if (_tab == 1) {
+      for (final author in _authorizedVlogs) {
+        final entries = author['entries'] as Map<String, dynamic>;
+        if (entries.containsKey(dateStr)) return true;
+      }
+    }
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final today = DateTime.now();
+    final todayStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
     return Scaffold(
-      appBar: AppBar(title: Text(auth.currentClassName ?? '生活')),
+      appBar: AppBar(
+        title: Text(auth.currentClassName ?? '生活'),
+        backgroundColor: AppColors.white,
+        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+      ),
       body: PaperTexture(
         child: Column(
           children: [
             WobblyTabBar(
-              tabs: const ['我的史记', '班级史记'],
+              tabs: const ['我的', '他人', '班级'],
               selectedIndex: _tab,
-              onTap: (i) => setState(() => _tab = i),
+              onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
             ),
-            Expanded(
-              child: _tab == 0
-                  ? _buildCalendarView(_personalHistory, true)
-                  : _buildCalendarView(_classHistory, false),
-            ),
+            _buildCalendar(),
+            Expanded(child: _buildContentArea(todayStr)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCalendarView(
-      Map<String, VlogEntry> entries, bool canEdit) {
-    final today = DateTime.now();
-    final todayStr =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+  Widget _buildCalendar() {
+    final firstDay = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
+    final daysInMonth =
+        DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0).day;
+    final firstWeekday = firstDay.weekday % 7;
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -108,7 +134,7 @@ class _LifeScreenState extends State<LifeScreen> {
               ),
               Text(
                 '${_calendarMonth.year}年${_calendarMonth.month}月',
-                style: AppTheme.headingStyle.copyWith(fontSize: 22),
+                style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right, size: 28),
@@ -117,9 +143,99 @@ class _LifeScreenState extends State<LifeScreen> {
             ],
           ),
         ),
-        if (canEdit && entries[todayStr] == null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              childAspectRatio: 0.9,
+            ),
+            itemCount: 7 + firstWeekday + daysInMonth,
+            itemBuilder: (ctx, i) {
+              if (i < 7) {
+                const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+                return Center(
+                  child: Text(weekDays[i],
+                      style: TextStyle(
+                          fontFamily: AppTheme.fontBody,
+                          fontSize: 14,
+                          color: AppColors.pencil.withValues(alpha: 0.5))),
+                );
+              }
+              final dayIndex = i - 7 - firstWeekday;
+              if (dayIndex < 0) return const SizedBox();
+              final d = dayIndex + 1;
+              final dateStr =
+                  '${_calendarMonth.year}-${_calendarMonth.month.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+              final hasEntry = _hasEntryOnDate(dateStr);
+              final isSelected = dateStr == _selectedDate;
+
+              return GestureDetector(
+                onTap: hasEntry || (_tab == 0 && dateStr == _todayStr())
+                    ? () => setState(() => _selectedDate = dateStr)
+                    : null,
+                child: Container(
+                  margin: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.postIt
+                        : hasEntry
+                            ? AppColors.white
+                            : AppColors.oldPaper.withValues(alpha: 0.3),
+                    borderRadius: AppTheme.wobblyRadius,
+                    border: hasEntry || isSelected
+                        ? Border.all(color: AppColors.pencil, width: 2)
+                        : null,
+                    boxShadow: hasEntry || isSelected ? AppTheme.hardShadowSm : null,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '$d',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBody,
+                          fontSize: 16,
+                          color: hasEntry || isSelected
+                              ? AppColors.pencil
+                              : AppColors.pencil.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      if (hasEntry)
+                        const Icon(Icons.fiber_manual_record,
+                            size: 6, color: AppColors.red),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _todayStr() {
+    final today = DateTime.now();
+    return '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildContentArea(String todayStr) {
+    if (_selectedDate == null) {
+      return const EmptyState(
+        message: '请在上方日历选择日期',
+        icon: Icons.calendar_today_outlined,
+      );
+    }
+
+    if (_tab == 0) {
+      final entry = _personalHistory[_selectedDate!];
+      if (entry == null && _selectedDate == todayStr) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: HandDrawnButton(
               label: '写今天的史记',
               icon: Icons.edit,
@@ -127,122 +243,86 @@ class _LifeScreenState extends State<LifeScreen> {
               onPressed: () => _openEditor(todayStr, null),
             ),
           ),
-        if (canEdit && entries[todayStr] != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: HandDrawnButton(
-                    label: '编辑今天的史记',
-                    icon: Icons.edit,
-                    isSecondary: true,
-                    fullWidth: true,
-                    onPressed: () =>
-                        _openEditor(todayStr, entries[todayStr]),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _buildCalendarGrid(entries, todayStr),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCalendarGrid(
-      Map<String, VlogEntry> entries, String todayStr) {
-    final firstDay =
-        DateTime(_calendarMonth.year, _calendarMonth.month, 1);
-    final daysInMonth =
-        DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0).day;
-    final firstWeekday = firstDay.weekday % 7;
-
-    final days = <Widget>[];
-    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-    for (final wd in weekDays) {
-      days.add(Center(
-        child: Text(wd,
-            style: AppTheme.bodyStyle.copyWith(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.foreground.withValues(alpha: 0.5),
-            )),
-      ));
-    }
-
-    for (int i = 0; i < firstWeekday; i++) {
-      days.add(const SizedBox());
-    }
-
-    for (int d = 1; d <= daysInMonth; d++) {
-      final dateStr =
-          '${_calendarMonth.year}-${_calendarMonth.month.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
-      final hasEntry = entries.containsKey(dateStr);
-      final isToday = dateStr == todayStr;
-      final isPast = dateStr.compareTo(todayStr) < 0;
-
-      days.add(GestureDetector(
-        onTap: hasEntry
-            ? () => _openViewer(dateStr, entries[dateStr]!)
-            : null,
-        child: Container(
-          margin: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: hasEntry
-                ? (isToday
-                    ? AppColors.postItYellow
-                    : AppColors.cardWhite)
-                : AppColors.muted.withValues(alpha: 0.3),
-            borderRadius: AppTheme.wobblyRadius,
-            border: hasEntry
-                ? Border.all(color: AppColors.border, width: 2)
-                : null,
-            boxShadow: hasEntry ? AppTheme.hardShadowSm : null,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '$d',
-                style: AppTheme.bodyStyle.copyWith(
-                  fontSize: 16,
-                  fontWeight: hasEntry ? FontWeight.bold : FontWeight.normal,
-                  color: hasEntry
-                      ? AppColors.foreground
-                      : AppColors.foreground.withValues(alpha: 0.3),
-                ),
+        );
+      }
+      if (entry == null) {
+        return const EmptyState(message: '这天没有记录', icon: Icons.event_busy);
+      }
+      return Column(
+        children: [
+          if (_selectedDate == todayStr)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: HandDrawnButton(
+                label: '编辑今天的史记',
+                icon: Icons.edit,
+                isSecondary: true,
+                fullWidth: true,
+                onPressed: () => _openEditor(todayStr, entry),
               ),
-              if (hasEntry)
-                Icon(Icons.fiber_manual_record,
-                    size: 8, color: AppColors.accent),
-            ],
-          ),
-        ),
-      ));
+            ),
+          Expanded(child: _VlogViewer(entry: entry)),
+        ],
+      );
     }
 
-    return GridView.count(
-      crossAxisCount: 7,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      childAspectRatio: 0.9,
-      shrinkWrap: true,
-      children: days,
-    );
-  }
+    if (_tab == 1) {
+      final authors = _authorizedVlogs.where((a) {
+        final entries = a['entries'] as Map<String, dynamic>;
+        return entries.containsKey(_selectedDate!);
+      }).toList();
 
-  void _openViewer(String date, VlogEntry entry) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _VlogViewerScreen(entry: entry, date: date),
-      ),
-    );
+      if (authors.isEmpty) {
+        return const EmptyState(message: '当天没有授权用户的史记', icon: Icons.people_outline);
+      }
+
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: authors.length,
+        itemBuilder: (ctx, i) {
+          final author = authors[i];
+          final entries = author['entries'] as Map<String, dynamic>;
+          final entry = VlogEntry.fromJson(
+              _selectedDate!, entries[_selectedDate!] as Map<String, dynamic>);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: HandDrawnCard(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: Text('${author['author_name']} - $_selectedDate')),
+                      body: PaperTexture(child: _VlogViewer(entry: entry)),
+                    ),
+                  ),
+                );
+              },
+              child: Row(
+                children: [
+                  const Icon(Icons.person, size: 28, color: AppColors.blue),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      author['author_name'] as String,
+                      style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 18),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    // tab == 2, class history
+    final entry = _classHistory[_selectedDate!];
+    if (entry == null) {
+      return const EmptyState(message: '这天没有班级史记', icon: Icons.event_busy);
+    }
+    return _VlogViewer(entry: entry);
   }
 
   void _openEditor(String date, VlogEntry? existing) {
@@ -259,96 +339,88 @@ class _LifeScreenState extends State<LifeScreen> {
   }
 }
 
-class _VlogViewerScreen extends StatelessWidget {
+class _VlogViewer extends StatelessWidget {
   final VlogEntry entry;
-  final String date;
 
-  const _VlogViewerScreen({required this.entry, required this.date});
+  const _VlogViewer({required this.entry});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(date)),
-      body: PaperTexture(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: HandDrawnCard(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: HandDrawnCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (entry.title.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(entry.title,
+                    style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 24)),
+              ),
+            Row(
               children: [
-                if (entry.title.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      entry.title,
-                      style: AppTheme.headingStyle.copyWith(fontSize: 24),
-                    ),
-                  ),
-                Row(
-                  children: [
-                    if (entry.mood.isNotEmpty)
-                      _buildMetaChip(entry.mood),
-                    if (entry.weather.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      _buildMetaChip(entry.weather),
-                    ],
-                    if (entry.location.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      _buildMetaChip(entry.location),
-                    ],
-                  ],
-                ),
-                if (entry.tags.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: entry.tags
-                        .map((t) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondaryAccent
-                                    .withValues(alpha: 0.1),
-                                borderRadius: AppTheme.wobblyRadius,
-                              ),
-                              child: Text('#$t',
-                                  style: AppTheme.bodyStyle.copyWith(
-                                      fontSize: 14,
-                                      color: AppColors.secondaryAccent)),
-                            ))
-                        .toList(),
-                  ),
-                ],
-                const Divider(height: 24, thickness: 2),
-                HtmlWidget(
-                  entry.content,
-                  textStyle: AppTheme.bodyStyle.copyWith(fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '更新于 ${entry.updatedAt}',
-                  style: AppTheme.bodyStyle.copyWith(
-                    fontSize: 13,
-                    color: AppColors.foreground.withValues(alpha: 0.4),
-                  ),
-                ),
+                if (entry.mood.isNotEmpty) _buildChip(entry.mood),
+                if (entry.weather.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.weather)],
+                if (entry.location.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.location)],
               ],
             ),
-          ),
+            if (entry.tags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: entry.tags
+                    .map((t) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.blue.withValues(alpha: 0.1),
+                            borderRadius: AppTheme.wobblyRadius,
+                          ),
+                          child: Text('#$t',
+                              style: TextStyle(
+                                  fontFamily: AppTheme.fontBody,
+                                  fontSize: 14,
+                                  color: AppColors.blue)),
+                        ))
+                    .toList(),
+              ),
+            ],
+            const Divider(height: 24, thickness: 2),
+            HtmlWidget(
+              entry.content,
+              textStyle: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16),
+              customWidgetBuilder: (element) {
+                if (element.localName == 'img') {
+                  final src = element.attributes['src'] ?? '';
+                  final fullSrc = src.startsWith('http')
+                      ? src
+                      : ApiService().resolveImageUrl(src);
+                  return Image.network(fullSrc, fit: BoxFit.contain);
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            Text('更新于 ${entry.updatedAt}',
+                style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 13,
+                    color: AppColors.pencil.withValues(alpha: 0.4))),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMetaChip(String label) {
+  Widget _buildChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.postItYellow,
+        color: AppColors.postIt,
         borderRadius: AppTheme.wobblyRadius,
       ),
-      child: Text(label, style: AppTheme.bodyStyle.copyWith(fontSize: 14)),
+      child: Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
     );
   }
 }
@@ -400,8 +472,7 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
 
   void _extractImagesFromContent(String html) {
     final imgRegex = RegExp(r'<img[^>]+src="([^"]+)"');
-    final matches = imgRegex.allMatches(html);
-    for (final m in matches) {
+    for (final m in imgRegex.allMatches(html)) {
       _imageUrls.add(m.group(1)!);
     }
   }
@@ -427,17 +498,13 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
       }
     }
     for (final url in _imageUrls) {
-      final fullUrl = url.startsWith('http') ? url : url;
-      htmlParts.add('<p><img src="$fullUrl"></p>');
+      htmlParts.add('<p><img src="$url"></p>');
     }
     return htmlParts.join('');
   }
 
   String _escapeHtml(String text) {
-    return text
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
+    return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   }
 
   Future<void> _pickImage() async {
@@ -453,8 +520,7 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
     try {
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId!;
-      final res =
-          await _api.uploadImage(classId, File(image.path), image.name);
+      final res = await _api.uploadImage(classId, File(image.path), image.name);
       final url = res['data']['url'] as String;
       setState(() {
         _imageUrls.add(url);
@@ -516,108 +582,29 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('编辑 ${widget.date}'),
+        backgroundColor: AppColors.white,
+        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.check),
-            onPressed: _saving ? null : _save,
-          ),
+          IconButton(icon: const Icon(Icons.check), onPressed: _saving ? null : _save),
         ],
       ),
       body: PaperTexture(
-        child: _saving && _imageUrls.length == _imageUrls.length
+        child: _saving
             ? const LoadingOverlay(message: '保存中...')
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    HandDrawnInput(
-                      label: '标题',
-                      hint: '给今天起个标题',
-                      controller: _titleCtrl,
-                    ),
+                    HandDrawnInput(label: '标题', hint: '给今天起个标题', controller: _titleCtrl),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('心情', style: AppTheme.bodyStyle),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 8,
-                                children: _moods.map((m) {
-                                  final selected = m == _mood;
-                                  return GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _mood = m),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? AppColors.postItYellow
-                                            : AppColors.cardWhite,
-                                        borderRadius:
-                                            AppTheme.wobblyRadius,
-                                        border: Border.all(
-                                          color: AppColors.border,
-                                          width: selected ? 2.5 : 1.5,
-                                        ),
-                                      ),
-                                      child: Text(m, style: const TextStyle(fontSize: 20)),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildSelector('心情', _moods, _mood, (v) => setState(() => _mood = v)),
                     const SizedBox(height: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('天气', style: AppTheme.bodyStyle),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          children: _weathers.map((w) {
-                            final selected = w == _weather;
-                            return GestureDetector(
-                              onTap: () => setState(() => _weather = w),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? AppColors.postItYellow
-                                      : AppColors.cardWhite,
-                                  borderRadius: AppTheme.wobblyRadius,
-                                  border: Border.all(
-                                    color: AppColors.border,
-                                    width: selected ? 2.5 : 1.5,
-                                  ),
-                                ),
-                                child: Text(w, style: const TextStyle(fontSize: 20)),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
+                    _buildSelector('天气', _weathers, _weather, (v) => setState(() => _weather = v)),
                     const SizedBox(height: 16),
-                    HandDrawnInput(
-                      label: '位置',
-                      hint: '你在哪里？',
-                      controller: _locationCtrl,
-                    ),
+                    HandDrawnInput(label: '位置', hint: '你在哪里？', controller: _locationCtrl),
                     const SizedBox(height: 16),
-                    HandDrawnInput(
-                      label: '标签',
-                      hint: '用逗号分隔',
-                      controller: _tagsCtrl,
-                    ),
+                    HandDrawnInput(label: '标签', hint: '用逗号分隔', controller: _tagsCtrl),
                     const SizedBox(height: 16),
                     HandDrawnInput(
                       label: '内容',
@@ -627,7 +614,7 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
                     ),
                     const SizedBox(height: 16),
                     if (_imageUrls.isNotEmpty) ...[
-                      Text('图片', style: AppTheme.bodyStyle),
+                      Text('图片', style: TextStyle(fontFamily: AppTheme.fontBody)),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -638,32 +625,21 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
                             children: [
                               ClipRRect(
                                 borderRadius: AppTheme.wobblyRadius,
-                                child: Image.network(
-                                  url,
-                                  width: 100,
-                                  height: 100,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 100,
-                                    height: 100,
-                                    color: AppColors.muted,
-                                    child: const Icon(Icons.broken_image),
-                                  ),
-                                ),
+                                child: Image.network(url,
+                                    width: 100, height: 100, fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: 100, height: 100, color: AppColors.oldPaper,
+                                      child: const Icon(Icons.broken_image))),
                               ),
                               Positioned(
-                                top: 0,
-                                right: 0,
+                                top: 0, right: 0,
                                 child: GestureDetector(
                                   onTap: () => _removeImage(i),
                                   child: Container(
                                     padding: const EdgeInsets.all(2),
                                     decoration: const BoxDecoration(
-                                      color: AppColors.accent,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.close,
-                                        size: 16, color: Colors.white),
+                                      color: AppColors.red, shape: BoxShape.circle),
+                                    child: const Icon(Icons.close, size: 16, color: AppColors.white),
                                   ),
                                 ),
                               ),
@@ -692,6 +668,37 @@ class _VlogEditorScreenState extends State<_VlogEditorScreen> {
                 ),
               ),
       ),
+    );
+  }
+
+  Widget _buildSelector(String label, List<String> options, String selected, ValueChanged<String> onTap) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: options.map((opt) {
+            final isSelected = opt == selected;
+            return GestureDetector(
+              onTap: () => onTap(opt),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.postIt : AppColors.white,
+                  borderRadius: AppTheme.wobblyRadius,
+                  border: Border.all(
+                    color: AppColors.pencil,
+                    width: isSelected ? 3 : 2,
+                  ),
+                ),
+                child: Text(opt, style: const TextStyle(fontSize: 20)),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }

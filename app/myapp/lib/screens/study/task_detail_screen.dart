@@ -8,12 +8,14 @@ class TaskDetailScreen extends StatefulWidget {
   final String classId;
   final String taskId;
   final String taskLabel;
+  final String? highlightQuery;
 
   const TaskDetailScreen({
     super.key,
     required this.classId,
     required this.taskId,
     required this.taskLabel,
+    this.highlightQuery,
   });
 
   @override
@@ -83,12 +85,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.background,
+          backgroundColor: AppColors.paper,
           shape: RoundedRectangleBorder(
             borderRadius: AppTheme.wobblyRadius,
-            side: const BorderSide(color: AppColors.border, width: 2),
+            side: const BorderSide(color: AppColors.pencil, width: 2),
           ),
-          title: Text('导出文本', style: AppTheme.headingStyle),
+          title: Text('导出文本', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
           content: SizedBox(
             width: double.maxFinite,
             child: TextField(
@@ -100,7 +102,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('关闭', style: AppTheme.bodyStyle),
+              child: Text('关闭', style: TextStyle(fontFamily: AppTheme.fontBody)),
             ),
           ],
         ),
@@ -114,22 +116,27 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
+  bool _shouldHighlight(Word w) {
+    if (widget.highlightQuery == null || widget.highlightQuery!.isEmpty) return false;
+    final q = widget.highlightQuery!.toLowerCase();
+    return w.word.toLowerCase().contains(q) ||
+        w.meaning.toLowerCase().contains(q);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.taskLabel.isNotEmpty ? widget.taskLabel : '任务详情'),
+        backgroundColor: AppColors.white,
+        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.copy),
-            tooltip: '导出文本',
-            onPressed: _exportText,
-          ),
+          IconButton(icon: const Icon(Icons.copy), tooltip: '导出文本', onPressed: _exportText),
         ],
       ),
       body: PaperTexture(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: AppColors.red))
             : _error != null
                 ? Center(child: EmptyState(message: _error!))
                 : ListView.builder(
@@ -140,43 +147,29 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: HandDrawnCard(
-                            backgroundColor: AppColors.postItYellow,
+                            backgroundColor: AppColors.postIt,
                             child: Row(
                               children: [
-                                const Icon(Icons.event,
-                                    color: AppColors.foreground),
+                                const Icon(Icons.event, color: AppColors.pencil),
                                 const SizedBox(width: 8),
                                 Flexible(
-                                  child: Text(
-                                    _date,
-                                    style: AppTheme.headingStyle
-                                        .copyWith(fontSize: 20),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                  child: Text(_date,
+                                      style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 20),
+                                      overflow: TextOverflow.ellipsis),
                                 ),
                                 const Spacer(),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: _status == 'pending'
-                                        ? AppColors.secondaryAccent
-                                            .withValues(alpha: 0.15)
-                                        : AppColors.muted,
+                                        ? AppColors.blue.withValues(alpha: 0.15)
+                                        : AppColors.oldPaper,
                                     borderRadius: AppTheme.wobblyRadius,
-                                    border: Border.all(
-                                        color: AppColors.border),
+                                    border: Border.all(color: AppColors.pencil),
                                   ),
                                   child: Text(
-                                    _status == 'pending'
-                                        ? '进行中'
-                                        : _status == 'completed'
-                                            ? '已完成'
-                                            : '已取消',
-                                    style: AppTheme.bodyStyle.copyWith(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    _status == 'pending' ? '进行中' : _status == 'completed' ? '已完成' : '已取消',
+                                    style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
                                   ),
                                 ),
                               ],
@@ -192,7 +185,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           meaning: w.meaning,
                           pos: w.pos,
                           isWrong: w.isWrong,
-                          onTap: () => _toggleWrong(w),
+                          highlight: _shouldHighlight(w),
+                          onToggleWrong: () => _toggleWrong(w),
                         ),
                       );
                     },

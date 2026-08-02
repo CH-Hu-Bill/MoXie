@@ -8,7 +8,10 @@ import '../../widgets/hand_drawn.dart';
 import '../study/task_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final String? initialQuery;
+  final String? highlightWord;
+
+  const SearchScreen({super.key, this.initialQuery, this.highlightWord});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -20,6 +23,15 @@ class _SearchScreenState extends State<SearchScreen> {
   SearchResult? _result;
   bool _loading = false;
   bool _searched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialQuery != null) {
+      _controller.text = widget.initialQuery!;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _search());
+    }
+  }
 
   Future<void> _search() async {
     final query = _controller.text.trim();
@@ -63,7 +75,11 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      appBar: AppBar(title: Text(auth.currentClassName ?? '搜索')),
+      appBar: AppBar(
+        title: Text(auth.currentClassName ?? '搜索'),
+        backgroundColor: AppColors.white,
+        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+      ),
       body: PaperTexture(
         child: Column(
           children: [
@@ -104,12 +120,9 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.red))
                   : !_searched
-                      ? const EmptyState(
-                          message: '输入关键词开始搜索',
-                          icon: Icons.search,
-                        )
+                      ? const EmptyState(message: '输入关键词开始搜索', icon: Icons.search)
                       : _result == null || _result!.total == 0
                           ? const EmptyState(
                               message: '没有找到结果',
@@ -128,7 +141,7 @@ class _SearchScreenState extends State<SearchScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         if (_result!.words.isNotEmpty) ...[
-          StickyNote(text: '单词 (${_result!.words.length})'),
+          const StickyNote(text: '单词'),
           const SizedBox(height: 8),
           ..._result!.words.map((w) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -136,22 +149,19 @@ class _SearchScreenState extends State<SearchScreen> {
                   word: w.word,
                   meaning: w.meaning,
                   pos: w.pos,
+                  highlight: true,
                 ),
               )),
           const SizedBox(height: 16),
         ],
         if (_result!.pendingTasks.isNotEmpty) ...[
-          StickyNote(
-              text: '进行中任务 (${_result!.pendingTasks.length})',
-              color: AppColors.postItYellow),
+          StickyNote(text: '进行中任务', color: AppColors.postIt),
           const SizedBox(height: 8),
           ..._result!.pendingTasks.map((t) => _buildTaskCard(t, 'pending')),
           const SizedBox(height: 16),
         ],
         if (_result!.historyTasks.isNotEmpty) ...[
-          StickyNote(
-              text: '历史任务 (${_result!.historyTasks.length})',
-              color: AppColors.postItYellow),
+          StickyNote(text: '历史任务', color: AppColors.postIt),
           const SizedBox(height: 8),
           ..._result!.historyTasks.map((t) => _buildTaskCard(t, 'history')),
         ],
@@ -161,6 +171,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildTaskCard(TaskMatch task, String type) {
     final auth = context.read<AuthProvider>();
+    final query = _controller.text.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: HandDrawnCard(
@@ -172,6 +183,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 classId: auth.currentClassId!,
                 taskId: task.id,
                 taskLabel: task.label,
+                highlightQuery: query,
               ),
             ),
           );
@@ -185,38 +197,35 @@ class _SearchScreenState extends State<SearchScreen> {
                   type == 'pending' ? Icons.play_circle : Icons.history,
                   size: 24,
                   color: type == 'pending'
-                      ? AppColors.secondaryAccent
-                      : AppColors.foreground.withValues(alpha: 0.4),
+                      ? AppColors.blue
+                      : AppColors.pencil.withValues(alpha: 0.4),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     task.label.isNotEmpty ? task.label : '未命名任务',
-                    style: AppTheme.headingStyle.copyWith(fontSize: 18),
+                    style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 18),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text(
-                  task.date,
-                  style: AppTheme.bodyStyle.copyWith(
-                    fontSize: 14,
-                    color: AppColors.foreground.withValues(alpha: 0.5),
-                  ),
-                ),
+                Text(task.date,
+                    style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        fontSize: 14,
+                        color: AppColors.pencil.withValues(alpha: 0.5))),
               ],
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               children: task.matchedWords.map((w) {
-                final query = _controller.text.trim();
                 return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.1),
+                    color: AppColors.postIt,
                     borderRadius: AppTheme.wobblyRadius,
+                    border: Border.all(color: AppColors.pencil, width: 1.5),
                   ),
                   child: _highlightText(w.word, query),
                 );
@@ -233,19 +242,19 @@ class _SearchScreenState extends State<SearchScreen> {
     final lowerQuery = query.toLowerCase();
     final idx = lowerText.indexOf(lowerQuery);
     if (idx < 0) {
-      return Text(text,
-          style: AppTheme.bodyStyle.copyWith(fontSize: 14));
+      return Text(text, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14));
     }
     return RichText(
       text: TextSpan(
-        style: AppTheme.bodyStyle.copyWith(fontSize: 14),
+        style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
         children: [
           TextSpan(text: text.substring(0, idx)),
           TextSpan(
             text: text.substring(idx, idx + query.length),
-            style: AppTheme.bodyStyle.copyWith(
+            style: TextStyle(
+              fontFamily: AppTheme.fontBody,
               fontSize: 14,
-              color: AppColors.accent,
+              color: AppColors.red,
               fontWeight: FontWeight.bold,
             ),
           ),
