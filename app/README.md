@@ -2,9 +2,11 @@
 
 ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 
+> **注意**：GitHub Actions 自动构建的 APK 是**示例版本**，内置 API 请求地址为 `http://localhost:8000`，仅用于本地开发测试。如需连接真实服务器，请自行按下方步骤配置 API 地址后重新打包。
+
 ## 技术栈
 
-- **Flutter** 3.x（Dart 3.12+）
+- **Flutter** 3.x（Dart 3.5+）
 - **状态管理**：Provider
 - **HTTP 请求**：http
 - **本地存储**：SharedPreferences
@@ -67,6 +69,8 @@ lib/
 提交代码到 main 分支后，GitHub Actions 自动构建 APK。
 
 构建产物在 Actions → Build APK → Artifacts 下载。
+
+> **⚠️ CI 构建的 APK 默认连接 `localhost:8000`，仅供本地测试。** 如需连接正式服务器，请修改 `lib/config/api_config.dart` 中的 `baseUrl` 后重新打包。
 
 ## 与后端的对接
 
