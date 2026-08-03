@@ -51,6 +51,12 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > moxie.jks
+            cat > key.properties <<EOF
+          storePassword=${{ secrets.KEY_STORE_PASS }}
+          keyPassword=${{ secrets.KEY_KEY_PASS }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=moxie.jks
+          EOF
             echo "Keystore decoded"
           else
             echo "No KEYSTORE_BASE64 secret set, using debug signing"
