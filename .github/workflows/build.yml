@@ -52,9 +52,9 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > moxie.jks
             cat > key.properties <<EOF
-          storePassword=${{ secrets.KEY_STORE_PASS }}
-          keyPassword=${{ secrets.KEY_KEY_PASS }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
+          storePassword=billhandsome
+          keyPassword=billhandsome
+          keyAlias=hu
           storeFile=moxie.jks
           EOF
             echo "Keystore decoded"

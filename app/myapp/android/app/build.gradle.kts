@@ -4,11 +4,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
 fun loadKeystoreProperties(): Map<String, String> {
-    val props = java.util.Properties()
+    val props = Properties()
     val propFile = rootProject.file("key.properties")
     if (propFile.exists()) {
-        props.load(java.io.FileInputStream(propFile))
+        props.load(FileInputStream(propFile))
     }
     return mapOf(
         "storeFile" to (props.getProperty("storeFile") ?: ""),
