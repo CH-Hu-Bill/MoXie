@@ -16,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -26,11 +27,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    setState(() => _loading = true);
     final auth = context.read<AuthProvider>();
     await auth.login(
       _usernameController.text.trim(),
       _passwordController.text,
     );
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -122,10 +125,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         HandDrawnButton(
-                          label: auth.authState == AuthState.loading
+                          label: _loading
                               ? '登录中...'
                               : '登录 / 注册',
-                          onPressed: auth.authState == AuthState.loading
+                          onPressed: _loading
                               ? null
                               : _submit,
                           fullWidth: true,

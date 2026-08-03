@@ -23,6 +23,7 @@ class LifeScreenState extends State<LifeScreen> {
     setState(() {
       _selectedDate = null;
       _isEditing = false;
+      _viewMode = false;
     });
     _loadData();
   }
@@ -36,6 +37,7 @@ class LifeScreenState extends State<LifeScreen> {
   DateTime _calendarMonth = DateTime.now();
   String? _selectedDate;
   bool _isEditing = false;
+  bool _viewMode = false;
   final _editTitleCtrl = TextEditingController();
   final _editLocationCtrl = TextEditingController();
   final _editTagsCtrl = TextEditingController();
@@ -123,6 +125,7 @@ class LifeScreenState extends State<LifeScreen> {
     setState(() {
       _selectedDate = dateStr;
       _isEditing = false;
+      _viewMode = false;
     });
     if (_tab == 0) {
       final entry = _personalHistory[dateStr];
@@ -313,6 +316,17 @@ class LifeScreenState extends State<LifeScreen> {
       }
       final entry = _personalHistory[_selectedDate!];
       final isToday = _selectedDate == todayStr;
+      if (isToday && _viewMode && entry != null) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: _VlogViewer(
+            entry: entry,
+            isToday: true,
+            onEdit: () => setState(() { _isEditing = true; _viewMode = false; _startEditing(entry); }),
+            scrollable: false,
+          ),
+        );
+      }
       if (isToday) {
         return _buildInlineEditor();
       }
@@ -424,6 +438,7 @@ class LifeScreenState extends State<LifeScreen> {
       });
       setState(() {
         _isEditing = false;
+        _viewMode = true;
       });
       _loadData();
       if (mounted) {

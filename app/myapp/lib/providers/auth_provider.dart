@@ -106,7 +106,6 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> login(String username, String password) async {
-    _authState = AuthState.loading;
     _setError(null);
     notifyListeners();
     try {

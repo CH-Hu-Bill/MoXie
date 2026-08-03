@@ -67,7 +67,16 @@ class RichTextEditorState extends State<RichTextEditor> {
           ),
         ),
       );
-      return converter.convert();
+      String html = converter.convert();
+      html = html.replaceAllMapped(
+        RegExp(r'<span class="ql-color-([a-fA-F0-9]{3,8})">'),
+        (m) => '<span style="color: #${m.group(1)}">',
+      );
+      html = html.replaceAllMapped(
+        RegExp(r'<span class="ql-background-([a-fA-F0-9]{3,8})">'),
+        (m) => '<span style="background-color: #${m.group(1)}">',
+      );
+      return html;
     } catch (_) {
       return '';
     }
