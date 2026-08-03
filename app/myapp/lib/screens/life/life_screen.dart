@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart' hide ImageSource;
@@ -49,10 +50,15 @@ class LifeScreenState extends State<LifeScreen> {
   static const _moods = ['😊', '🥰', '😌', '😢', '😤', '🤩', '😴'];
   static const _weathers = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '🌨️', '🌬️'];
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!_isEditing) _loadData();
+    });
   }
 
   @override
@@ -60,6 +66,7 @@ class LifeScreenState extends State<LifeScreen> {
     _editTitleCtrl.dispose();
     _editLocationCtrl.dispose();
     _editTagsCtrl.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -180,17 +187,22 @@ class LifeScreenState extends State<LifeScreen> {
       body: PaperTexture(
         child: _loading
             ? const LoadingOverlay(message: '加载中...')
-            : SingleChildScrollView(
-                child: Column(
-                  children: [
-                    WobblyTabBar(
-                      tabs: const ['我的', '他人', '班级'],
-                      selectedIndex: _tab,
-                      onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
-                    ),
-                    _buildCalendar(),
-                    _buildContentArea(todayStr),
-                  ],
+            : RefreshIndicator(
+                onRefresh: _loadData,
+                color: AppColors.red,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    children: [
+                      WobblyTabBar(
+                        tabs: const ['我的', '他人', '班级'],
+                        selectedIndex: _tab,
+                        onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
+                      ),
+                      _buildCalendar(),
+                      _buildContentArea(todayStr),
+                    ],
+                  ),
                 ),
               ),
       ),

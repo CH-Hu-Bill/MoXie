@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -87,9 +88,12 @@ class StudyScreenState extends State<StudyScreen> {
     } catch (_) {}
   }
 
+  Timer? _refreshTimer;
+
   @override
   void dispose() {
     _wordListScrollController.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -97,6 +101,13 @@ class StudyScreenState extends State<StudyScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      final auth = context.read<AuthProvider>();
+      final classId = auth.currentClassId;
+      if (classId != null && classId.isNotEmpty) {
+        _loadData();
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -382,35 +393,38 @@ class StudyScreenState extends State<StudyScreen> {
     if (_words.isEmpty) {
       return const EmptyState(message: '还没有单词，点击右下角添加');
     }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notif) {
-        if (notif is ScrollEndNotification &&
-            notif.metrics.pixels >= notif.metrics.maxScrollExtent - 100 &&
-            _wordsHasMore &&
-            !_loading) {
-          _loadWords(classId, reset: false);
-        }
-        return false;
-      },
-      child: ListView.builder(
-        controller: _wordListScrollController,
-        padding: const EdgeInsets.all(16),
-        itemCount: _words.length + (_wordsHasMore ? 1 : 0),
-        itemBuilder: (ctx, i) {
-          if (i >= _words.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator(color: AppColors.red)),
-            );
+    return RefreshIndicator(
+      onRefresh: () => _loadWords(classId, reset: true),
+      color: AppColors.red,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notif) {
+          if (notif is ScrollEndNotification &&
+              notif.metrics.pixels >= notif.metrics.maxScrollExtent - 100 &&
+              _wordsHasMore &&
+              !_loading) {
+            _loadWords(classId, reset: false);
           }
-          final w = _words[i];
-          final isHighlighted = _highlightWord?.toLowerCase() == w.word.toLowerCase();
-          final key = _wordCardKeys.putIfAbsent(
-            w.word.toLowerCase(),
-            () => GlobalKey(),
-          );
-          return Container(
-            key: key,
+          return false;
+        },
+        child: ListView.builder(
+          controller: _wordListScrollController,
+          padding: const EdgeInsets.all(16),
+          itemCount: _words.length + (_wordsHasMore ? 1 : 0),
+          itemBuilder: (ctx, i) {
+            if (i >= _words.length) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator(color: AppColors.red)),
+              );
+            }
+            final w = _words[i];
+            final isHighlighted = _highlightWord?.toLowerCase() == w.word.toLowerCase();
+            final key = _wordCardKeys.putIfAbsent(
+              w.word.toLowerCase(),
+              () => GlobalKey(),
+            );
+            return Container(
+              key: key,
             padding: const EdgeInsets.only(bottom: 12),
             child: WordCard(
               word: w.word,
@@ -422,6 +436,7 @@ class StudyScreenState extends State<StudyScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

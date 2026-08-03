@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -28,10 +29,21 @@ class _GalleryScreenState extends State<GalleryScreen> {
   int _page = 1;
   bool _hasMore = false;
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadGallery());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _loadGallery(reset: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadGallery({bool reset = true}) async {
@@ -200,18 +212,21 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     message: '画廊还是空的，上传第一张图片吧',
                     icon: Icons.photo,
                   )
-                : NotificationListener<ScrollNotification>(
-                    onNotification: (notif) {
-                      if (notif is ScrollEndNotification &&
-                          notif.metrics.pixels >=
-                              notif.metrics.maxScrollExtent - 100 &&
-                          _hasMore &&
-                          !_loading) {
-                        _loadGallery(reset: false);
-                      }
-                      return false;
-                    },
-                    child: GridView.builder(
+                : RefreshIndicator(
+                    onRefresh: () => _loadGallery(reset: true),
+                    color: AppColors.red,
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notif) {
+                        if (notif is ScrollEndNotification &&
+                            notif.metrics.pixels >=
+                                notif.metrics.maxScrollExtent - 100 &&
+                            _hasMore &&
+                            !_loading) {
+                          _loadGallery(reset: false);
+                        }
+                        return false;
+                      },
+                      child: GridView.builder(
                       padding: const EdgeInsets.all(12),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
@@ -269,7 +284,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       },
                     ),
                   ),
-      ),
+                ),
+              ),
       floatingActionButton: FloatingActionButton(
         onPressed: _uploadImage,
         backgroundColor: AppColors.accent,

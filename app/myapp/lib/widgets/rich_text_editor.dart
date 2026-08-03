@@ -68,18 +68,54 @@ class RichTextEditorState extends State<RichTextEditor> {
         ),
       );
       String html = converter.convert();
-      html = html.replaceAllMapped(
-        RegExp(r'<span class="ql-color-([a-fA-F0-9]{3,8})">'),
-        (m) => '<span style="color: #${m.group(1)}">',
-      );
-      html = html.replaceAllMapped(
-        RegExp(r'<span class="ql-background-([a-fA-F0-9]{3,8})">'),
-        (m) => '<span style="background-color: #${m.group(1)}">',
-      );
+      html = _convertColorClassesToInline(html);
       return html;
     } catch (_) {
       return '';
     }
+  }
+
+  String _convertColorClassesToInline(String html) {
+    String result = html;
+    result = result.replaceAllMapped(
+      RegExp(r'(<span)([^>]*?)(\sclass=")([^"]*?)\bql-color-([a-fA-F0-9]{3,8})\b([^"]*)(")([^>]*>)'),
+      (m) {
+        final color = m.group(5)!;
+        final before = m.group(1)!;
+        final middle = m.group(2)!;
+        final classOpen = m.group(3)!;
+        final classBefore = m.group(4)!;
+        final classAfter = m.group(6)!;
+        final classClose = m.group(7)!;
+        final after = m.group(8)!;
+        final cleanClass = '$classBefore$classAfter'.replaceAll(RegExp(r'\s+'), ' ').trim();
+        final hasStyle = middle.contains('style=') || after.contains('style=') || classBefore.contains('style=') || classAfter.contains('style=');
+        if (cleanClass.isEmpty) {
+          return '$before${hasStyle ? '' : ' style="color: #$color"'}$middle$after';
+        }
+        return '$before${hasStyle ? '' : ' style="color: #$color"'}$middle$classOpen$cleanClass$classClose$after';
+      },
+    );
+    result = result.replaceAllMapped(
+      RegExp(r'(<span)([^>]*?)(\sclass=")([^"]*?)\bql-background-([a-fA-F0-9]{3,8})\b([^"]*)(")([^>]*>)'),
+      (m) {
+        final color = m.group(5)!;
+        final before = m.group(1)!;
+        final middle = m.group(2)!;
+        final classOpen = m.group(3)!;
+        final classBefore = m.group(4)!;
+        final classAfter = m.group(6)!;
+        final classClose = m.group(7)!;
+        final after = m.group(8)!;
+        final cleanClass = '$classBefore$classAfter'.replaceAll(RegExp(r'\s+'), ' ').trim();
+        final hasStyle = middle.contains('style=') || after.contains('style=') || classBefore.contains('style=') || classAfter.contains('style=');
+        if (cleanClass.isEmpty) {
+          return '$before${hasStyle ? '' : ' style="background-color: #$color"'}$middle$after';
+        }
+        return '$before${hasStyle ? '' : ' style="background-color: #$color"'}$middle$classOpen$cleanClass$classClose$after';
+      },
+    );
+    return result;
   }
 
   void insertImage(String url) {
