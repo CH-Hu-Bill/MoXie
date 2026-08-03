@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "默写史记"
+    },
+    {
+      "name": "login_title",
+      "value": "默写史记"
+    },
+    {
+      "name": "login_subtitle",
+      "value": "ListenWrite"
+    }
+  ]
+}

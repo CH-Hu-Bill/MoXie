@@ -1,0 +1,12 @@
+{
+  "name": "com.moxie.app",
+  "version": "1.0.0",
+  "description": "MoXie - ListenWrite",
+  "main": "",
+  "types": "",
+  "author": "MoXie Team",
+  "license": "MIT",
+  "dependencies": {
+    "@ohos/hvigor-ohos-plugin": "5.0.0"
+  }
+}

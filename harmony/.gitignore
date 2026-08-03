@@ -1,0 +1,9 @@
+# HarmonyOS build artifacts
+.idea/
+.gradle/
+build/
+local.properties
+node_modules/
+*.hap
+*.app
+
