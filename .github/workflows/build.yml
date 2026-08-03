@@ -61,7 +61,7 @@ jobs:
 
       - name: Build APK (release)
         env:
-          KEYSTORE_FILE: android/moxie.jks
+          KEYSTORE_FILE: moxie.jks
           KEY_STORE_PASS: ${{ secrets.KEY_STORE_PASS }}
           KEY_KEY_PASS: ${{ secrets.KEY_KEY_PASS }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
