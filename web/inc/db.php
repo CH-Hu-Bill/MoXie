@@ -1,4 +1,6 @@
 <?php
+
+date_default_timezone_set('Asia/Shanghai');
 /**
  * ============================================================
  * 数据库访问层 (Database Access Layer)

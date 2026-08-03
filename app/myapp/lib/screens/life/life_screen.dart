@@ -23,7 +23,6 @@ class LifeScreenState extends State<LifeScreen> {
     setState(() {
       _selectedDate = null;
       _isEditing = false;
-      _viewMode = false;
     });
     _loadData();
   }
@@ -37,7 +36,6 @@ class LifeScreenState extends State<LifeScreen> {
   DateTime _calendarMonth = DateTime.now();
   String? _selectedDate;
   bool _isEditing = false;
-  bool _viewMode = false;
   final _editTitleCtrl = TextEditingController();
   final _editLocationCtrl = TextEditingController();
   final _editTagsCtrl = TextEditingController();
@@ -125,7 +123,6 @@ class LifeScreenState extends State<LifeScreen> {
     setState(() {
       _selectedDate = dateStr;
       _isEditing = false;
-      _viewMode = false;
     });
     if (_tab == 0) {
       final entry = _personalHistory[dateStr];
@@ -316,7 +313,7 @@ class LifeScreenState extends State<LifeScreen> {
       }
       final entry = _personalHistory[_selectedDate!];
       final isToday = _selectedDate == todayStr;
-      if (isToday && !_viewMode && entry == null) {
+      if (isToday) {
         return _buildInlineEditor();
       }
       if (entry != null) {
@@ -324,14 +321,9 @@ class LifeScreenState extends State<LifeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           child: _VlogViewer(
             entry: entry,
-            isToday: isToday,
-            onEdit: isToday ? () => setState(() { _isEditing = true; _viewMode = false; _startEditing(entry); }) : null,
             scrollable: false,
           ),
         );
-      }
-      if (isToday) {
-        return _buildInlineEditor();
       }
       return const EmptyState(message: '这天没有记录', icon: Icons.event_busy);
     }
@@ -432,7 +424,6 @@ class LifeScreenState extends State<LifeScreen> {
       });
       setState(() {
         _isEditing = false;
-        _viewMode = true;
       });
       _loadData();
       if (mounted) {
