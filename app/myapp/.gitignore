@@ -48,5 +48,5 @@ app.*.map.json
 lib/config/api_config.dart
 
 # Signing
-moxie.jks
+**/moxie.jks
 key.properties
