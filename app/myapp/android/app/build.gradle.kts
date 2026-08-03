@@ -14,10 +14,10 @@ fun loadKeystoreProperties(): Map<String, String> {
         props.load(FileInputStream(propFile))
     }
     return mapOf(
-        "storeFile" to (props.getProperty("storeFile") ?: ""),
-        "storePassword" to (props.getProperty("storePassword") ?: ""),
-        "keyPassword" to (props.getProperty("keyPassword") ?: ""),
-        "keyAlias" to (props.getProperty("keyAlias") ?: ""),
+        "storeFile" to (props.getProperty("storeFile") ?: System.getenv("KEYSTORE_FILE") ?: ""),
+        "storePassword" to (props.getProperty("storePassword") ?: System.getenv("KEY_STORE_PASS") ?: ""),
+        "keyPassword" to (props.getProperty("keyPassword") ?: System.getenv("KEY_KEY_PASS") ?: ""),
+        "keyAlias" to (props.getProperty("keyAlias") ?: System.getenv("KEY_ALIAS") ?: ""),
     )
 }
 

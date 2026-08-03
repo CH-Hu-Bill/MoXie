@@ -51,12 +51,6 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > moxie.jks
-            cat > key.properties <<EOF
-          storePassword=billhandsome
-          keyPassword=billhandsome
-          keyAlias=hu
-          storeFile=moxie.jks
-          EOF
             echo "Keystore decoded"
           else
             echo "No KEYSTORE_BASE64 secret set, using debug signing"
@@ -66,6 +60,11 @@ jobs:
         run: flutter pub get
 
       - name: Build APK (release)
+        env:
+          KEYSTORE_FILE: moxie.jks
+          KEY_STORE_PASS: ${{ secrets.KEY_STORE_PASS }}
+          KEY_KEY_PASS: ${{ secrets.KEY_KEY_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: flutter build apk --release
 
       - name: Upload release APK
