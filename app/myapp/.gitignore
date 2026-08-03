@@ -46,3 +46,7 @@ app.*.map.json
 
 # API config (contains local server address, not for commit)
 lib/config/api_config.dart
+
+# Signing
+moxie.jks
+key.properties
