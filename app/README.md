@@ -13,6 +13,7 @@ ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 - **字体**：Google Fonts（Kalam + Patrick Hand）
 - **日历**：table_calendar
 - **图片选择**：image_picker
+- **设计风格**：两端统一 **Hand-Drawn 手绘风格**，设计规范详见 [`web/风格.md`](../web/风格.md)
 
 ## 快速开始
 
