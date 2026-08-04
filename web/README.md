@@ -2,7 +2,7 @@
 
 班级默写 + 班级史记的 Web 应用。基于 **PHP + JSON 文件存储**（无数据库），通过浏览器使用；同时为同名 APP 提供 REST 风格的后端 API。
 
-> 本仓库仅包含 **Web 端 / 后端** 代码，APP 客户端源码不在本仓库内。
+> 本仓库包含 **Web 端 / 后端** 与 **APP 客户端**（Flutter）完整源码。
 
 ---
 
@@ -73,6 +73,7 @@
 ├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
 ├── common.js              # 公共脚本（TTS / Toast / 跟读 / 页面过渡 / 跑马灯等）
 ├── favicon.png            # 网站图标（与 APP 图标一致）
+├── 风格.md                # 设计规范（Hand-Drawn 手绘风格）
 ├── shiyin.mp3             # 任务提示音
 ├── inc/                   # 核心库
 │   ├── head.php           # 统一 HTML <head>（Google Fonts、meta、common.css）
@@ -344,7 +345,7 @@ data/
 
 ## 前端设计
 
-采用 **Hand-Drawn 手绘风格**，模拟纸笔/便签的课堂氛围。完整设计规范见 [`风格.md`](../风格.md)。
+采用 **Hand-Drawn 手绘风格**，模拟纸笔/便签的课堂氛围。完整设计规范见 [`风格.md`](风格.md)。
 
 - **颜色**：暖纸底色（`#fdfbf7`）、铅笔黑（`#2d2d2d`）、红色修正笔（`#ff4d4d`）、蓝色圆珠笔（`#2d5da1`）
 - **字体**：标题 ZCOOL KuaiLe（站酷快乐体），正文 Ma Shan Zheng（马山正楷），Google Fonts 引入
