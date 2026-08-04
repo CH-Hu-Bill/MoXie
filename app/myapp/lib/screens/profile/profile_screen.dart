@@ -159,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildItem(
                 icon: Icons.info_outline,
                 title: '版本',
-                subtitle: '1.0.0',
+                subtitle: '1.0.1',
               ),
             ]),
             const SizedBox(height: 16),
