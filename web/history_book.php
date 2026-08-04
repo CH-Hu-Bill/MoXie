@@ -286,8 +286,7 @@ var quill = null;
 // 个人列传：读取已授权用户的真实数据
 var personalData = <?php
 $personalDates = [];
-$appData = Database::read('app_data.json');
-foreach (($appData['users'] ?? []) as $uid => $user) {
+foreach (Database::getAllUsers() as $uid => $user) {
     $consentMap = $user['consent_map'] ?? [];
     $allowed = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($user['consent']) ? true : false);
     if (!$allowed || !preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', (string)$uid)) continue;

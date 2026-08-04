@@ -68,12 +68,13 @@ if ($isAuthed) {
             });
             if ($deleted) {
                 Database::validateClassId($delId);
-                Database::update('app_data.json', function($data) use ($delId) {
-                    foreach (($data['users'] ?? []) as $uid => &$user) {
-                        $user['class_ids'] = array_values(array_filter($user['class_ids'] ?? [], function($id) use ($delId) { return (string)$id !== $delId; }));
-                        unset($user['class_auth_versions'][$delId], $user['wrong_words'][$delId]);
-                    } unset($user); return $data;
-                });
+                foreach (Database::getAllUserIds() as $uid) {
+                    Database::updateUser($uid, function($data) use ($delId) {
+                        $data['class_ids'] = array_values(array_filter($data['class_ids'] ?? [], function($id) use ($delId) { return (string)$id !== $delId; }));
+                        unset($data['class_auth_versions'][$delId], $data['wrong_words'][$delId]);
+                        return $data;
+                    });
+                }
                 Database::update('settings.json', function($s) use ($delId) {
                     $suffix = '_' . $delId;
                     foreach (array_keys($s) as $k) if (substr((string)$k, -strlen($suffix)) === $suffix) unset($s[$k]);

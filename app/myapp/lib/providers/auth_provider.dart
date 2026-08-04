@@ -64,9 +64,9 @@ class AuthProvider extends ChangeNotifier {
     }
     _api.setToken(token);
     try {
-      await _autoLogin();
       _currentClassId = _storage.getCurrentClassId();
       _currentClassName = _storage.getCurrentClassName();
+      await _autoLogin();
       _authState = AuthState.authenticated;
     } catch (e) {
       await _storage.clearToken();
@@ -119,9 +119,9 @@ class AuthProvider extends ChangeNotifier {
       await _storage.saveToken(_user!.token!);
       await _storage.saveUserId(_user!.id);
       await _storage.saveUserName(_user!.name);
-      await _loadMyClasses();
       _currentClassId = _storage.getCurrentClassId();
       _currentClassName = _storage.getCurrentClassName();
+      await _loadMyClasses();
       _authState = AuthState.authenticated;
       notifyListeners();
       return true;

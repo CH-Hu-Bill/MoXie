@@ -39,6 +39,7 @@ class LifeScreenState extends State<LifeScreen> {
   String? _selectedDate;
   bool _isEditing = false;
   bool _viewMode = false;
+  bool _editingCancelled = false;
   final _editTitleCtrl = TextEditingController();
   final _editLocationCtrl = TextEditingController();
   final _editTagsCtrl = TextEditingController();
@@ -133,6 +134,7 @@ class LifeScreenState extends State<LifeScreen> {
       _selectedDate = dateStr;
       _isEditing = false;
       _viewMode = false;
+      _editingCancelled = false;
     });
     if (_tab == 0) {
       final entry = _personalHistory[dateStr];
@@ -334,12 +336,12 @@ class LifeScreenState extends State<LifeScreen> {
           child: _VlogViewer(
             entry: entry,
             isToday: true,
-            onEdit: () => setState(() { _isEditing = true; _viewMode = false; _startEditing(entry); }),
+            onEdit: () => setState(() { _isEditing = true; _viewMode = false; _editingCancelled = false; _startEditing(entry); }),
             scrollable: false,
           ),
         );
       }
-      if (isToday) {
+      if (isToday && !_editingCancelled) {
         return _buildInlineEditor();
       }
       if (entry != null) {
@@ -521,7 +523,14 @@ class LifeScreenState extends State<LifeScreen> {
                 child: HandDrawnButton(
                   label: '取消',
                   isSecondary: true,
-                  onPressed: () => setState(() => _isEditing = false),
+                  onPressed: () {
+                    final entry = _personalHistory[_selectedDate];
+                    setState(() {
+                      _isEditing = false;
+                      _editingCancelled = true;
+                      _viewMode = entry != null;
+                    });
+                  },
                 ),
               ),
               const SizedBox(width: 12),

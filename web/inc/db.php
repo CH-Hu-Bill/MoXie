@@ -270,6 +270,205 @@ class Database {
     /** @param array $tasks 任务关联数组 */
     public static function saveTasks($classId, $tasks) { return self::saveClassData($classId, 'tasks', $tasks); }
 
+    // ==================== 用户数据存储 (Users) ====================
+    /**
+     * 获取用户数据目录
+     * @return string 目录绝对路径
+     */
+    public static function getUsersDir() {
+        $dir = self::$dataPath . 'users';
+        if (!is_dir($dir)) @mkdir($dir, 0750, true);
+        return $dir;
+    }
+
+    /**
+     * 读取单个用户数据
+     * @param string $uid 用户ID
+     * @return array|null 用户数据数组，不存在返回 null
+     */
+    public static function getUser($uid) {
+        self::validateUserId($uid);
+        $file = self::getUsersDir() . '/' . $uid . '.json';
+        if (!file_exists($file)) return null;
+        $content = @file_get_contents($file);
+        if ($content === false) return null;
+        $data = json_decode($content, true);
+        return is_array($data) ? $data : null;
+    }
+
+    /**
+     * 写入单个用户数据（原子写入）
+     * @param string $uid 用户ID
+     * @param array $data 用户数据
+     * @return bool 是否成功
+     */
+    public static function saveUser($uid, $data) {
+        self::validateUserId($uid);
+        $file = self::getUsersDir() . '/' . $uid . '.json';
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        $tmp = $file . '.' . uniqid('', true) . '.tmp';
+        if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+        if (!rename($tmp, $file)) { @unlink($tmp); return false; }
+        return true;
+    }
+
+    /**
+     * 在文件锁内读取-修改-写回用户数据
+     * @param string $uid 用户ID
+     * @param callable $callback 回调返回更新后数组；返回 null 表示不写入
+     * @return array|false 更新后的数据，或 false 表示加锁失败
+     */
+    public static function updateUser($uid, callable $callback) {
+        $file = self::getUsersDir() . '/' . self::validateUserId($uid) . '.json';
+        $dir = dirname($file);
+        if (!is_dir($dir)) @mkdir($dir, 0750, true);
+        $lock = fopen($file . '.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_EX)) {
+            if ($lock !== false) fclose($lock);
+            return false;
+        }
+        try {
+            $data = self::getUser($uid) ?: [];
+            $updated = $callback($data);
+            if ($updated === null) return $data;
+            if (!is_array($updated)) throw new RuntimeException('Update callback must return an array or null');
+            if (!self::saveUser($uid, $updated)) throw new RuntimeException('Unable to write user file');
+            return $updated;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    /**
+     * 删除用户数据文件
+     * @param string $uid 用户ID
+     * @return bool 是否成功
+     */
+    public static function deleteUser($uid) {
+        $file = self::getUsersDir() . '/' . self::validateUserId($uid) . '.json';
+        return !file_exists($file) || unlink($file);
+    }
+
+    /**
+     * 获取所有用户ID列表
+     * @return array 用户ID数组
+     */
+    public static function getAllUserIds() {
+        $dir = self::getUsersDir();
+        $ids = [];
+        $items = @scandir($dir);
+        if ($items === false) return $ids;
+        foreach ($items as $item) {
+            if (preg_match('/\A([A-Za-z0-9][A-Za-z0-9_-]*)\.json\z/D', $item, $m)) {
+                $ids[] = $m[1];
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * 获取所有用户数据（key=uid, value=user data）
+     * @return array 用户数据数组
+     */
+    public static function getAllUsers() {
+        $users = [];
+        foreach (self::getAllUserIds() as $uid) {
+            $user = self::getUser($uid);
+            if ($user !== null) $users[$uid] = $user;
+        }
+        return $users;
+    }
+
+    /**
+     * 读取令牌数据
+     * @return array ['tokens' => [...], 'next_uid' => int]
+     */
+    public static function getTokens() {
+        $file = self::getUsersDir() . '/tokens.json';
+        if (!file_exists($file)) return ['tokens' => [], 'next_uid' => 1];
+        $content = @file_get_contents($file);
+        if ($content === false) return ['tokens' => [], 'next_uid' => 1];
+        $data = json_decode($content, true);
+        return is_array($data) ? $data : ['tokens' => [], 'next_uid' => 1];
+    }
+
+    /**
+     * 写入令牌数据（原子写入）
+     * @param array $data 令牌数据
+     * @return bool 是否成功
+     */
+    public static function saveTokens($data) {
+        $file = self::getUsersDir() . '/tokens.json';
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        $tmp = $file . '.' . uniqid('', true) . '.tmp';
+        if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+        if (!rename($tmp, $file)) { @unlink($tmp); return false; }
+        return true;
+    }
+
+    /**
+     * 在文件锁内读取-修改-写回令牌数据
+     * @param callable $callback 回调返回更新后数组；返回 null 表示不写入
+     * @return array|false 更新后的数据，或 false 表示加锁失败
+     */
+    public static function updateTokens(callable $callback) {
+        $file = self::getUsersDir() . '/tokens.json';
+        $dir = dirname($file);
+        if (!is_dir($dir)) @mkdir($dir, 0750, true);
+        $lock = fopen($file . '.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_EX)) {
+            if ($lock !== false) fclose($lock);
+            return false;
+        }
+        try {
+            $data = self::getTokens();
+            $updated = $callback($data);
+            if ($updated === null) return $data;
+            if (!is_array($updated)) throw new RuntimeException('Update callback must return an array or null');
+            if (!self::saveTokens($updated)) throw new RuntimeException('Unable to write tokens file');
+            return $updated;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    /**
+     * 从旧版 app_data.json 迁移到新版 users/ 目录结构
+     * 迁移后重命名旧文件为 app_data.json.bak
+     */
+    public static function migrateAppData() {
+        $oldFile = self::$dataPath . 'app_data.json';
+        if (!file_exists($oldFile)) return;
+        $content = @file_get_contents($oldFile);
+        if ($content === false) return;
+        $data = json_decode($content, true);
+        if (!is_array($data)) return;
+        $usersDir = self::getUsersDir();
+        $changed = false;
+        if (isset($data['users']) && is_array($data['users'])) {
+            foreach ($data['users'] as $uid => $userData) {
+                $userFile = $usersDir . '/' . $uid . '.json';
+                if (!file_exists($userFile)) {
+                    @file_put_contents($userFile, json_encode($userData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
+                    $changed = true;
+                }
+            }
+        }
+        $tokensFile = $usersDir . '/tokens.json';
+        if (!file_exists($tokensFile)) {
+            $tokensData = [];
+            if (isset($data['tokens'])) $tokensData['tokens'] = $data['tokens'];
+            if (isset($data['next_uid'])) $tokensData['next_uid'] = $data['next_uid'];
+            @file_put_contents($tokensFile, json_encode($tokensData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
+            $changed = true;
+        }
+        if ($changed) {
+            @rename($oldFile, $oldFile . '.bak');
+        }
+    }
+
     // ==================== 全局设置 (Settings) ====================
     /** @return array 设置数组，包含 last_task_id_{classId}, default_volume, default_interval, default_repeat, weekend_lottery_{classId}, weekend_week_{classId} */
     public static function getSettings() { return self::read('settings.json'); }

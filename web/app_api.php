@@ -24,13 +24,13 @@ require_once 'inc/api.php';
 require_once 'inc/app_auth.php';
 require_once 'inc/ratelimit.php';
 
+Database::migrateAppData();
+
 $action = trim((string)($_POST['action'] ?? ''));
 if ($action === '') appError('缺少 action 参数');
 
-// 获取客户端 IP
 $clientIp = $_SERVER['REMOTE_ADDR'] ?? '';
 
-// 限流辅助: 超限时直接返回 429
 function appRateLimit($bucket, $identity, $max, $windowSec) {
     list($allow, $retry) = RateLimiter::check($bucket, $identity, $max, $windowSec);
     if (!$allow) {
@@ -40,95 +40,102 @@ function appRateLimit($bucket, $identity, $max, $windowSec) {
 }
 
 if ($action === 'register' || $action === 'claim_legacy') {
-    // 限流: 登录类操作 10次/5分钟
     appRateLimit('login', $clientIp, 10, 300);
     $name = appUsername();
     $password = (string)($_POST['password'] ?? '');
     appValidateCredentials($name, $password);
-    $response = null;
-    Database::update('app_data.json', function($data) use ($action, $name, $password, &$response) {
-        $data = appDataDefaults($data);
-        $uid = appFindUserId($data, $name);
-        if ($uid !== null && !empty($data['users'][$uid]['password_hash'])) {
-            $response = ['success' => false, 'error' => '用户名已存在'];
-            return null;
+    $uid = appFindUserId($name);
+    if ($uid !== null) {
+        $user = Database::getUser($uid);
+        if ($user && !empty($user['password_hash'])) {
+            appError('用户名已存在', null, 409);
         }
-        if ($uid !== null && $action === 'register') {
-            // 安全折中：旧账号仅凭同名可一次性设置密码，以保留原有学习数据。
-            $data['users'][$uid]['legacy_claimed_at'] = date('Y-m-d H:i:s');
-        } elseif ($uid === null) {
-            if ($action === 'claim_legacy') {
-                $response = ['success' => false, 'error' => '旧用户不存在'];
-                return null;
-            }
-            do { $uid = 'u' . $data['next_uid']++; } while (isset($data['users'][$uid]));
-            $data['users'][$uid] = ['name' => $name, 'created_at' => date('Y-m-d H:i:s'), 'class_ids' => [], 'class_auth_versions' => [], 'wrong_words' => []];
+    }
+    if ($uid === null) {
+        if ($action === 'claim_legacy') {
+            appError('旧用户不存在');
         }
-        $data['users'][$uid]['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
-        list($token, $expires) = appNewToken($data, $uid);
-        $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $name, 'class_ids' => $data['users'][$uid]['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => empty($data['users'][$uid]['legacy_claimed_at'])]];
-        return $data;
+        $tokens = Database::getTokens();
+        do { $uid = 'u' . $tokens['next_uid']++; } while (Database::getUser($uid) !== null);
+        Database::saveUser($uid, ['name' => $name, 'created_at' => date('Y-m-d H:i:s'), 'class_ids' => [], 'class_auth_versions' => [], 'wrong_words' => [], 'favorites' => []]);
+        Database::updateTokens(function($latest) use ($tokens) { $latest['next_uid'] = $tokens['next_uid']; return $latest; });
+    } else {
+        $user = Database::getUser($uid);
+        if ($user && $action === 'register') {
+            Database::updateUser($uid, function($latest) {
+                $latest['legacy_claimed_at'] = date('Y-m-d H:i:s');
+                return $latest;
+            });
+        }
+    }
+    Database::updateUser($uid, function($latest) use ($password) {
+        $latest['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+        return $latest;
     });
-    if ($response === null) appError('保存失败', null, 500);
-    appJson($response, !empty($response['success']) ? 200 : 409);
+    $updated = Database::getUser($uid);
+    $tokens = Database::getTokens();
+    list($token, $expires) = appNewToken($tokens, $uid);
+    Database::saveTokens($tokens);
+    appJson(['success' => true, 'data' => [
+        'user_id' => $uid, 'name' => $name,
+        'class_ids' => $updated['class_ids'] ?? [],
+        'token' => $token, 'expires_at' => $expires,
+        'is_new' => empty($updated['legacy_claimed_at']),
+    ]]);
 }
 
 if ($action === 'login') {
-    // 限流: 登录类操作 10次/5分钟
     appRateLimit('login', $clientIp, 10, 300);
     $name = appUsername();
     $password = (string)($_POST['password'] ?? '');
     appValidateCredentials($name, $password);
-    $data = appDataDefaults(Database::read('app_data.json'));
-    $uid = appFindUserId($data, $name);
-    // 用户不存在 → 自动注册（合并登录/注册入口，新手友好）
+    $uid = appFindUserId($name);
+
     if ($uid === null) {
-        $response = null;
-        Database::update('app_data.json', function($latest) use ($name, $password, &$response) {
-            $latest = appDataDefaults($latest);
-            $existing = appFindUserId($latest, $name);
-            if ($existing !== null && !empty($latest['users'][$existing]['password_hash'])) {
-                $response = ['success' => false, 'error' => '用户名已存在'];
-                return null;
-            }
-            do { $uid = 'u' . $latest['next_uid']++; } while (isset($latest['users'][$uid]));
-            $latest['users'][$uid] = ['name' => $name, 'created_at' => date('Y-m-d H:i:s'), 'class_ids' => [], 'class_auth_versions' => [], 'wrong_words' => []];
-            $latest['users'][$uid]['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
-            list($token, $expires) = appNewToken($latest, $uid);
-            $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $name, 'class_ids' => [], 'token' => $token, 'expires_at' => $expires, 'is_new' => true]];
+        $tokens = Database::getTokens();
+        do { $uid = 'u' . $tokens['next_uid']++; } while (Database::getUser($uid) !== null);
+        $user = ['name' => $name, 'created_at' => date('Y-m-d H:i:s'), 'class_ids' => [], 'class_auth_versions' => [], 'wrong_words' => [], 'favorites' => []];
+        $user['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+        Database::saveUser($uid, $user);
+        Database::updateTokens(function($latest) use ($tokens) { $latest['next_uid'] = $tokens['next_uid']; return $latest; });
+        list($token, $expires) = appNewToken($tokens, $uid);
+        Database::saveTokens($tokens);
+        appJson(['success' => true, 'data' => [
+            'user_id' => $uid, 'name' => $name, 'class_ids' => [],
+            'token' => $token, 'expires_at' => $expires, 'is_new' => true,
+        ]]);
+    }
+
+    $user = Database::getUser($uid);
+    if (empty($user['password_hash'])) {
+        Database::updateUser($uid, function($latest) use ($password) {
+            $latest['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+            $latest['legacy_claimed_at'] = date('Y-m-d H:i:s');
             return $latest;
         });
-        if ($response === null) appError('注册失败', null, 500);
-        if (!empty($response['success'])) appJson($response);
-        appJson($response, 409);
+        $user = Database::getUser($uid);
+        $tokens = Database::getTokens();
+        list($token, $expires) = appNewToken($tokens, $uid);
+        Database::saveTokens($tokens);
+        appJson(['success' => true, 'data' => [
+            'user_id' => $uid, 'name' => $user['name'],
+            'class_ids' => $user['class_ids'] ?? [],
+            'token' => $token, 'expires_at' => $expires, 'is_new' => false,
+            'consent' => !empty($user['consent']),
+            'consent_map' => $user['consent_map'] ?? (object)[],
+        ]]);
     }
-    if (empty($data['users'][$uid]['password_hash'])) {
-        // 旧用户首次设置密码
-        Database::update('app_data.json', function($latest) use ($uid, $password, &$response) {
-            $latest = appDataDefaults($latest);
-            if (!isset($latest['users'][$uid])) return null;
-            $latest['users'][$uid]['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
-            $latest['users'][$uid]['legacy_claimed_at'] = date('Y-m-d H:i:s');
-            list($token, $expires) = appNewToken($latest, $uid);
-            $user = $latest['users'][$uid];
-            $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $user['name'], 'class_ids' => $user['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => false, 'consent' => !empty($user['consent']), 'consent_map' => $user['consent_map'] ?? (object)[]]];
-            return $latest;
-        });
-        if ($response === null) appError('登录失败', null, 500);
-        appJson($response);
-    }
-    if (!password_verify($password, $data['users'][$uid]['password_hash'])) appError('用户名或密码错误', null, 401);
-    $response = null;
-    Database::update('app_data.json', function($latest) use ($uid, &$response) {
-        $latest = appDataDefaults($latest);
-        if (!isset($latest['users'][$uid])) return null;
-        list($token, $expires) = appNewToken($latest, $uid);
-        $user = $latest['users'][$uid];
-        $response = ['success' => true, 'data' => ['user_id' => $uid, 'name' => $user['name'], 'class_ids' => $user['class_ids'] ?? [], 'token' => $token, 'expires_at' => $expires, 'is_new' => false, 'consent' => !empty($user['consent']), 'consent_map' => $user['consent_map'] ?? (object)[]]];
-        return $latest;
-    });
-    if ($response === null) appError('登录失败', null, 500);
-    appJson($response);
+    if (!password_verify($password, $user['password_hash'])) appError('用户名或密码错误', null, 401);
+    $tokens = Database::getTokens();
+    list($token, $expires) = appNewToken($tokens, $uid);
+    Database::saveTokens($tokens);
+    appJson(['success' => true, 'data' => [
+        'user_id' => $uid, 'name' => $user['name'],
+        'class_ids' => $user['class_ids'] ?? [],
+        'token' => $token, 'expires_at' => $expires, 'is_new' => false,
+        'consent' => !empty($user['consent']),
+        'consent_map' => $user['consent_map'] ?? (object)[],
+    ]]);
 }
 
 if ($action === 'get_classes') {
@@ -141,21 +148,19 @@ if ($action === 'get_classes') {
 
 if ($action === 'auto_login') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
-    $data = appDataDefaults(Database::read('app_data.json'));
-    $user = $data['users'][$userId] ?? [];
     appJson(['success' => true, 'data' => [
-        'user_id' => $userId, 'name' => $user['name'] ?? '',
-        'class_ids' => $user['class_ids'] ?? [],
-        'consent' => !empty($user['consent']),
-        'consent_map' => $user['consent_map'] ?? (object)[],
+        'user_id' => $userId, 'name' => $authUser['name'] ?? '',
+        'class_ids' => $authUser['class_ids'] ?? [],
+        'consent' => !empty($authUser['consent']),
+        'consent_map' => $authUser['consent_map'] ?? (object)[],
     ]]);
 }
 
 if ($action === 'delete_account') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
-    Database::update('app_data.json', function($data) use ($userId, $tokenHash) {
-        $data = appDataDefaults($data);
-        unset($data['users'][$userId], $data['tokens'][$tokenHash]);
+    Database::deleteUser($userId);
+    Database::updateTokens(function($data) use ($tokenHash) {
+        unset($data['tokens'][$tokenHash]);
         return $data;
     });
     appJson(['success' => true]);
@@ -197,16 +202,13 @@ if ($action === 'get_profile') {
 if ($action === 'set_global_consent') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
     $allow = (string)($_POST['consent'] ?? $_POST['allow'] ?? '0') === '1';
-    Database::update('app_data.json', function($data) use ($userId, $allow) {
-        $data = appDataDefaults($data);
-        if (!isset($data['users'][$userId])) return null;
-        $data['users'][$userId]['consent'] = $allow;
-        if (!isset($data['users'][$userId]['consent_map']) || !is_array($data['users'][$userId]['consent_map'])) {
-            $data['users'][$userId]['consent_map'] = [];
+    Database::updateUser($userId, function($data) use ($allow) {
+        $data['consent'] = $allow;
+        if (!isset($data['consent_map']) || !is_array($data['consent_map'])) {
+            $data['consent_map'] = [];
         }
-        // 同步到已绑定的所有班级
-        foreach (($data['users'][$userId]['class_ids'] ?? []) as $cid) {
-            $data['users'][$userId]['consent_map'][$cid] = $allow;
+        foreach (($data['class_ids'] ?? []) as $cid) {
+            $data['consent_map'][$cid] = $allow;
         }
         return $data;
     });
@@ -215,17 +217,12 @@ if ($action === 'set_global_consent') {
 
 if ($action === 'check_version') {
     $current = trim((string)($_POST['current_version'] ?? '1.0'));
-    // 兼容 1.0.0 vs 1.0
-    if (preg_match('/^\d+\.\d+\.\d+$/', $current)) {
-        // keep
-    }
+    if (preg_match('/^\d+\.\d+\.\d+$/', $current)) {}
     $versions = Database::read('app_versions.json');
     if (!is_array($versions)) $versions = ['latest' => '1.0', 'history' => []];
     $latest = (string)($versions['latest'] ?? '1.0');
     $hasUpdate = version_compare($latest, $current, '>');
-    // 若 latest=1.0 且 current=1.0.0，视为无更新
     if (!$hasUpdate && version_compare($current, $latest, '>')) {
-        // APP 三位版本号可能高于两位服务端版本
         $hasUpdate = false;
     }
     $notes = '';
@@ -239,7 +236,6 @@ if ($action === 'check_version') {
 
 if ($action === 'get_csrf_token') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
-    // 为 APP 生成 CSRF token（基于 session 或随机生成）
     if (session_status() === PHP_SESSION_NONE) @session_start();
     $csrf = bin2hex(random_bytes(32));
     $_SESSION['app_csrf_' . $userId] = $csrf;
@@ -250,8 +246,7 @@ if ($action === 'get_csrf_token') {
 list($userId, $authUser, $tokenHash) = appRequireAuth();
 
 if ($action === 'logout') {
-    Database::update('app_data.json', function($data) use ($tokenHash) {
-        $data = appDataDefaults($data);
+    Database::updateTokens(function($data) use ($tokenHash) {
         unset($data['tokens'][$tokenHash]);
         return $data;
     });
@@ -259,7 +254,6 @@ if ($action === 'logout') {
 }
 
 if ($action === 'bind_class') {
-    // 限流: 班级口令尝试 10次/5分钟
     appRateLimit('bindpw', $clientIp, 10, 300);
     $classId = appStrictId($_POST['class_id'] ?? '', 'class_id');
     $classes = Database::getClasses();
@@ -268,20 +262,17 @@ if ($action === 'bind_class') {
     $classPassword = (string)($_POST['password'] ?? $_POST['class_password'] ?? '');
     if ($hash !== '' && !password_verify($classPassword, $hash)) appError('口令错误');
     $version = appClassVersion($classes[$classId]);
-    Database::update('app_data.json', function($data) use ($userId, $classId, $version) {
-        $data = appDataDefaults($data);
-        if (!isset($data['users'][$userId])) return null;
-        $ids = $data['users'][$userId]['class_ids'] ?? [];
+    Database::updateUser($userId, function($data) use ($classId, $version) {
+        $ids = $data['class_ids'] ?? [];
         if (!in_array($classId, $ids, true)) $ids[] = $classId;
-        $data['users'][$userId]['class_ids'] = $ids;
-        $data['users'][$userId]['class_auth_versions'][$classId] = $version;
-        if (!isset($data['users'][$userId]['wrong_words'][$classId])) $data['users'][$userId]['wrong_words'][$classId] = [];
-        // 新绑定班级：若未单独设置过，继承全局 consent
-        if (!isset($data['users'][$userId]['consent_map']) || !is_array($data['users'][$userId]['consent_map'])) {
-            $data['users'][$userId]['consent_map'] = [];
+        $data['class_ids'] = $ids;
+        $data['class_auth_versions'][$classId] = $version;
+        if (!isset($data['wrong_words'][$classId])) $data['wrong_words'][$classId] = [];
+        if (!isset($data['consent_map']) || !is_array($data['consent_map'])) {
+            $data['consent_map'] = [];
         }
-        if (!array_key_exists($classId, $data['users'][$userId]['consent_map'])) {
-            $data['users'][$userId]['consent_map'][$classId] = !empty($data['users'][$userId]['consent']);
+        if (!array_key_exists($classId, $data['consent_map'])) {
+            $data['consent_map'][$classId] = !empty($data['consent']);
         }
         return $data;
     });
@@ -290,11 +281,10 @@ if ($action === 'bind_class') {
 
 if ($action === 'unbind_class') {
     $classId = appStrictId($_POST['class_id'] ?? '', 'class_id');
-    Database::update('app_data.json', function($data) use ($userId, $classId) {
-        $data = appDataDefaults($data);
-        $ids = $data['users'][$userId]['class_ids'] ?? [];
-        $data['users'][$userId]['class_ids'] = array_values(array_filter($ids, function($id) use ($classId) { return $id !== $classId; }));
-        unset($data['users'][$userId]['class_auth_versions'][$classId], $data['users'][$userId]['wrong_words'][$classId]);
+    Database::updateUser($userId, function($data) use ($classId) {
+        $ids = $data['class_ids'] ?? [];
+        $data['class_ids'] = array_values(array_filter($ids, function($id) use ($classId) { return $id !== $classId; }));
+        unset($data['class_auth_versions'][$classId], $data['wrong_words'][$classId]);
         return $data;
     });
     appJson(['success' => true]);
@@ -316,9 +306,9 @@ switch ($action) {
         $words = Database::getWords($classId);
         $query = trim((string)($_POST['query'] ?? ''));
         if ($action === 'search_word' && $query === '') appError('参数不全');
-        $data = appDataDefaults(Database::read('app_data.json'));
-        $wrong = $data['users'][$userId]['wrong_words'][$classId] ?? [];
-        $favIds = $data['users'][$userId]['favorites'] ?? [];
+        $user = Database::getUser($userId);
+        $wrong = $user['wrong_words'][$classId] ?? [];
+        $favIds = $user['favorites'] ?? [];
         $list = [];
         foreach ($words as $word) {
             if ($action === 'search_word' && mb_stripos((string)$word['word'], $query) === false && mb_stripos((string)$word['meaning'], $query) === false) continue;
@@ -347,7 +337,6 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos]]);
 
     case 'ai_word':
-        // 限流: AI 调用 40次/小时 (按用户)
         appRateLimit('ai', $userId, 40, 3600);
         $word = trim((string)($_POST['word'] ?? ''));
         if ($word === '' || mb_strlen($word) > 100) appError('请输入有效单词');
@@ -364,11 +353,10 @@ switch ($action) {
         foreach (Database::getWords($classId) as $word) if ((string)$word['id'] === $wordId) { $exists = true; break; }
         if (!$exists) appError('单词不存在');
         $wrong = (string)($_POST['wrong'] ?? '1') === '1';
-        Database::update('app_data.json', function($data) use ($userId, $classId, $wordId, $wrong) {
-            $data = appDataDefaults($data);
-            if (!isset($data['users'][$userId]['wrong_words'][$classId])) $data['users'][$userId]['wrong_words'][$classId] = [];
-            if ($wrong) $data['users'][$userId]['wrong_words'][$classId][$wordId] = ['marked_at' => date('Y-m-d H:i:s')];
-            else unset($data['users'][$userId]['wrong_words'][$classId][$wordId]);
+        Database::updateUser($userId, function($data) use ($classId, $wordId, $wrong) {
+            if (!isset($data['wrong_words'][$classId])) $data['wrong_words'][$classId] = [];
+            if ($wrong) $data['wrong_words'][$classId][$wordId] = ['marked_at' => date('Y-m-d H:i:s')];
+            else unset($data['wrong_words'][$classId][$wordId]);
             return $data;
         });
         appJson(['success' => true, 'data' => ['is_wrong' => $wrong]]);
@@ -411,10 +399,10 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['id' => $taskId, 'status' => $newStatus]]);
 
     case 'get_wrong_words':
-        $data = appDataDefaults(Database::read('app_data.json'));
+        $user = Database::getUser($userId);
         $map = [];
         foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
-        $wrongMap = $data['users'][$userId]['wrong_words'][$classId] ?? [];
+        $wrongMap = $user['wrong_words'][$classId] ?? [];
         $list = [];
         foreach ($wrongMap as $wid => $info) if (isset($map[$wid])) {
             $list[] = ['word_id' => $wid, 'word' => $map[$wid]['word'], 'meaning' => $map[$wid]['meaning'], 'pos' => $map[$wid]['pos'] ?? '', 'marked_at' => $info['marked_at'] ?? ''];
@@ -540,9 +528,8 @@ switch ($action) {
     case 'get_authorized_vlogs':
         $month = trim((string)($_POST['month'] ?? ''));
         if ($month !== '' && !preg_match('/\A\d{4}-(?:0[1-9]|1[0-2])\z/D', $month)) appError('month 格式无效');
-        $appData = appDataDefaults(Database::read('app_data.json'));
         $result = [];
-        foreach (($appData['users'] ?? []) as $uid => $u) {
+        foreach (Database::getAllUsers() as $uid => $u) {
             if ((string)$uid === $userId) continue;
             $consentMap = $u['consent_map'] ?? [];
             $allowed = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($u['consent']) ? true : false);
@@ -582,7 +569,6 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['entry' => $entry]]);
 
     case 'upload_image':
-        // APP 端图片上传 (需登录 + 班级校验，复用统一图片处理逻辑)
         if (!isset($_FILES['file']) || !is_array($_FILES['file'])) appError('请选择图片');
         $file = $_FILES['file'];
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -599,38 +585,32 @@ switch ($action) {
             appError($msg, null, $code);
         }
 
-        // 返回相对 URL (与 historySanitizeHtml 允许的格式一致)
         appJson(['success' => true, 'data' => ['url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($filename)]]);
 
     case 'set_consent':
-        // 按班级存储 consent，兼容旧全局键
         $allow = (string)($_POST['consent'] ?? $_POST['allow'] ?? '0') === '1';
-        Database::update('app_data.json', function($data) use ($userId, $classId, $allow) {
-            $data = appDataDefaults($data);
-            if (!isset($data['users'][$userId]['consent_map']) || !is_array($data['users'][$userId]['consent_map'])) {
-                $data['users'][$userId]['consent_map'] = [];
+        Database::updateUser($userId, function($data) use ($classId, $allow) {
+            if (!isset($data['consent_map']) || !is_array($data['consent_map'])) {
+                $data['consent_map'] = [];
             }
-            $data['users'][$userId]['consent_map'][$classId] = $allow;
-            // 向后兼容: 同步旧全局键
-            $data['users'][$userId]['consent'] = $allow;
+            $data['consent_map'][$classId] = $allow;
+            $data['consent'] = $allow;
             return $data;
         });
         appJson(['success' => true, 'allow' => $allow, 'data' => ['consent' => $allow, 'class_id' => $classId]]);
 
     case 'get_consent':
-        // 按班级读取 consent，回退到旧全局键
-        $data = appDataDefaults(Database::read('app_data.json'));
-        $consentMap = $data['users'][$userId]['consent_map'] ?? [];
-        $allow = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($data['users'][$userId]['consent']) ? true : false);
+        $user = Database::getUser($userId);
+        $consentMap = $user['consent_map'] ?? [];
+        $allow = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($user['consent']) ? true : false);
         appJson(['success' => true, 'allow' => $allow, 'data' => ['consent' => $allow, 'class_id' => $classId]]);
 
 
     case 'unmark_wrong':
         $wordId = appStrictId($_POST['word_id'] ?? '', 'word_id');
-        Database::update('app_data.json', function($data) use ($userId, $classId, $wordId) {
-            $data = appDataDefaults($data);
-            if (isset($data['users'][$userId]['wrong_words'][$classId][$wordId])) {
-                unset($data['users'][$userId]['wrong_words'][$classId][$wordId]);
+        Database::updateUser($userId, function($data) use ($classId, $wordId) {
+            if (isset($data['wrong_words'][$classId][$wordId])) {
+                unset($data['wrong_words'][$classId][$wordId]);
             }
             return $data;
         });
@@ -642,14 +622,13 @@ switch ($action) {
         foreach (Database::getWords($classId) as $word) if ((string)$word['id'] === $wordId) { $exists = true; break; }
         if (!$exists) appError('单词不存在');
         $isFav = false;
-        Database::update('app_data.json', function($data) use ($userId, $wordId, &$isFav) {
-            $data = appDataDefaults($data);
-            if (!isset($data['users'][$userId]['favorites'])) $data['users'][$userId]['favorites'] = [];
-            if (in_array($wordId, $data['users'][$userId]['favorites'], true)) {
-                $data['users'][$userId]['favorites'] = array_values(array_diff($data['users'][$userId]['favorites'], [$wordId]));
+        Database::updateUser($userId, function($data) use ($wordId, &$isFav) {
+            if (!isset($data['favorites'])) $data['favorites'] = [];
+            if (in_array($wordId, $data['favorites'], true)) {
+                $data['favorites'] = array_values(array_diff($data['favorites'], [$wordId]));
                 $isFav = false;
             } else {
-                $data['users'][$userId]['favorites'][] = $wordId;
+                $data['favorites'][] = $wordId;
                 $isFav = true;
             }
             return $data;
@@ -657,8 +636,8 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['is_favorite' => $isFav]]);
 
     case 'get_favorites':
-        $data = appDataDefaults(Database::read('app_data.json'));
-        $favIds = $data['users'][$userId]['favorites'] ?? [];
+        $user = Database::getUser($userId);
+        $favIds = $user['favorites'] ?? [];
         $map = []; foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
         $list = [];
         foreach ($favIds as $wid) if (isset($map[$wid])) {
@@ -672,9 +651,9 @@ switch ($action) {
         if (!isset($tasks[$taskId])) appError('任务不存在');
         $task = $tasks[$taskId];
         $map = []; foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
-        $data = appDataDefaults(Database::read('app_data.json'));
-        $favIds = $data['users'][$userId]['favorites'] ?? [];
-        $wrongMap = $data['users'][$userId]['wrong_words'][$classId] ?? [];
+        $user = Database::getUser($userId);
+        $favIds = $user['favorites'] ?? [];
+        $wrongMap = $user['wrong_words'][$classId] ?? [];
         $words = [];
         foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid])) {
             $words[] = [
@@ -706,8 +685,7 @@ switch ($action) {
         }
         if (!count($textLines)) appError('任务中没有可导出的单词');
         if ($action === 'export_task_csv') {
-            $csv = implode("
-", $csvRows);
+            $csv = implode("\n", $csvRows);
             $directory = Database::getExportsDirectory();
         if (!is_dir($directory)) mkdir($directory, 0750, true);
             if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) appError('无法创建导出目录', 'IO_ERROR', 500);
@@ -724,14 +702,13 @@ switch ($action) {
             });
             appJson(['success' => true, 'data' => ['download_url' => 'download.php?token=' . rawurlencode($token) . '&type=csv', 'filename' => $safeName]]);
         } else {
-            appJson(['success' => true, 'data' => ['text' => implode("
-", $textLines)]]);
+            appJson(['success' => true, 'data' => ['text' => implode("\n", $textLines)]]);
         }
 
     case 'export_wrong_csv':
     case 'export_wrong_text':
-        $data = appDataDefaults(Database::read('app_data.json'));
-        $wrongMap = $data['users'][$userId]['wrong_words'][$classId] ?? [];
+        $user = Database::getUser($userId);
+        $wrongMap = $user['wrong_words'][$classId] ?? [];
         $map = []; foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
         $csvRows = ["ï»¿单词,释义,词性"];
         $textLines = [];
@@ -741,8 +718,7 @@ switch ($action) {
         }
         if (!count($textLines)) appError('错题本为空，无可导出内容');
         if ($action === 'export_wrong_csv') {
-            $csv = implode("
-", $csvRows);
+            $csv = implode("\n", $csvRows);
             $directory = Database::getExportsDirectory();
         if (!is_dir($directory)) mkdir($directory, 0750, true);
             if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) appError('无法创建导出目录', 'IO_ERROR', 500);
@@ -759,14 +735,12 @@ switch ($action) {
             });
             appJson(['success' => true, 'data' => ['download_url' => 'download.php?token=' . rawurlencode($token) . '&type=csv', 'filename' => $safeName]]);
         } else {
-            appJson(['success' => true, 'data' => ['text' => implode("
-", $textLines)]]);
+            appJson(['success' => true, 'data' => ['text' => implode("\n", $textLines)]]);
         }
 
     case 'get_gallery':
         $gallery = Database::getClassData($classId, 'gallery');
         if (!is_array($gallery)) $gallery = [];
-        // 自愈：过滤丢失的图片
         $valid = [];
         $cleaned = false;
         foreach ($gallery as $item) {

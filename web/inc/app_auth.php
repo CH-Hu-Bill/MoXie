@@ -14,13 +14,6 @@ function appError($message, $code = null, $status = 400) {
     appJson($result, $status);
 }
 
-function appDataDefaults($data) {
-    if (!isset($data['users']) || !is_array($data['users'])) $data['users'] = [];
-    if (!isset($data['next_uid']) || !is_int($data['next_uid'])) $data['next_uid'] = 1;
-    if (!isset($data['tokens']) || !is_array($data['tokens'])) $data['tokens'] = [];
-    return $data;
-}
-
 function appUsername() {
     return trim((string)($_POST['username'] ?? $_POST['name'] ?? ''));
 }
@@ -32,21 +25,23 @@ function appValidateCredentials($name, $password) {
     if (strlen($password) < 8) appError('密码至少8位');
 }
 
-function appFindUserId($data, $name) {
-    foreach ($data['users'] as $uid => $user) {
-        if (($user['name'] ?? '') === $name) return (string)$uid;
+function appFindUserId($name) {
+    foreach (Database::getAllUserIds() as $uid) {
+        $user = Database::getUser($uid);
+        if ($user && ($user['name'] ?? '') === $name) return (string)$uid;
     }
     return null;
 }
 
-function appNewToken(&$data, $userId) {
+function appNewToken(&$tokens, $userId) {
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
     $expires = time() + APP_TOKEN_TTL;
-    foreach ($data['tokens'] as $key => $record) {
-        if ((int)($record['expires_at'] ?? 0) <= time()) unset($data['tokens'][$key]);
+    // 清理过期令牌
+    foreach ($tokens['tokens'] as $key => $record) {
+        if ((int)($record['expires_at'] ?? 0) <= time()) unset($tokens['tokens'][$key]);
     }
-    $data['tokens'][$hash] = ['user_id' => $userId, 'expires_at' => $expires];
+    $tokens['tokens'][$hash] = ['user_id' => $userId, 'expires_at' => $expires];
     return [$token, $expires];
 }
 
@@ -60,19 +55,19 @@ function appRequireAuth() {
     $token = appAuthToken();
     if ($token === '') appError('请先登录', 'AUTH_REQUIRED', 401);
     $hash = hash('sha256', $token);
-    $data = appDataDefaults(Database::read('app_data.json'));
-    $record = $data['tokens'][$hash] ?? null;
+    $tokens = Database::getTokens();
+    $record = $tokens['tokens'][$hash] ?? null;
     if (!$record || (int)($record['expires_at'] ?? 0) <= time()) {
-        if ($record) Database::update('app_data.json', function($current) use ($hash) {
-            $current = appDataDefaults($current);
+        if ($record) Database::updateTokens(function($current) use ($hash) {
             unset($current['tokens'][$hash]);
             return $current;
         });
         appError('登录已过期，请重新登录', 'TOKEN_EXPIRED', 401);
     }
     $userId = (string)($record['user_id'] ?? '');
-    if (!isset($data['users'][$userId])) appError('用户不存在', 'AUTH_INVALID', 401);
-    return [$userId, $data['users'][$userId], $hash];
+    $user = Database::getUser($userId);
+    if ($user === null) appError('用户不存在', 'AUTH_INVALID', 401);
+    return [$userId, $user, $hash];
 }
 
 function appStrictId($value, $field) {
@@ -91,18 +86,16 @@ function appClassVersion($class) {
 function appRequireClass($userId, $classId) {
     $classes = Database::getClasses();
     if (!isset($classes[$classId])) appError('班级不存在');
-    $data = appDataDefaults(Database::read('app_data.json'));
-    $user = $data['users'][$userId] ?? [];
+    $user = Database::getUser($userId);
+    if ($user === null) appError('用户不存在');
     if (!in_array($classId, $user['class_ids'] ?? [], true)) appError('请先绑定班级', 'CLASS_NOT_BOUND', 403);
     $current = appClassVersion($classes[$classId]);
     $stored = $user['class_auth_versions'][$classId] ?? null;
     if (!is_string($stored) || !hash_equals($current, $stored)) {
-        Database::update('app_data.json', function($latest) use ($userId, $classId) {
-            $latest = appDataDefaults($latest);
-            if (!isset($latest['users'][$userId])) return null;
-            $ids = $latest['users'][$userId]['class_ids'] ?? [];
-            $latest['users'][$userId]['class_ids'] = array_values(array_filter($ids, function($id) use ($classId) { return $id !== $classId; }));
-            unset($latest['users'][$userId]['class_auth_versions'][$classId]);
+        Database::updateUser($userId, function($latest) use ($classId) {
+            $ids = $latest['class_ids'] ?? [];
+            $latest['class_ids'] = array_values(array_filter($ids, function($id) use ($classId) { return $id !== $classId; }));
+            unset($latest['class_auth_versions'][$classId]);
             return $latest;
         });
         appError('班级口令已变更，请重新绑定', 'CLASS_AUTH_EXPIRED', 403);

@@ -65,7 +65,7 @@ function historySanitizeHtml($html) {
                 foreach (explode(';', $value) as $declaration) {
                     // 显式拒绝 url()、expression()、javascript: 等危险 CSS 值 (深度防御)
                     if (preg_match('/url\s*\(|expression\s*\(|javascript:|vbscript:|@import|behavior\s*:/i', $declaration)) continue;
-                    if (preg_match('/\A\s*(color|background-color)\s*:\s*(#[0-9a-fA-F]{3,8}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))\s*\z/D', $declaration, $match)) $safe[] = strtolower($match[1]) . ':' . $match[2];
+                    if (preg_match('/\A\s*(color|background-color)\s*:\s*(#[0-9a-fA-F]{3,8}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)|rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*[0-9.]+\s*\)|hsl\(\s*\d{1,3}\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%\s*\)|hsla\(\s*\d{1,3}\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%\s*,\s*[0-9.]+\s*\)|[a-zA-Z]+)\s*\z/D', $declaration, $match)) $safe[] = strtolower($match[1]) . ':' . $match[2];
                     elseif (preg_match('/\A\s*page-break-(?:after|before|inside)\s*:\s*(?:auto|always|avoid|left|right)\s*\z/D', $declaration, $match)) $safe[] = strtolower(trim($declaration));
                     // 允许 text-align（富文本编辑器对齐按钮生成）
                     elseif (preg_match('/\A\s*text-align\s*:\s*(?:left|center|right|justify)\s*\z/D', $declaration, $match)) $safe[] = strtolower(trim($declaration));
@@ -136,8 +136,7 @@ function historyBuildMergedEntries($history, $classId, $start, $end, $includePer
         $merged[$dateKey][] = ['title' => '班级史记', 'content' => $entry['content']];
     }
     if ($includePersonal) {
-        $appData = Database::read('app_data.json');
-        foreach (($appData['users'] ?? []) as $uid => $user) {
+        foreach (Database::getAllUsers() as $uid => $user) {
             // 兼容两种 consent 存储：新 consent_map[classId] 和旧 consent
             $consentMap = $user['consent_map'] ?? [];
             $allowed = isset($consentMap[$classId]) ? (bool)$consentMap[$classId] : (!empty($user['consent']) ? true : false);
