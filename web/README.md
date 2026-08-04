@@ -72,6 +72,7 @@
 ├── download.php           # 导出文件下载（token + 自动 GC）
 ├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
 ├── common.js              # 公共脚本（TTS / Toast / 跟读 / 页面过渡 / 跑马灯等）
+├── favicon.png            # 网站图标（与 APP 图标一致）
 ├── shiyin.mp3             # 任务提示音
 ├── inc/                   # 核心库
 │   ├── head.php           # 统一 HTML <head>（Google Fonts、meta、common.css）
@@ -268,10 +269,13 @@ Options -Indexes
 data/
 ├── classes.json                # 全局班级注册表
 ├── settings.json               # 全局设置
-├── app_data.json               # APP 用户（全局）
 ├── app_versions.json           # APP 版本发布日志
 ├── exports.json + exports/     # 临时导出文件与 token
 ├── ratelimit.json              # 限流计数
+├── users/                      # APP 用户数据（每个用户独立文件）
+│   ├── u1.json                 #   用户数据（name / password_hash / class_ids / wrong_words / consent_map）
+│   ├── u2.json
+│   └── tokens.json             #   登录令牌（sha256哈希） + next_uid
 └── classes/
     └── {classId}/
         ├── words.json              # 单词
@@ -288,7 +292,8 @@ data/
 | `classes/{classId}/words.json` | 单词数组（id / word / meaning / pos / created_at） | 中 |
 | `classes/{classId}/tasks.json` | 任务（id / date / label / word_ids / status / weekend_week） | 中 |
 | `settings.json` | 全局设置（键名按功能+班级组合，如 `volume_{classId}`、`weekend_week_{classId}`、`gallery_api_key_{classId}`） | 中 |
-| `app_data.json` | APP 用户（name / `password_hash` / tokens / class_ids / wrong_words / consent_map） | **极高** |
+| `users/{uid}.json` | APP 用户数据（name / password_hash / class_ids / wrong_words / consent_map） | **极高** |
+| `users/tokens.json` | 登录令牌 sha256 哈希 + next_uid | **极高** |
 | `app_versions.json` | APP 版本与发布日志（latest / history） | 中 |
 | `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/title/mood/weather/location/tags） | 中 |
 | `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权） | 高 |
@@ -303,7 +308,7 @@ data/
 
 ## APP API 说明
 
-入口：`POST app_api.php`，参数 `action=...`（表单或 JSON）。使用 Bearer token 鉴权（`Authorization: Bearer <token>`），token 经 sha256 哈希后存于 `app_data.json`，有效期 30 天。
+入口：`POST app_api.php`，参数 `action=...`（表单或 JSON）。使用 Bearer token 鉴权（`Authorization: Bearer <token>`），token 经 sha256 哈希后存于 `data/users/tokens.json`，有效期 30 天。
 
 ### 主要接口分组
 

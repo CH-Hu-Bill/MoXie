@@ -9,7 +9,6 @@
 ├── web/                          # Web 端 + 后端 API（PHP + JSON 文件存储，无数据库）
 ├── app/myapp/                    # Flutter APP 客户端（Android）
 ├── .github/workflows/build.yml   # CI: 自动构建 APK
-├── 风格.md                        # 设计规范（Hand-Drawn 手绘风格）
 └── README.md
 ```
 
@@ -19,7 +18,6 @@
 |------|------|------|
 | [`web/`](web/) | 网站端 + APP 全部后端 API。PHP 7.4+，GD，cURL，JSON 文件存储 | [web/README.md](web/README.md) |
 | [`app/myapp/`](app/myapp/) | Flutter APP 客户端，通过 `app_api.php` 与后端交互 | [app/myapp/README.md](app/myapp/README.md) |
-| [`风格.md`](风格.md) | 设计规范（Hand-Drawn 手绘风格） | — |
 
 ## 快速开始
 
@@ -30,6 +28,8 @@ cd web
 cp inc/config.example.php inc/config.php   # 填入真实密钥
 # 将 web/ 配置为 Web 服务器文档根目录
 ```
+
+首次部署时，旧版 `app_data.json` 会在首次 API 请求时自动迁移为 `data/users/{uid}.json` + `tokens.json` 结构，旧文件重命名为 `app_data.json.bak`。
 
 详细部署、安全加固、API 文档见 [web/README.md](web/README.md)。
 
@@ -57,20 +57,28 @@ APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 | APP 图标 | 自定义图标，多密度 mipmap（48~192px） |
 | CI/CD | GitHub Actions（Flutter stable + Java 17） |
 
-## 设计系统
+## 数据存储
 
-两端统一采用 **Hand-Drawn 手绘风格**，详见 [`风格.md`](风格.md)。核心要素：
-
-| 要素 | 值 |
-|------|-----|
-| 背景色 | `#fdfbf7`（暖纸白） |
-| 文字色 | `#2d2d2d`（铅笔黑） |
-| 强调色 | `#ff4d4d`（红色修正笔） |
-| 次强调色 | `#2d5da1`（蓝色圆珠笔） |
-| 便签色 | `#fff9c4`（便利贴黄） |
-| 阴影 | 硬偏移无模糊：`4px 4px 0px 0px #2d2d2d` |
-| 圆角 | 不规则 wobbly：`255px 15px 225px 15px / 15px 225px 15px 255px` |
-| 纸张纹理 | 点阵：`radial-gradient(#e5e0d8 1px, transparent 1px)`，间距 24px |
+```
+data/
+├── classes.json              # 全局班级注册表
+├── settings.json             # 全局设置
+├── app_versions.json         # APP 版本发布记录
+├── exports.json + exports/   # 临时导出文件
+├── ratelimit.json            # 限流计数
+├── users/                    # 用户数据（每个用户独立文件）
+│   ├── u1.json
+│   ├── u2.json
+│   └── tokens.json           # 登录令牌 + next_uid
+└── classes/                  # 班级数据
+    └── {classId}/
+        ├── words.json
+        ├── tasks.json
+        ├── history.json
+        ├── gallery.json
+        ├── personal_history_{uid}.json
+        └── uploads/
+```
 
 ## 安全
 

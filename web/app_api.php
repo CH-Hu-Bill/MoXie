@@ -217,12 +217,11 @@ if ($action === 'set_global_consent') {
 
 if ($action === 'check_version') {
     $current = trim((string)($_POST['current_version'] ?? '1.0'));
-    if (preg_match('/^\d+\.\d+\.\d+$/', $current)) {}
     $versions = Database::read('app_versions.json');
     if (!is_array($versions)) $versions = ['latest' => '1.0', 'history' => []];
     $latest = (string)($versions['latest'] ?? '1.0');
     $hasUpdate = version_compare($latest, $current, '>');
-    if (!$hasUpdate && version_compare($current, $latest, '>')) {
+    if ($hasUpdate && version_compare($current, $latest, '>=')) {
         $hasUpdate = false;
     }
     $notes = '';
