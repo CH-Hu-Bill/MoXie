@@ -105,6 +105,10 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> refreshMyClasses() async {
+    await _loadMyClasses();
+  }
+
   Future<bool> login(String username, String password) async {
     _setError(null);
     notifyListeners();

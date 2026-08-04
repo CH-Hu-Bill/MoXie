@@ -40,6 +40,7 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
     try {
       final auth = context.read<AuthProvider>();
       _allClasses = await auth.loadAllClasses();
+      await auth.refreshMyClasses();
     } catch (e) {
       _error = e.toString();
     }
@@ -220,7 +221,9 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
                         if (auth.myClasses.isNotEmpty) ...[
                           const StickyNote(text: '已加入的班级'),
                           const SizedBox(height: 12),
-                          ...auth.myClasses.map((c) {
+                          ...auth.myClasses.where((c) {
+                                return _allClasses.any((a) => a.id == c['class_id']);
+                              }).map((c) {
                                 final classId = c['class_id']!;
                                 final clsInfo = _allClasses.where((a) => a.id == classId).firstOrNull;
                                 final hasPw = clsInfo?.hasPassword ?? true;

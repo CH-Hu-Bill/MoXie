@@ -100,7 +100,7 @@ class ApiService {
     }
     if (json['success'] != true) {
       final code = json['code']?.toString();
-      if (code == 'CLASS_AUTH_EXPIRED' || code == 'CLASS_NOT_BOUND') {
+      if (code == 'CLASS_AUTH_EXPIRED' || code == 'CLASS_NOT_BOUND' || code == 'CLASS_DELETED') {
         onClassAuthExpired?.call();
       }
       throw ApiException(
