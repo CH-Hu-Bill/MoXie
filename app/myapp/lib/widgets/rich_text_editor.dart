@@ -42,11 +42,12 @@ class RichTextEditorState extends State<RichTextEditor> {
     setState(() => _loading = true);
     try {
       if (html.isNotEmpty) {
-        // Web (Quill 2.x) and older app versions store colors as
-        // `ql-color-XXXX` / `ql-background-XXXX` classes, which
-        // HtmlToDelta cannot parse. Convert them to inline styles first
-        // so colors survive loading.
         html = _convertColorClassesToInline(html);
+        // HtmlToDelta only parses style attributes on <span> tags.
+        // vsc_quill_delta_to_html puts color on the inline tag itself
+        // (e.g. <strong style="color:#ff0000">), so wrap those in <span>
+        // to preserve color/background attributes.
+        html = _wrapInlineTagStyles(html);
         final delta = HtmlToDelta().convert(html);
         _controller.document = Document.fromJson(delta.toJson());
       } else {
@@ -78,6 +79,19 @@ class RichTextEditorState extends State<RichTextEditor> {
     } catch (_) {
       return '';
     }
+  }
+
+  String _wrapInlineTagStyles(String html) {
+    String result = html;
+    result = result.replaceAllMapped(
+      RegExp(r'<(strong|b|em|i|u|ins|s|del|sub|sup)([^>]*?style="[^"]*"[^>]*)>'),
+      (m) => '<span${m[2]}><${m[1]}>',
+    );
+    result = result.replaceAllMapped(
+      RegExp(r'</(strong|b|em|i|u|ins|s|del|sub|sup)>'),
+      (m) => '</${m[1]}></span>',
+    );
+    return result;
   }
 
   String _convertColorClassesToInline(String html) {

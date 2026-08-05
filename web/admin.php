@@ -133,6 +133,59 @@ if ($isAuthed) {
             $msg = "发布成功：{$prevLatest} → {$newVer}（{$channel}） · {$publishedAt}";
         }
     }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'save_announcement') {
+        $content = trim((string)($_POST['content'] ?? ''));
+        $color = trim((string)($_POST['color'] ?? ''));
+        $targetClasses = $_POST['target_classes'] ?? [];
+        $targetPlatforms = $_POST['target_platforms'] ?? [];
+        $allowClose = !empty($_POST['allow_close']);
+        $startTime = trim((string)($_POST['start_time'] ?? ''));
+        $endTime = trim((string)($_POST['end_time'] ?? ''));
+        if ($content === '' || $startTime === '' || $endTime === '') {
+            $msg = '请填写公告内容、开始时间和结束时间';
+        } elseif (!preg_match('/\A#[0-9a-fA-F]{3,8}\z/D', $color)) {
+            $msg = '颜色格式无效';
+        } elseif ($startTime >= $endTime) {
+            $msg = '结束时间必须晚于开始时间';
+        } else {
+            $announcements = Database::getAnnouncements();
+            // 检查时间冲突
+            $conflict = false;
+            foreach ($announcements as $ann) {
+                if ($ann['start_time'] < $endTime && $ann['end_time'] > $startTime) {
+                    $conflict = true;
+                    $msg = '该时间段与已有公告（' . htmlspecialchars($ann['content']) . '）冲突';
+                    break;
+                }
+            }
+            if (!$conflict) {
+                $announcements[] = [
+                    'id' => 'ann_' . time(),
+                    'content' => $content,
+                    'color' => $color,
+                    'target_classes' => $targetClasses,
+                    'target_platforms' => $targetPlatforms,
+                    'allow_close' => $allowClose,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ];
+                Database::saveAnnouncements($announcements);
+                $msg = '公告已发布';
+            }
+        }
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'delete_announcement') {
+        $delId = (string)($_POST['id'] ?? '');
+        $announcements = Database::getAnnouncements();
+        $announcements = array_values(array_filter($announcements, function($a) use ($delId) {
+            return ($a['id'] ?? '') !== $delId;
+        }));
+        Database::saveAnnouncements($announcements);
+        $msg = '公告已删除';
+    }
 }
 $versionData = Database::read('app_versions.json');
 if (!is_array($versionData)) $versionData = ['latest' => '1.0', 'history' => []];
@@ -234,6 +287,114 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
                     <td style="padding:8px 10px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo htmlspecialchars((string)($row['channel'] ?? 'stable')); ?></td>
                     <td style="padding:8px 10px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo htmlspecialchars((string)($row['notes'] ?? '')); ?></td>
                     <td style="padding:8px 10px;border-bottom:2px solid var(--old-paper);vertical-align:top;color:var(--pencil);opacity:0.7;"><?php echo htmlspecialchars((string)($row['ip'] ?? '-')); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+</div>
+
+<?php
+$announcements = Database::getAnnouncements();
+$allClassIds = is_array($classes) ? array_keys($classes) : [];
+?>
+<div class="card" style="margin-bottom:16px;">
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📢 全服公告</h2>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
+        <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">当前公告</span><b style="font-size:14px;"><?php echo count($announcements); ?> 条</b></div>
+        <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">服务时间</span><b style="font-size:14px;"><?php echo date('Y-m-d H:i'); ?></b></div>
+    </div>
+    <form method="post">
+        <input type="hidden" name="action" value="save_announcement">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:200px">
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">公告内容 *</label>
+                <input type="text" name="content" class="input" placeholder="例如：周五下午进行默写测试" style="width:100%" maxlength="200" required>
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">颜色</label>
+                <input type="color" name="color" value="#ff4d4d" style="width:44px;height:44px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);cursor:pointer;padding:2px;">
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">目标班级</label>
+                <select name="target_classes[]" multiple style="height:80px;padding:6px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:12px;font-family:var(--font-body);background:var(--white);min-width:120px;">
+                    <option value="all" selected>全部班级</option>
+                    <?php foreach ($allClassIds as $cid): ?>
+                    <option value="<?php echo htmlspecialchars($cid); ?>"><?php echo htmlspecialchars($classes[$cid]['name'] ?? $cid); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">投送平台</label>
+                <div style="display:flex;gap:8px;padding:4px 0;">
+                    <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" name="target_platforms[]" value="app" checked> APP</label>
+                    <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" name="target_platforms[]" value="web" checked> Web</label>
+                </div>
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">允许关闭</label>
+                <div style="padding:4px 0;">
+                    <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" name="allow_close" value="1" checked> 是</label>
+                </div>
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">开始时间</label>
+                <input type="datetime-local" name="start_time" class="input" style="width:180px" required>
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">结束时间</label>
+                <input type="datetime-local" name="end_time" class="input" style="width:180px" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="white-space:nowrap;">发布公告</button>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">同一时间段只允许一条公告。时间精确到分钟，服务时区 Asia/Shanghai（UTC+8）。</p>
+    </form>
+
+    <?php if (count($announcements) > 0): ?>
+    <h3 style="font-family:var(--font-heading);font-size:15px;margin:18px 0 10px;color:var(--pencil);">公告列表</h3>
+    <div style="overflow-x:auto;border:2px solid var(--old-paper);border-radius:var(--wobbly-sm);">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+                <tr>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">内容</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">颜色</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">班级</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">平台</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">开始</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">结束</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">状态</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($announcements as $ann): ?>
+                <?php
+                $now = date('Y-m-d H:i:s');
+                $active = $ann['start_time'] <= $now && $ann['end_time'] >= $now;
+                $future = $ann['start_time'] > $now;
+                ?>
+                <tr>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars($ann['content']); ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:<?php echo htmlspecialchars($ann['color'] ?? '#ff4d4d'); ?>;border:1px solid var(--pencil);"></span></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo in_array('all', $ann['target_classes'] ?? []) ? '全部' : implode(', ', $ann['target_classes']); ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo implode(', ', $ann['target_platforms'] ?? []); ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;white-space:nowrap;"><?php echo htmlspecialchars($ann['start_time']); ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;white-space:nowrap;"><?php echo htmlspecialchars($ann['end_time']); ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;">
+                        <?php if ($active): ?><span style="color:var(--blue);font-weight:700;">进行中</span>
+                        <?php elseif ($future): ?><span style="color:#888;">待生效</span>
+                        <?php else: ?><span style="color:var(--red);">已过期</span><?php endif; ?>
+                    </td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;">
+                        <form method="post" style="display:inline;" onsubmit="return confirm('确认删除此公告？')">
+                            <input type="hidden" name="action" value="delete_announcement">
+                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="id" value="<?php echo htmlspecialchars($ann['id']); ?>">
+                            <button type="submit" class="btn btn-danger btn-sm" style="font-size:11px;padding:2px 8px;">删除</button>
+                        </form>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

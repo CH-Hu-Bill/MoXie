@@ -196,9 +196,16 @@ class ApiService {
 
   // ── Version ──
 
-  Future<Map<String, dynamic>> checkVersion() {
-    return _post('check_version',
-        fields: {'current_version': ApiConfig.appVersion});
+Future<Map<String, dynamic>> checkVersion() {
+    return _post('check_version');
+  }
+
+  Future<Map<String, dynamic>> getAnnouncements(String classId,
+      {String platform = 'app'}) {
+    return _post('get_announcements', fields: {
+      'class_id': classId,
+      'platform': platform,
+    });
   }
 
   // ── Words ──

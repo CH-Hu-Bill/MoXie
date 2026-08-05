@@ -475,6 +475,15 @@ class Database {
     /** @param array $settings 设置数组 */
     public static function saveSettings($settings) { return self::write('settings.json', $settings); }
 
+    // ==================== 公告 (Announcements) ====================
+    public static function getAnnouncements() {
+        $data = self::read('announcements.json');
+        return $data['announcements'] ?? [];
+    }
+    public static function saveAnnouncements($announcements) {
+        return self::write('announcements.json', ['announcements' => $announcements]);
+    }
+
     // ==================== 班级级联删除 ====================
     /**
      * 删除班级的整个数据目录 (含所有 json、uploads 子目录)。

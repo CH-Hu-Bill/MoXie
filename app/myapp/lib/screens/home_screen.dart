@@ -9,6 +9,7 @@ import 'search/search_screen.dart';
 import 'gallery/gallery_screen.dart';
 import 'profile/profile_screen.dart';
 import 'class_selection_screen.dart';
+import '../widgets/announcement_banner.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -106,9 +107,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      body: Column(
+        children: [
+          const AnnouncementBanner(),
+          Expanded(
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _screens,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

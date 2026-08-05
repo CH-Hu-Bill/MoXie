@@ -101,6 +101,32 @@ body {
 .status-bar .right {
   display: flex; align-items: center; gap: 8px;
 }
+.status-bar .announcement {
+  flex: 1; overflow: hidden; white-space: nowrap;
+  text-align: center; font-family: var(--font-heading);
+  font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px;
+}
+.status-bar .announcement .announcement-text {
+  display: inline-block; white-space: nowrap;
+}
+.status-bar .announcement .announcement-text.scrollable {
+  animation: annMarquee var(--md, 5s) ease-in-out infinite alternate;
+  animation-delay: 0.6s;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%);
+}
+.status-bar .announcement .announcement-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 0 4px;
+  color: var(--pencil); opacity: 0.5; flex-shrink: 0;
+}
+.status-bar .announcement .announcement-close:hover { opacity: 1; }
+@keyframes annMarquee {
+  0%,12% { transform: translateX(0); }
+  88%,100% { transform: translateX(var(--mx, -30px)); }
+}
 
 /* ---- 返回按钮 ---- */
 .back-btn {

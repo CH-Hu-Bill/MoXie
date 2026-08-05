@@ -233,6 +233,22 @@ if ($action === 'check_version') {
     ]]);
 }
 
+if ($action === 'get_announcements') {
+    list($userId, $authUser) = appRequireAuth();
+    $classId = trim((string)($_POST['class_id'] ?? ''));
+    $platform = trim((string)($_POST['platform'] ?? 'app'));
+    $announcements = Database::getAnnouncements();
+    $now = date('Y-m-d H:i:s');
+    $result = [];
+    foreach ($announcements as $ann) {
+        if ($ann['start_time'] > $now || $ann['end_time'] < $now) continue;
+        if (!in_array('all', $ann['target_classes'] ?? []) && !in_array($classId, $ann['target_classes'] ?? [])) continue;
+        if (!in_array($platform, $ann['target_platforms'] ?? [])) continue;
+        $result[] = $ann;
+    }
+    appJson(['success' => true, 'data' => $result]);
+}
+
 if ($action === 'get_csrf_token') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
     if (session_status() === PHP_SESSION_NONE) @session_start();
