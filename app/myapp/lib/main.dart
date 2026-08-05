@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => AuthProvider(),
       child: MaterialApp(
-        title: '默写史记',
+        title: 'ListenWrite',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.theme,
         locale: const Locale('zh'),

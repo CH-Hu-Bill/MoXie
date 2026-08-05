@@ -66,12 +66,12 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '默写史记',
+                        'ListenWrite',
                         style: AppTheme.headingStyle.copyWith(fontSize: 36),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'ListenWrite',
+                        '默写 · 史记',
                         style: AppTheme.bodyStyle.copyWith(
                           fontSize: 16,
                           color: AppColors.secondaryAccent,

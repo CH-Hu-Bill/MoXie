@@ -40,7 +40,7 @@ jobs:
           class ApiConfig {
             static const String baseUrl = '$API_BASE_URL';
             static const String apiEndpoint = '\$baseUrl/app_api.php';
-            static const String appVersion = '1.0.0';
+            static const String appVersion = '1.0.2';
           }
           EOF
           fi

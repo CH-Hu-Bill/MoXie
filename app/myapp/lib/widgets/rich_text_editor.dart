@@ -42,6 +42,11 @@ class RichTextEditorState extends State<RichTextEditor> {
     setState(() => _loading = true);
     try {
       if (html.isNotEmpty) {
+        // Web (Quill 2.x) and older app versions store colors as
+        // `ql-color-XXXX` / `ql-background-XXXX` classes, which
+        // HtmlToDelta cannot parse. Convert them to inline styles first
+        // so colors survive loading.
+        html = _convertColorClassesToInline(html);
         final delta = HtmlToDelta().convert(html);
         _controller.document = Document.fromJson(delta.toJson());
       } else {

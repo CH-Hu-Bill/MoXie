@@ -53,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const StickyNote(text: '欢迎！'),
                   const SizedBox(height: 16),
                   Text(
-                    '默写史记',
+                    'ListenWrite',
                     textAlign: TextAlign.center,
                     style: AppTheme.headingStyle.copyWith(fontSize: 42),
                   ),

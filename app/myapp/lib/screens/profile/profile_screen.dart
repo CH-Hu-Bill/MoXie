@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../config/api_config.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 import '../class_selection_screen.dart';
@@ -159,7 +160,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildItem(
                 icon: Icons.info_outline,
                 title: '版本',
-                subtitle: '1.0.1',
+                subtitle: ApiConfig.appVersion,
               ),
             ]),
             const SizedBox(height: 16),
@@ -180,7 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 32),
             Center(
               child: Text(
-                '默写史记 ListenWrite',
+                'ListenWrite · 默写史记',
                 style: AppTheme.bodyStyle.copyWith(
                   fontSize: 14,
                   color: AppColors.foreground.withValues(alpha: 0.3),
