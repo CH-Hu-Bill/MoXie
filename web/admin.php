@@ -140,8 +140,8 @@ if ($isAuthed) {
         $targetClasses = $_POST['target_classes'] ?? [];
         $targetPlatforms = $_POST['target_platforms'] ?? [];
         $allowClose = !empty($_POST['allow_close']);
-        $startTime = trim((string)($_POST['start_time'] ?? ''));
-        $endTime = trim((string)($_POST['end_time'] ?? ''));
+        $startTime = str_replace('T', ' ', trim((string)($_POST['start_time'] ?? '')));
+        $endTime = str_replace('T', ' ', trim((string)($_POST['end_time'] ?? '')));
         if ($content === '' || $startTime === '' || $endTime === '') {
             $msg = '请填写公告内容、开始时间和结束时间';
         } elseif (!preg_match('/\A#[0-9a-fA-F]{3,8}\z/D', $color)) {
