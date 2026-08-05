@@ -153,7 +153,9 @@ if ($isAuthed) {
             // 检查时间冲突
             $conflict = false;
             foreach ($announcements as $ann) {
-                if ($ann['start_time'] < $endTime && $ann['end_time'] > $startTime) {
+                $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
+                $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
+                if ($annStart < $endTime && $annEnd > $startTime) {
                     $conflict = true;
                     $msg = '该时间段与已有公告（' . htmlspecialchars($ann['content']) . '）冲突';
                     break;

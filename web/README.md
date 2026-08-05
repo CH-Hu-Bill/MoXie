@@ -33,7 +33,8 @@
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑；个人列传（需授权）；支持 PDF / HTML / 长图导出 |
 | **班级图集** (`gallery.php` / `gallery_api.php`) | 图片上传 + 画廊展示；提供公开分页 API（基于 IP + 日期轮换排序，防同设备重复） |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数，按班级隔离存储 |
-| **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志） |
+| **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
+| **全服公告** | 管理员发布的公告按班级 + 平台 + 时间段投送；Web 端嵌入顶部状态栏跑马灯（可关闭，存 localStorage）；APP 端顶部横幅显示（可关闭，存 SharedPreferences） |
 | **APP 后端 API** (`app_api.php`) | 用户注册 / 登录 / token 鉴权、单词 / 任务 / 错题本 / 收藏、史记、图集、导出等完整接口 |
 
 ---
@@ -252,6 +253,7 @@ Options -Indexes
 | `task.php` | 默写任务：列表视图 + 执行视图（看词/默写/听写） | `?id={classId}` `?task_id={taskId}` |
 | `history.php` | 默写记录：历史任务、重新创建 | `?id={classId}` `?task_id={taskId}` |
 | `history_book.php` | 班级史记：月历 + Quill 编辑器 + 导出 | `?id={classId}` |
+| `app_api.php` `get_announcements` | 获取当前有效公告（按班级 + 平台 + 时间段筛选） | POST `class_id` `platform` |
 | `gallery.php` | 图集：上传 / 删除 / 画廊 | `?id={classId}` |
 | `gallery_api.php` | 图集公开 API | `?class_id={id}` `?page=` `?per_page=` `?apikey=` |
 | `settings.php` | 听写 / 朗读 / 跟读参数 | `?id={classId}` |
@@ -271,6 +273,7 @@ data/
 ├── classes.json                # 全局班级注册表
 ├── settings.json               # 全局设置
 ├── app_versions.json           # APP 版本发布日志
+├── announcements.json          # 全服公告列表
 ├── exports.json + exports/     # 临时导出文件与 token
 ├── ratelimit.json              # 限流计数
 ├── users/                      # APP 用户数据（每个用户独立文件）
@@ -296,8 +299,9 @@ data/
 | `users/{uid}.json` | APP 用户数据（name / password_hash / class_ids / wrong_words / consent_map） | **极高** |
 | `users/tokens.json` | 登录令牌 sha256 哈希 + next_uid | **极高** |
 | `app_versions.json` | APP 版本与发布日志（latest / history） | 中 |
-| `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/title/mood/weather/location/tags） | 中 |
-| `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权） | 高 |
+| `announcements.json` | 全服公告（id/content/color/target_classes/target_platforms/allow_close/start_time/end_time） | 中 |
+| `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/delta/title/mood/weather/location/tags） | 中 |
+| `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权；`delta` 为 APP 端 Delta JSON 无损格式，Web 忽略） | 高 |
 | `classes/{classId}/gallery.json` | 图集元数据（id / image / description / uploaded_at） | 中 |
 | `exports.json` + `exports/` | 临时导出文件与下载 token（短时有效，自动 GC） | 高 |
 | `ratelimit.json` | 限流计数（滑动窗口） | 低 |
@@ -321,6 +325,7 @@ data/
 | 任务 | `get_tasks` `get_task_detail` `complete_task` `cancel_task` `get_completed_tasks` `search_all` |
 | 错题 / 收藏 | `mark_wrong` `unmark_wrong` `get_wrong_words` `toggle_favorite` `get_favorites` |
 | 史记 | `get_class_history` `get_personal_history` `save_personal_history` `export_personal_history` |
+| 公告 | `get_announcements` |
 | 图集 | `get_gallery` `save_gallery` `delete_gallery` `upload_image` |
 | 授权 | `set_global_consent` `set_consent` `get_consent` |
 | 版本 | `check_version` |

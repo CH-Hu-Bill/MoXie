@@ -22,7 +22,9 @@ if ($classId !== '') {
         $allAnnouncements = Database::getAnnouncements();
         $now = date('Y-m-d H:i:s');
         foreach ($allAnnouncements as $ann) {
-            if ($ann['start_time'] > $now || $ann['end_time'] < $now) continue;
+            $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
+            $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
+            if ($annStart > $now || $annEnd < $now) continue;
             if (!in_array('all', $ann['target_classes'] ?? []) && !in_array($classId, $ann['target_classes'] ?? [])) continue;
             if (!in_array('web', $ann['target_platforms'] ?? [])) continue;
             $webAnnouncement = $ann;

@@ -241,7 +241,9 @@ if ($action === 'get_announcements') {
     $now = date('Y-m-d H:i:s');
     $result = [];
     foreach ($announcements as $ann) {
-        if ($ann['start_time'] > $now || $ann['end_time'] < $now) continue;
+        $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
+        $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
+        if ($annStart > $now || $annEnd < $now) continue;
         if (!in_array('all', $ann['target_classes'] ?? []) && !in_array($classId, $ann['target_classes'] ?? [])) continue;
         if (!in_array($platform, $ann['target_platforms'] ?? [])) continue;
         $result[] = $ann;
@@ -566,8 +568,16 @@ switch ($action) {
         } catch (Exception $e) {
             appError('内容格式无效');
         }
+        $delta = (string)($_POST['delta'] ?? '');
+        if ($delta !== '' && strlen($delta) <= 2097152) {
+            json_decode($delta, true);
+            if (json_last_error() !== JSON_ERROR_NONE) $delta = '';
+        } elseif ($delta !== '') {
+            $delta = '';
+        }
         $entry = historyNormalizeEntry([
             'content' => $content,
+            'delta' => $delta,
             'title' => $_POST['title'] ?? '',
             'mood' => $_POST['mood'] ?? historyDefaultMood(),
             'weather' => $_POST['weather'] ?? historyDefaultWeather(),

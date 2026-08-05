@@ -196,8 +196,10 @@ class ApiService {
 
   // ── Version ──
 
-Future<Map<String, dynamic>> checkVersion() {
-    return _post('check_version');
+  Future<Map<String, dynamic>> checkVersion() {
+    return _post('check_version', fields: {
+      'current_version': ApiConfig.appVersion,
+    });
   }
 
   Future<Map<String, dynamic>> getAnnouncements(String classId,
@@ -348,6 +350,7 @@ Future<Map<String, dynamic>> checkVersion() {
       'class_id': classId,
       'date': entry['date'] as String,
       'content': entry['content'] as String,
+      'delta': entry['delta'] as String? ?? '',
       'title': entry['title'] as String? ?? '',
       'mood': entry['mood'] as String? ?? '😊',
       'weather': entry['weather'] as String? ?? '☀️',

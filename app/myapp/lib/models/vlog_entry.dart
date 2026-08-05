@@ -1,6 +1,7 @@
 class VlogEntry {
   final String date;
   final String content;
+  final String delta;
   final String title;
   final String mood;
   final String weather;
@@ -11,6 +12,7 @@ class VlogEntry {
   VlogEntry({
     required this.date,
     this.content = '',
+    this.delta = '',
     this.title = '',
     this.mood = '😊',
     this.weather = '☀️',
@@ -23,6 +25,7 @@ class VlogEntry {
     return VlogEntry(
       date: dateKey,
       content: json['content'] ?? '',
+      delta: json['delta'] ?? '',
       title: json['title'] ?? '',
       mood: json['mood'] ?? '😊',
       weather: json['weather'] ?? '☀️',
@@ -36,6 +39,7 @@ class VlogEntry {
     return {
       'date': date,
       'content': content,
+      'delta': delta,
       'title': title,
       'mood': mood,
       'weather': weather,

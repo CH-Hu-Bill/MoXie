@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
@@ -61,6 +62,30 @@ class RichTextEditorState extends State<RichTextEditor> {
 
   void setHtml(String html) => _loadHtml(html);
 
+  String getDelta() {
+    try {
+      return jsonEncode(_controller.document.toDelta().toJson());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void setDelta(String delta) {
+    setState(() => _loading = true);
+    try {
+      if (delta.isNotEmpty) {
+        final decoded = jsonDecode(delta) as List;
+        _controller.document =
+            Document.fromJson(decoded.cast<Map<String, dynamic>>());
+      } else {
+        _controller.clear();
+      }
+    } catch (_) {
+      _controller.clear();
+    }
+    setState(() => _loading = false);
+  }
+
   String getHtml() {
     try {
       final delta = _controller.document.toDelta();
@@ -82,16 +107,21 @@ class RichTextEditorState extends State<RichTextEditor> {
   }
 
   String _wrapInlineTagStyles(String html) {
-    String result = html;
-    result = result.replaceAllMapped(
-      RegExp(r'<(strong|b|em|i|u|ins|s|del|sub|sup)([^>]*?style="[^"]*"[^>]*)>'),
-      (m) => '<span${m[2]}><${m[1]}>',
+    // 只把「带 style 的 inline 标签」整体（开标签+内容+闭标签）包进 <span>，
+    // 保证 HTML 平衡；不带 style 的 inline 标签不受影响。
+    return html.replaceAllMapped(
+      RegExp(
+        r'<(strong|b|em|i|u|ins|s|del|sub|sup)([^>]*?style="[^"]*"[^>]*)>(.*?)</\1>',
+        caseSensitive: false,
+        dotAll: true,
+      ),
+      (m) {
+        final tag = m.group(1)!;
+        final attrs = m.group(2)!;
+        final content = m.group(3)!;
+        return '<span$attrs><$tag>$content</$tag></span>';
+      },
     );
-    result = result.replaceAllMapped(
-      RegExp(r'</(strong|b|em|i|u|ins|s|del|sub|sup)>'),
-      (m) => '</${m[1]}></span>',
-    );
-    return result;
   }
 
   String _convertColorClassesToInline(String html) {

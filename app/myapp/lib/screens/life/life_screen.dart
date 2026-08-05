@@ -151,10 +151,18 @@ class LifeScreenState extends State<LifeScreen> {
     _editTagsCtrl.text = existing?.tags.join(', ') ?? '';
     _editMood = (existing?.mood.isNotEmpty == true) ? existing!.mood : '😊';
     _editWeather = (existing?.weather.isNotEmpty == true) ? existing!.weather : '☀️';
+    final delta = existing?.delta ?? '';
     final html = existing != null ? _resolveHtmlImages(existing.content) : '';
     setState(() => _isEditing = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _richTextKey.currentState?.setHtml(html);
+      final editor = _richTextKey.currentState;
+      if (editor == null) return;
+      // 优先用 Delta JSON（无损还原），无 delta 时回退 HTML
+      if (delta.isNotEmpty) {
+        editor.setDelta(delta);
+      } else {
+        editor.setHtml(html);
+      }
     });
   }
 
@@ -438,12 +446,14 @@ class LifeScreenState extends State<LifeScreen> {
         .where((t) => t.isNotEmpty)
         .toList();
     final content = _richTextKey.currentState?.getHtml() ?? '';
+    final delta = _richTextKey.currentState?.getDelta() ?? '';
 
     setState(() => _saving = true);
     try {
       await _api.savePersonalHistory(classId, {
         'date': _selectedDate!,
         'content': content,
+        'delta': delta,
         'title': _editTitleCtrl.text.trim(),
         'mood': _editMood,
         'weather': _editWeather,

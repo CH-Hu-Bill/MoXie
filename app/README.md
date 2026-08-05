@@ -50,9 +50,11 @@ lib/
 │   ├── class_info.dart         # 班级模型
 │   ├── word.dart               # 单词模型
 │   ├── task.dart               # 任务模型
-│   └── gallery_item.dart       # 画廊模型
+│   ├── gallery_item.dart       # 画廊模型
+│   ├── vlog_entry.dart         # Vlog 条目（content=HTML，delta=Delta JSON）
+│   └── announcement.dart       # 公告模型
 ├── services/
-│   ├── api_service.dart        # API 请求封装
+│   ├── api_service.dart        # API 请求封装（含 get_announcements）
 │   └── storage_service.dart   # 本地存储
 ├── providers/
 │   └── auth_provider.dart      # 认证状态管理
@@ -66,8 +68,16 @@ lib/
 │   ├── gallery/                # 画廊
 │   └── profile/                # 我的
 └── widgets/
-    └── hand_drawn_widgets.dart # 手绘风格通用组件
+    ├── hand_drawn_widgets.dart # 手绘风格通用组件
+    ├── rich_text_editor.dart   # Quill 富文本编辑器（HTML + Delta JSON 双存）
+    └── announcement_banner.dart # 顶部公告横幅（跑马灯，可关闭）
 ```
+
+## 富文本颜色保存说明
+
+- 编辑器保存时**同时写入** `content`（HTML，供 Web 端）与 `delta`（Delta JSON，供 APP 无损还原）。
+- 加载时**优先使用 `delta`**，无 `delta`（如 Web 端创建的旧数据）回退到 HTML 转换。
+- 因此 APP 端设置的字体颜色等格式可完全保留，同时不影响 Web 端读取。
 
 ## 打包
 

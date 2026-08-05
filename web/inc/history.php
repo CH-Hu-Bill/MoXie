@@ -55,11 +55,38 @@ function historySanitizeHtml($html) {
             if (stripos($name, 'on') === 0 || in_array($lower, ['srcset', 'formaction', 'xlink:href', 'xml:base', 'xmlns', 'data', 'code', 'codebase'], true)) {
                 $keep = false;
             } elseif ($lower === 'class') {
-                $classes = array_filter(preg_split('/\s+/', $value), function($class) {
-                    return preg_match('/\Aql-(?:align-(?:center|right|justify)|indent-[1-8]|direction-rtl)\z/D', $class)
-                        || preg_match('/\Aimg-(?:left|center|right|selected)\z/D', $class);
-                });
-                if ($classes) { $node->setAttribute('class', implode(' ', $classes)); $keep = true; }
+                // 保留布局类；把 ql-color-/ql-background- 类转为内联 style（兼容 web Quill 保存的颜色）
+                $classes = [];
+                $styleAdd = [];
+                foreach (preg_split('/\s+/', $value) as $class) {
+                    if ($class === '') continue;
+                    if (preg_match('/\Aql-color-([0-9a-fA-F]{3,8})\z/D', $class, $m)) {
+                        $styleAdd['color'] = '#' . strtolower($m[1]);
+                    } elseif (preg_match('/\Aql-background-([0-9a-fA-F]{3,8})\z/D', $class, $m)) {
+                        $styleAdd['background-color'] = '#' . strtolower($m[1]);
+                    } elseif (preg_match('/\Aql-(?:align-(?:center|right|justify)|indent-[1-8]|direction-rtl)\z/D', $class)
+                        || preg_match('/\Aimg-(?:left|center|right|selected)\z/D', $class)) {
+                        $classes[] = $class;
+                    }
+                }
+                if ($classes) {
+                    $node->setAttribute('class', implode(' ', $classes));
+                } else {
+                    $node->removeAttribute('class');
+                }
+                if ($styleAdd) {
+                    $existing = trim((string)$node->getAttribute('style'));
+                    $parts = $existing !== '' ? array_filter(array_map('trim', explode(';', $existing))) : [];
+                    $seen = [];
+                    foreach ($parts as $p) {
+                        if (preg_match('/\A([a-zA-Z-]+)\s*:/', $p, $m)) $seen[strtolower($m[1])] = true;
+                    }
+                    foreach ($styleAdd as $prop => $val) {
+                        if (!isset($seen[$prop])) $parts[] = $prop . ':' . $val;
+                    }
+                    $node->setAttribute('style', implode(';', $parts));
+                }
+                if ($classes || $styleAdd) $keep = true;
             } elseif ($lower === 'style') {
                 $safe = [];
                 foreach (explode(';', $value) as $declaration) {
@@ -225,8 +252,16 @@ function historyNormalizeEntry(array $entry) {
     } catch (Exception $e) {
         $content = '';
     }
+    $delta = (string)($entry['delta'] ?? '');
+    if ($delta !== '' && strlen($delta) <= 2097152) {
+        json_decode($delta, true);
+        if (json_last_error() !== JSON_ERROR_NONE) $delta = '';
+    } else {
+        $delta = '';
+    }
     return [
         'content' => $content,
+        'delta' => $delta,
         'title' => historySanitizeTitle($entry['title'] ?? ''),
         'mood' => historySanitizeMood($entry['mood'] ?? historyDefaultMood()),
         'weather' => historySanitizeWeather($entry['weather'] ?? historyDefaultWeather()),
