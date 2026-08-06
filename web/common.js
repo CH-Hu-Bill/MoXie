@@ -165,6 +165,16 @@ hidePageLeaving();
 document.addEventListener('DOMContentLoaded', hidePageLeaving);
 window.addEventListener('load', hidePageLeaving);
 window.addEventListener('pageshow', hidePageLeaving);
+// 页面离开前(进入 bfcache)移除蒙版，避免系统返回键恢复页面时蒙版残留卡住
+window.addEventListener('pagehide', function() {
+    document.documentElement.classList.remove('page-leaving');
+    const overlay = document.getElementById('pageLeavingOverlay');
+    if (overlay) overlay.remove();
+});
+// 页面重新可见时再兜底一次（覆盖 bfcache 恢复等场景）
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) hidePageLeaving();
+});
 
 function showOkOverlayThen(url) {
     showPageLeaving();

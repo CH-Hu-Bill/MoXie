@@ -95,8 +95,12 @@ body {
   font-size: 15px; font-weight: 700; color: var(--pencil);
 }
 .status-bar .left .page-name {
-  font-size: 13px; font-weight: 700; color: var(--red);
-  border-left: 2px solid var(--pencil); padding-left: 10px;
+  font-size: 13px; font-weight: 700; color: var(--pencil);
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; /* 手绘 wobbly 圆角 */
+  box-shadow: 2px 2px 0 0 var(--pencil); /* 硬偏移阴影，无模糊 */
+  padding: 1px 10px;
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .status-bar .title {
@@ -106,10 +110,12 @@ body {
 }
 .status-bar .right {
   display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
 }
 .status-bar .announcement {
   flex: 1; min-width: 0; overflow: hidden;
   display: flex; align-items: center; gap: 6px;
+  margin: 0 8px;
 }
 .status-bar .announcement-track {
   flex: 1; min-width: 0; overflow: hidden; align-self: stretch;
@@ -125,15 +131,12 @@ body {
 }
 .status-bar .announcement-marquee {
   display: flex; align-items: center; white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 0; width: max-content;
   animation: annMarquee var(--dur, 8s) linear infinite;
   will-change: transform;
 }
 .status-bar .announcement-marquee .announcement-text {
-  margin: 0; padding-right: 40px;
-}
-.status-bar .announcement-marquee .announcement-text:last-child {
-  padding-right: 0;
+  padding: 0 20px; /* 对称间距：translateX(-50%) 正好移动一个副本，无缝循环 */
 }
 .status-bar .announcement-close {
   background: var(--white); border: 1.5px solid currentColor; cursor: pointer;
@@ -146,7 +149,7 @@ body {
 .status-bar .announcement-close:hover { opacity: 1; transform: scale(1.1); }
 @keyframes annMarquee {
   from { transform: translateX(0); }
-  to { transform: translateX(var(--end, -200px)); }
+  to { transform: translateX(-50%); }
 }
 
 /* ---- 返回按钮 ---- */

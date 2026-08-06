@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 /// 公告无缝跑马灯。
 ///
-/// 双副本（text + text）首尾相接循环滚动：
-/// 第一份文本从右侧移入、左侧移出后，第二份已在同一位置无缝续接，
-/// 不会出现"从开头重新播放"的跳变，也不会出现两份重叠。
+/// 双副本（text + text）首尾相接循环滚动：第一份从左侧移出后，
+/// 第二份已精确补位到第一份的起始位置，无跳变、无重叠。
 ///
-/// [animation] 值域 0..1，0 时第一份从可用区左缘开始（第二份在右缘外），
-/// 1 时第一份完全移出左侧、第二份正好补到第一份起始位置。
-class BannerMarquee extends StatelessWidget {
+/// 关键：副本间距使用**实际渲染宽度**（GlobalKey 测量），而不是
+/// TextPainter 估算值——字体缩放/度量差异会导致第二份偏移不精确
+/// 从而在拼接处出现短暂重叠。
+class BannerMarquee extends StatefulWidget {
   const BannerMarquee({
     super.key,
     required this.text,
@@ -29,13 +29,41 @@ class BannerMarquee extends StatelessWidget {
   final bool fadeEdges;
 
   @override
+  State<BannerMarquee> createState() => _BannerMarqueeState();
+}
+
+class _BannerMarqueeState extends State<BannerMarquee> {
+  final GlobalKey _firstKey = GlobalKey();
+  double _realWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  void _measure() {
+    if (!mounted) return;
+    final ctx = _firstKey.currentContext;
+    if (ctx == null) return;
+    final w = ctx.size?.width ?? 0;
+    if (w > 0 && (w - _realWidth).abs() > 0.5) {
+      setState(() => _realWidth = w);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // 有真实渲染宽度优先用真实值，保证拼接精确；否则退回估算值
+    final copyWidth = _realWidth > 0 ? _realWidth : widget.textWidth;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+
     final content = AnimatedBuilder(
-      animation: animation,
+      animation: widget.animation,
       builder: (context, child) {
-        final dx = -(animation.value * (textWidth + gap));
+        final dx = -(widget.animation.value * (copyWidth + widget.gap));
         return SizedBox(
-          height: height,
+          height: widget.height,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -43,10 +71,10 @@ class BannerMarquee extends StatelessWidget {
                 left: dx,
                 top: 0,
                 bottom: 0,
-                child: Center(child: _copy()),
+                child: Center(child: _copy(key: _firstKey)),
               ),
               Positioned(
-                left: dx + textWidth + gap,
+                left: dx + copyWidth + widget.gap,
                 top: 0,
                 bottom: 0,
                 child: Center(child: _copy()),
@@ -56,7 +84,8 @@ class BannerMarquee extends StatelessWidget {
         );
       },
     );
-    if (!fadeEdges) return ClipRect(child: content);
+
+    if (!widget.fadeEdges) return ClipRect(child: content);
     return ClipRect(
       child: ShaderMask(
         shaderCallback: (bounds) => LinearGradient(
@@ -68,7 +97,7 @@ class BannerMarquee extends StatelessWidget {
             Colors.black,
             Colors.transparent,
           ],
-          stops: const [0.0, 0.06, 0.94, 1.0],
+          stops: const [0.0, 0.03, 0.97, 1.0],
         ).createShader(bounds),
         blendMode: BlendMode.dstIn,
         child: content,
@@ -76,10 +105,11 @@ class BannerMarquee extends StatelessWidget {
     );
   }
 
-  Widget _copy() {
+  Widget _copy({Key? key}) {
     return Text(
-      text,
-      style: style,
+      widget.text,
+      key: key,
+      style: widget.style,
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.visible,

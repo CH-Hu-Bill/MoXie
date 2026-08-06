@@ -198,6 +198,7 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
       ),
       maxLines: 1,
       textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
     )..layout();
     return tp.width;
   }

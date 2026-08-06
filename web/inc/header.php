@@ -84,12 +84,10 @@ $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color
         var avail = track.clientWidth;
         var tw = textEl.scrollWidth;
         if (tw > avail + 4) {
-            // 无缝跑马灯：复制两份文本 + 位移循环
+            // 无缝跑马灯：两份文本 + translateX(-50%) 恰好移动一个副本，无需像素测量
             var textHtml = textEl.outerHTML;
             track.innerHTML = '<div class="announcement-marquee">' + textHtml + textHtml + '</div>';
             var marquee = track.querySelector('.announcement-marquee');
-            var gap = 40;
-            marquee.style.setProperty('--end', '-' + (tw + gap) + 'px');
             marquee.style.setProperty('--dur', Math.max(5, (avail + tw) / 40) + 's');
             track.classList.add('track-scroll');
         }
