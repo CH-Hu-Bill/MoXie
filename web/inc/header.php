@@ -40,11 +40,20 @@ if ($classId !== '') {
     } catch (Throwable $e) {}
 }
 $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color'] ?? '#ff4d4d'), ENT_QUOTES, 'UTF-8') : '';
-// 超级霸屏数据注入页面（供加载蒙版 / 新页霸屏层使用）
+// 超级霸屏数据注入页面（供霸屏层使用）
 $fsColor = $webFullscreen ? htmlspecialchars((string)($webFullscreen['color'] ?? '#ff4d4d'), ENT_QUOTES, 'UTF-8') : '#ff4d4d';
 $fsContent = $webFullscreen ? htmlspecialchars((string)$webFullscreen['content'], ENT_QUOTES, 'UTF-8') : '';
 $fsSeconds = $webFullscreen ? max(1, min(5, (int)($webFullscreen['fullscreen_seconds'] ?? 1))) : 1;
 ?>
+<?php if ($webFullscreen): ?>
+<script>try { if (sessionStorage.getItem('__inapp_nav') === '1') document.documentElement.classList.add('fs-active'); } catch (e) {}</script>
+<div class="fs-overlay" id="fsOverlay" data-seconds="<?php echo $fsSeconds; ?>" aria-label="超级公告">
+  <div class="fs-card" style="border-color:<?php echo $fsColor; ?>">
+    <div class="fs-text" style="color:<?php echo $fsColor; ?>"><?php echo $fsContent; ?></div>
+    <div class="fs-hint">点击任意处进入</div>
+  </div>
+</div>
+<?php endif; ?>
 <div class="status-bar">
   <div class="left">
     <button class="back-btn" onclick="showOkOverlayThen('<?php echo htmlspecialchars($backUrl, ENT_QUOTES, 'UTF-8'); ?>')" aria-label="返回">
@@ -116,18 +125,4 @@ $fsSeconds = $webFullscreen ? max(1, min(5, (int)($webFullscreen['fullscreen_sec
         restoreNoBanner();
     };
 })();
-</script>
-<script>
-// 超级霸屏公告数据（active 且平台含 web），供加载蒙版/新页霸屏层使用
-window.__FS_ANN = <?php
-if ($webFullscreen) {
-    echo json_encode([
-        'content' => (string)$webFullscreen['content'],
-        'color' => $fsColor,
-        'seconds' => $fsSeconds,
-    ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-} else {
-    echo 'null';
-}
-?>;
 </script>

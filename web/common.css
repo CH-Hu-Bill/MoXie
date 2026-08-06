@@ -74,15 +74,16 @@ body {
 @keyframes pageLoadingSpin { to { transform: rotate(360deg); } }
 
 /* ---- 超级霸屏（全屏公告）---- */
+/* 仅占状态栏（顶部横幅）下方区域，避免遮挡横幅 */
 .fs-overlay {
-  position: fixed; inset: 0; z-index: 9998;
+  position: fixed; top: 52px; left: 0; right: 0; bottom: 0;
+  z-index: 9998;
   background: rgba(253,251,247,0.90);
   display: flex; align-items: center; justify-content: center;
-  padding-top: 56px; /* 卡片避开顶部状态栏/横幅区域 */
   opacity: 0; visibility: hidden; cursor: pointer;
   transition: opacity 0.3s ease, visibility 0s linear 0.3s;
 }
-.fs-overlay.show {
+.fs-active .fs-overlay {
   opacity: 1; visibility: visible; transition-delay: 0s;
 }
 .fs-card {

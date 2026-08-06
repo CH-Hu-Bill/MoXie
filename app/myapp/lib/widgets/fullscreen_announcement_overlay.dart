@@ -69,6 +69,11 @@ class _FullscreenAnnouncementOverlayState
     if (ann == null) return const SizedBox.shrink();
 
     final color = _parseColor(ann.color);
+    final media = MediaQuery.of(context);
+    // 只占内容区：顶部为 状态栏+AppBar(+横幅)，底部为 底部 tab 栏
+    final topInset = media.padding.top + kToolbarHeight +
+        (AnnouncementService.instance.banner != null ? 30.0 : 0.0);
+    final bottomInset = 60.0 + media.padding.bottom;
 
     return IgnorePointer(
       ignoring: !_visible,
@@ -78,58 +83,78 @@ class _FullscreenAnnouncementOverlayState
         child: GestureDetector(
           onTap: _hide,
           behavior: HitTestBehavior.opaque,
-          child: Container(
-            color: AppColors.paper.withValues(alpha: 0.90),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.only(top: 96),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 32),
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(255),
-                  topRight: const Radius.circular(15),
-                  bottomLeft: const Radius.circular(225),
-                  bottomRight: const Radius.circular(15),
-                ),
-                border: Border.all(color: color, width: 4),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x8C2D2D2D),
-                    offset: Offset(8, 8),
-                    blurRadius: 0,
-                  ),
-                ],
+          child: Stack(
+            children: [
+              // 全屏透明拦截层：点击任意处（含顶部/底部栏）跳过
+              Positioned.fill(child: Container(color: Colors.transparent)),
+              // 内容区半透明背景
+              Positioned(
+                top: topInset,
+                bottom: bottomInset,
+                left: 0,
+                right: 0,
+                child: Container(color: AppColors.paper.withValues(alpha: 0.90)),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    ann.content,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontHeading,
-                      fontSize: 26,
-                      height: 1.5,
-                      fontWeight: FontWeight.w700,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  Text(
-                    '点击任意处进入',
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontBody,
-                      fontSize: 13,
-                      color: AppColors.pencil.withValues(alpha: 0.55),
-                    ),
-                  ),
-                ],
+              // 公告卡（内容区居中）
+              Positioned(
+                top: topInset,
+                bottom: bottomInset,
+                left: 0,
+                right: 0,
+                child: Center(child: _buildCard(ann, color)),
               ),
-            ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCard(Announcement ann, Color color) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(255),
+          topRight: const Radius.circular(15),
+          bottomLeft: const Radius.circular(225),
+          bottomRight: const Radius.circular(15),
+        ),
+        border: Border.all(color: color, width: 4),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x8C2D2D2D),
+            offset: Offset(8, 8),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            ann.content,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: AppTheme.fontHeading,
+              fontSize: 26,
+              height: 1.5,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            '点击任意处进入',
+            style: TextStyle(
+              fontFamily: AppTheme.fontBody,
+              fontSize: 13,
+              color: AppColors.pencil.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
       ),
     );
   }

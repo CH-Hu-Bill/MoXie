@@ -315,7 +315,7 @@ require 'inc/header.php';
     </div>
 </div>
 
-    <script src="common.js?v=5"></script>
+    <script src="common.js?v=6"></script>
     <script>
         const weekendClickable = <?php echo $weekendClickable ? 'true' : 'false'; ?>;
         const weekendCompleted = <?php echo $weekendCompleted ? 'true' : 'false'; ?>;

@@ -141,60 +141,35 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- 超级霸屏（全屏公告）----------
-function fsAnn() { return window.__FS_ANN || null; }
+// 霸屏层由 header.php 服务端渲染（位于状态栏下方），
+// 通过 <html>.fs-active 控制显隐；仅站内点击跳转的新页面显示。
 
-function buildFsOverlay() {
-    const a = fsAnn();
-    if (!a) return null;
-    const ov = document.createElement('div');
-    ov.id = 'fsOverlay';
-    ov.className = 'fs-overlay';
-    ov.setAttribute('aria-label', '超级公告');
-    ov.innerHTML = '<div class="fs-card" style="border-color:' + a.color + '">' +
-        '<div class="fs-text" style="color:' + a.color + '">' + escHtml(a.content) + '</div>' +
-        '<div class="fs-hint">点击任意处进入</div></div>';
-    ov.addEventListener('click', hideFs);
-    return ov;
-}
-
-function showFs() {
-    if (!fsAnn()) return;
-    let ov = document.getElementById('fsOverlay');
-    if (!ov) {
-        ov = buildFsOverlay();
-        if (!ov) return;
-        document.body.appendChild(ov);
-    }
-    requestAnimationFrame(() => ov.classList.add('show'));
+function fsOverlayEl() {
+    return document.getElementById('fsOverlay');
 }
 
 function hideFs() {
-    const ov = document.getElementById('fsOverlay');
+    document.documentElement.classList.remove('fs-active');
+}
+
+function maybeShowFsOnLoad() {
+    const ov = fsOverlayEl();
     if (!ov) return;
-    ov.classList.remove('show');
-    setTimeout(() => { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 320);
+    let nav = false;
+    try { nav = sessionStorage.getItem('__inapp_nav') === '1'; } catch (e) {}
+    try { sessionStorage.removeItem('__inapp_nav'); } catch (e) {}
+    if (!nav) return; // 刷新/直达：保持隐藏，无闪动
+    document.documentElement.classList.add('fs-active');
+    const seconds = parseInt(ov.getAttribute('data-seconds') || '1', 10) || 1;
+    setTimeout(hideFs, Math.min(5, Math.max(1, seconds)) * 1000);
 }
 
 function markInAppNav() {
     try { sessionStorage.setItem('__inapp_nav', '1'); } catch (e) {}
 }
 
-// 新页面加载后：若是站内跳转且有超级公告，则显示满配置时长（可点击跳过）
-function maybeShowFsOnLoad() {
-    const a = fsAnn();
-    if (!a) return;
-    let nav = false;
-    try { nav = sessionStorage.getItem('__inapp_nav') === '1'; } catch (e) {}
-    if (!nav) return;
-    try { sessionStorage.removeItem('__inapp_nav'); } catch (e) {}
-    showFs();
-    setTimeout(hideFs, (a.seconds || 1) * 1000);
-}
-
 // ---------- 全局页面离场反馈 ----------
 function showPageLeaving() {
-    // 有超级公告时：加载蒙版直接呈现为全屏公告视觉（半透明，公告卡避开顶部横幅）
-    if (fsAnn()) { showFs(); document.documentElement.classList.add('page-leaving'); return; }
     let overlay = document.getElementById('pageLeavingOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -219,6 +194,14 @@ document.addEventListener('DOMContentLoaded', hidePageLeaving);
 window.addEventListener('load', hidePageLeaving);
 window.addEventListener('pageshow', hidePageLeaving);
 // 新页面加载后：站内跳转且存在超级公告则全屏展示配置时长（可点击跳过）
+function initFsOverlay() {
+    const ov = fsOverlayEl();
+    if (ov && !ov.dataset.bound) {
+        ov.dataset.bound = '1';
+        ov.addEventListener('click', hideFs);
+    }
+}
+document.addEventListener('DOMContentLoaded', initFsOverlay);
 document.addEventListener('DOMContentLoaded', maybeShowFsOnLoad);
 window.addEventListener('load', maybeShowFsOnLoad);
 setTimeout(maybeShowFsOnLoad, 200);

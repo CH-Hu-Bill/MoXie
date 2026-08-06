@@ -377,7 +377,7 @@ $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
             </div>
             <button type="submit" class="btn btn-primary" style="white-space:nowrap;">发布公告</button>
         </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">已预填服务器当前时间（默认发布后立即生效，可自行改为预约时段）。公告仅在「开始~结束」时间段内显示。同一时间段**同类型**只允许一条（顶部横幅与超级霸屏可共存）。</p>
+        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">已预填服务器当前时间（默认发布后立即生效，可自行改为预约时段）。公告仅在「开始~结束」时间段内显示。同一时间段同类公告只允许一条（顶部横幅与超级霸屏可共存）。</p>
     </form>
     <script>
     function toggleFsSec() {
