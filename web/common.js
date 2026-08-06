@@ -209,7 +209,6 @@ function prefetchPage(event) {
 document.addEventListener('pointerover', prefetchPage, { passive: true });
 document.addEventListener('focusin', prefetchPage);
 document.addEventListener('touchstart', prefetchPage, { passive: true });
-window.addEventListener('pageshow', hidePageLeaving);
 
 // ---------- 关闭模态框（点击背景），在脚本加载时立即执行 ----------
 document.querySelectorAll('.modal').forEach(m => {
