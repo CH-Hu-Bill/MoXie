@@ -294,6 +294,11 @@ require 'inc/header.php';
             <div class="title">班级图集</div>
             <div class="desc">图片记录与画廊</div>
         </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('display.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+            <div class="title">展示大屏</div>
+            <div class="desc">壁纸投屏模式</div>
+        </div>
     </div>
 
     <div class="card" style="padding:28px;">

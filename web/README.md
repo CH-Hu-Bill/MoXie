@@ -32,6 +32,7 @@
 | **周末大礼包** | 周末从本周已默写单词中随机抽 20 个组成加练任务，周一随机决定本周是否开启 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；支持 PDF / HTML / 长图导出 |
 | **班级图集** (`gallery.php` / `gallery_api.php`) | 图片上传 + 画廊展示；提供公开分页 API（基于 IP + 日期轮换排序，防同设备重复） |
+| **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好 |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数，按班级隔离存储 |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
 | **全服公告** | 公告分两类：**顶部横幅**（状态栏跑马灯，可关闭）与**超级霸屏**（mode=fullscreen）。超级霸屏：仅站内点击跳转时触发（刷新/直达/系统返回不触发），新页面**首帧即渲染**（无内容闪现），页面加载完成后开始计时展示 1~5 秒、点击任意处跳过；霸屏层只占状态栏（横幅）**下方**区域，不遮挡顶部横幅。两类同时间段可共存、同类互斥。后台时间选择已预填服务器当前时间（默认立即生效），并醒目显示服务器时间 |
@@ -66,6 +67,9 @@
 ├── history_book.php       # 班级史记（Vlog 日记 + 导出）
 ├── gallery.php            # 班级图集（上传 / 画廊）
 ├── gallery_api.php        # 图集公开 API
+├── display.php            # 展示大屏（壁纸投屏页）
+├── display.css            # 展示大屏样式（独立，仅该页加载）
+├── display.js             # 展示大屏脚本（跑马灯 / 轮询 / 轮播 / 竖线拖拽）
 ├── settings.php           # 听写 / 朗读 / 跟读设置
 ├── admin.php              # 管理后台
 ├── app_api.php            # APP 后端 API（全部接口）
@@ -277,6 +281,7 @@ Web 端日历的"今天"以**浏览器本机时钟**计算（与 APP 端手机�
 | `task.php` | 默写任务：列表视图 + 执行视图（看词/默写/听写） | `?id={classId}` `?task_id={taskId}` |
 | `history.php` | 默写记录：历史任务、重新创建 | `?id={classId}` `?task_id={taskId}` |
 | `history_book.php` | 班级史记：月历 + Quill 编辑器 + 导出 | `?id={classId}` |
+| `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词 + 图集轮播） | `?id={classId}` 指定班级；`?json=1` 轮询数据接口 |
 | `app_api.php` `get_announcements` | 获取当前有效公告（按班级 + 平台 + 时间段筛选） | POST `class_id` `platform` |
 | `gallery.php` | 图集：上传 / 删除 / 画廊 | `?id={classId}` |
 | `gallery_api.php` | 图集公开 API | `?class_id={id}` `?page=` `?per_page=` `?apikey=` |
@@ -319,7 +324,7 @@ data/
 | `classes.json` | 班级列表（id / name / `password_hash` / `auth_version` / created_at） | 高 |
 | `classes/{classId}/words.json` | 单词数组（id / word / meaning / pos / created_at） | 中 |
 | `classes/{classId}/tasks.json` | 任务（id / date / label / word_ids / status / weekend_week） | 中 |
-| `settings.json` | 全局设置（键名按功能+班级组合，如 `volume_{classId}`、`weekend_week_{classId}`、`gallery_api_key_{classId}`） | 中 |
+| `settings.json` | 全局设置（键名按功能+班级组合，如 `volume_{classId}`、`weekend_week_{classId}`、`gallery_api_key_{classId}`、`display_bottom_margin` 大屏底部避让高度） | 中 |
 | `users/{uid}.json` | APP 用户数据（name / password_hash / class_ids / wrong_words / consent_map） | **极高** |
 | `users/tokens.json` | 登录令牌 sha256 哈希 + next_uid | **极高** |
 | `app_versions.json` | APP 版本与发布日志（latest / history） | 中 |
@@ -382,6 +387,51 @@ data/
 - **交互**：wobbly 不规则边框（`border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px`），硬阴影「按平」动效，卡片 hover 微旋转
 - **模板**：`inc/head.php` 统一 `<head>` 元数据与字体加载，`inc/header.php` 统一状态栏
 
+---
+
+## 展示大屏（壁纸页）
+
+`display.php` 专为 **Lively Wallpaper / 希沃白板大屏** 等「链接当壁纸」的场景设计，独立全屏布局（不套用状态栏）。
+
+### 页面布局
+
+```
+┌────────────┬──────────────────────────────────────┐
+│ 快捷方式区   │ 内容区 (左侧可拖拽竖线调整，默认 33.3%)     │
+│ (不使用)    │ ┌──────────────────────────────────┐ │
+│            │ │ 顶部条：公告跑马灯 + 班级名 + 切换按钮     │ │
+│            │ │ 单词区 (2/3)：今日默写大字海报（≤20 词）    │ │
+│            │ │ 图集区 (1/3)：左图 + 右侧描述            │ │
+│            │ └──────────────────────────────────┘ │
+│            │  ← 底部避让 (admin 配置 display_bottom_margin)
+└────────────┴──────────────────────────────────────┘
+```
+
+- **公告**：仅 `mode=banner`（顶部跑马灯），超级霸屏通告不进壁纸页。跑马灯**复用顶部栏横幅的实现**（双副本 `translateX(-50%)` 无缝循环 + 左右 `mask` 渐隐遮罩），文本不溢出时居中显示
+- **单词**：取今天 `status=pending` 的任务，合并 `word_ids` 去重、上限 20；无任务显示占位。**字号自适应**：按内容区宽高 + 单词数（75 分位长度）动态算列数与字号（16~64px），个别超长单词单独缩小该卡片，保证后排可读
+- **图集**：仅班级图集 `gallery.json`，15s 轮播 + 预加载下一张
+- **可拖拽竖线**：调整可用区域左边界（存每台设备 `localStorage['display_left_pct']`），默认 33.3%
+- **底部避让**：后台「大屏壁纸设置」配置 `display_bottom_margin`（px），防止被任务栏遮挡
+
+### 班级鉴权状态机
+
+| 场景 | 页面行为 |
+|------|---------|
+| 无 `current_class_id` cookie | 班级选择页 |
+| cookie 的班级已被删除 | 自动回退到班级选择页 |
+| 班级口令已重置（`auth_version` 递增） | 自动弹出该班口令弹窗 |
+| cookie 过期 / 被篡改 | 同上，口令弹窗 |
+| 班级无口令 | 直接进入，无需口令 |
+| 正常 | 渲染壁纸内容 |
+
+`?json=1` 轮询接口同样先做鉴权：口令重置返回 `{code:"need_auth"}`、班级删除返回 `{code:"class_not_found"}`，客户端**无刷新**回退到选择页/口令弹窗并暂停轮询。`?id={classId}` 可指定班级直达。
+
+### 性能设计
+
+- 服务端首屏直出（无白屏）；`common.css` 未改动，样式在独立 `display.css`
+- 60s 轮询一次（公告/单词/图集列表），图集 15s 纯客户端切换 + 预加载
+- `document.hidden` 暂停全部定时器；`prefers-reduced-motion` 禁用动画
+- 图片沿用服务器 GD 压缩（≤1600px）+ `upload.php` 缓存
 ---
 
 ## 安全机制

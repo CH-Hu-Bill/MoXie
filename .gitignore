@@ -9,6 +9,11 @@ web/data/classes/
 web/data/exports/
 *.lock
 
+# ── 仓库根目录的数据快照（含真实口令哈希，勿提交）──
+/announcements.json
+/classes.json
+/app_versions.json
+
 # ── 诊断/临时脚本（调试遗留，不进仓库）──
 web/diag.php
 web/diagnose.php

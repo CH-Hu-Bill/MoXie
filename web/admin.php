@@ -201,6 +201,18 @@ if ($isAuthed) {
             $msg = '公告删除失败：服务器数据目录不可写';
         }
     }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'save_display_settings') {
+        $margin = max(0, min(200, (int)($_POST['display_bottom_margin'] ?? 48)));
+        $settings = Database::getSettings();
+        if (!is_array($settings)) $settings = [];
+        $settings['display_bottom_margin'] = $margin;
+        if (Database::saveSettings($settings)) {
+            $msg = '大屏壁纸设置已保存（底部避让 ' . $margin . 'px）';
+        } else {
+            $msg = '保存失败：服务器数据目录不可写';
+        }
+    }
 }
 $versionData = Database::read('app_versions.json');
 if (!is_array($versionData)) $versionData = ['latest' => '1.0', 'history' => []];
@@ -315,7 +327,26 @@ $announcements = Database::getAnnouncements();
 $allClassIds = is_array($classes) ? array_keys($classes) : [];
 $serverNowInput = date('Y-m-d\TH:i');
 $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
+$displaySettings = Database::getSettings();
+$displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ?? 48));
 ?>
+<div class="card" style="margin-bottom:16px;">
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">🖥️ 大屏壁纸设置</h2>
+    <p style="font-size:13px;color:var(--pencil);opacity:0.75;margin-bottom:12px;">
+        壁纸展示页 <code style="background:var(--old-paper);padding:1px 6px;border-radius:var(--wobbly-sm);">display.php</code> 的底部避让高度（防止被电脑任务栏遮挡）。内容只占右侧可用区域（左侧快捷方式区通过页面上可拖拽竖线调整）。
+    </p>
+    <form method="post">
+        <input type="hidden" name="action" value="save_display_settings">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">底部避让高度 (px)</label>
+                <input type="number" name="display_bottom_margin" class="input" value="<?php echo (int)$displayBottomMargin; ?>" min="0" max="200" style="width:120px" required>
+            </div>
+            <button type="submit" class="btn btn-primary">保存设置</button>
+        </div>
+    </form>
+</div>
 <div class="card" style="margin-bottom:16px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📢 全服公告</h2>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">

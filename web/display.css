@@ -1,0 +1,386 @@
+/* =========================================================
+   壁纸展示大屏页 — Hand-Drawn Display Layout
+   =========================================================
+   复用 common.css 的 :root 设计令牌。仅 display.php 加载。
+   ========================================================= */
+
+html, body { height: 100%; overflow: hidden; }
+body {
+  min-height: 100vh;
+  margin: 0;
+}
+
+.display-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* ---- 视图切换 ---- */
+.d-view { display: none; }
+.display-root[data-view="selection"] [data-view-name="selection"] { display: flex; }
+.display-root[data-view="content"]  [data-view-name="content"]  { display: block; }
+
+/* =========================================================
+   班级选择视图
+   ========================================================= */
+.d-select {
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.d-select-card {
+  width: min(560px, 90vw);
+  padding: 28px;
+}
+.d-select-title {
+  font-family: var(--font-heading);
+  font-size: 34px;
+  color: var(--pencil);
+  text-align: center;
+  margin-bottom: 6px;
+}
+.d-select-sub {
+  text-align: center;
+  color: var(--pencil);
+  opacity: 0.65;
+  margin-bottom: 20px;
+  font-size: 16px;
+}
+.d-class-list { max-height: 56vh; overflow-y: auto; padding: 4px; }
+.d-class-item {
+  margin-bottom: 10px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  font-family: var(--font-heading);
+  font-size: 17px;
+}
+.d-class-item:hover { background: var(--post-it); }
+.d-class-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-class-arrow { color: var(--old-paper); font-size: 20px; font-weight: 700; flex-shrink: 0; margin-left: 10px; }
+
+/* =========================================================
+   可拖拽竖线
+   ========================================================= */
+.d-divider {
+  position: absolute;
+  top: 0;
+  bottom: var(--bottom-margin, 48px);
+  left: var(--content-left, 33.333%);
+  width: 18px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+  z-index: 5;
+  touch-action: none;
+}
+.d-divider::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--pencil) 0 6px,
+    transparent 6px 12px
+  );
+  opacity: 0.22;
+}
+.d-divider::after {
+  content: "⋮⋮";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly-sm);
+  box-shadow: var(--shadow-sm);
+  padding: 2px 7px;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 1px;
+  color: var(--pencil);
+  white-space: nowrap;
+  transition: box-shadow 0.15s ease;
+}
+.d-divider.dragging::before { opacity: 0.5; }
+.d-divider.dragging::after { box-shadow: var(--shadow-md); }
+
+/* =========================================================
+   壁纸内容区
+   ========================================================= */
+.d-content {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: var(--bottom-margin, 48px);
+  left: var(--content-left, 33.333%);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px 10px;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ---- 顶部条：跑马灯公告 + 班级名 + 齿轮 ---- */
+.d-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.d-marquee {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px;
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--red);
+}
+.d-marquee-track {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+.d-marquee-track .d-marquee-text {
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin: 0 auto; /* 文本不溢出时居中 */
+}
+.d-marquee-track.track-scroll {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%);
+}
+.d-marquee-marquee {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  width: max-content;
+  animation: dMarqueeMove var(--dur, 8s) linear infinite;
+  will-change: transform;
+}
+.d-marquee-marquee .d-marquee-text {
+  padding: 0 20px; /* 对称间距：translateX(-50%) 正好移动一个副本，无缝循环 */
+}
+@keyframes dMarqueeMove {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.d-classname {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  color: var(--blue);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.d-gear {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly-sm);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  color: var(--pencil);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.d-gear:hover { transform: translateY(2px) rotate(12deg); box-shadow: var(--shadow-md); }
+
+/* ---- 单词区 ---- */
+.d-words {
+  flex: 2;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.d-words-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.d-words-title {
+  font-family: var(--font-heading);
+  font-size: 28px;
+  color: var(--pencil);
+}
+.d-words-date {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--old-paper);
+}
+.d-word-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--d-cols, 5), 1fr);
+  grid-auto-rows: 1fr;
+  gap: 10px;
+  overflow: hidden;
+}
+.d-word {
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly);
+  box-shadow: var(--shadow-sm);
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.d-word:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.d-word-main {
+  font-family: var(--font-heading);
+  font-size: var(--word-fs, clamp(22px, 9cqi, 52px));
+  line-height: 1.15;
+  color: var(--pencil);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.d-word-pos {
+  font-family: var(--font-body);
+  font-size: var(--word-pos-fs, clamp(13px, 4cqi, 24px));
+  color: var(--blue);
+  margin-left: 6px;
+}
+.d-word-mean {
+  font-family: var(--font-body);
+  font-size: var(--word-mean-fs, clamp(14px, 5cqi, 26px));
+  color: var(--pencil);
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.d-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-size: 34px;
+  color: var(--old-paper);
+  text-align: center;
+  padding: 30px;
+}
+.d-placeholder-sm { font-size: 24px; }
+
+/* ---- 图集区 ---- */
+.d-gallery {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+.d-gallery-img {
+  flex: 0 0 55%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly);
+  box-shadow: var(--shadow-sm);
+  padding: 8px;
+  overflow: hidden;
+}
+.d-gallery-img img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--wobbly-sm);
+  transition: opacity 0.45s ease;
+}
+.d-gallery-img img.swapping { opacity: 0; }
+.d-gallery-desc {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--post-it);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--pencil);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+/* =========================================================
+   口令弹窗（复用 .modal 视觉风格，独立层）
+   ========================================================= */
+.d-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(253, 251, 247, 0.7);
+}
+.d-modal.active { display: flex; }
+.d-modal-content {
+  width: min(400px, 90vw);
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 26px;
+}
+
+/* ---- 移动端/小屏适配 ---- */
+@media (max-width: 900px) {
+  .d-content { padding: 10px 12px 8px; gap: 8px; }
+  .d-marquee { font-size: 17px; }
+  .d-words-title { font-size: 22px; }
+  .d-word-main { font-size: 21px; }
+  .d-word-mean { font-size: 14px; }
+  .d-gallery-desc { font-size: 15px; }
+  .d-gallery { flex-direction: column; }
+  .d-gallery-img { flex: 1 1 auto; }
+  .d-gallery-desc { flex: 0 0 auto; }
+}
+
+/* ---- 减少动效偏好 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .d-marquee-track.track-scroll { animation: none; }
+  .d-gallery-img img { transition: none; }
+  .d-divider::after, .d-word, .d-gear { transition: none; }
+}
