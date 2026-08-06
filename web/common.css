@@ -125,6 +125,7 @@ body {
 }
 .status-bar .announcement-marquee {
   display: flex; align-items: center; white-space: nowrap;
+  flex-shrink: 0;
   animation: annMarquee var(--dur, 8s) linear infinite;
   will-change: transform;
 }
@@ -135,11 +136,14 @@ body {
   padding-right: 0;
 }
 .status-bar .announcement-close {
-  background: none; border: none; cursor: pointer;
-  font-size: 16px; line-height: 1; padding: 0 4px;
-  color: inherit; opacity: 0.5; flex-shrink: 0;
+  background: var(--white); border: 1.5px solid currentColor; cursor: pointer;
+  border-radius: 50%; width: 20px; height: 20px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; padding: 0; margin: 0 4px;
+  color: inherit; opacity: 0.9; flex-shrink: 0;
+  transition: transform 0.1s ease;
 }
-.status-bar .announcement-close:hover { opacity: 1; }
+.status-bar .announcement-close:hover { opacity: 1; transform: scale(1.1); }
 @keyframes annMarquee {
   from { transform: translateX(0); }
   to { transform: translateX(var(--end, -200px)); }

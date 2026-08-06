@@ -5,6 +5,7 @@ import '../models/announcement.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'announcement_marquee.dart';
 
 class AnnouncementBanner extends StatefulWidget {
   const AnnouncementBanner({super.key});
@@ -163,49 +164,11 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
                   );
                 }
 
-                // 无缝跑马灯：两份相同文本首尾相接循环，两边渐变蒙板
-                return ClipRect(
-                  child: ShaderMask(
-                    shaderCallback: (bounds) => LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black,
-                        Colors.black,
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.06, 0.94, 1.0],
-                    ).createShader(bounds),
-                    blendMode: BlendMode.dstIn,
-                    child: AnimatedBuilder(
-                      animation: _scrollController,
-                      builder: (context, child) {
-                        final dx =
-                            -(_scrollController.value * (textWidth + _gap));
-                        final copy = Text(
-                          ann.content,
-                          style: textStyle,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.visible,
-                        );
-                        return Stack(
-                          alignment: Alignment.centerLeft,
-                          children: [
-                            Transform.translate(
-                              offset: Offset(dx, 0),
-                              child: copy,
-                            ),
-                            Transform.translate(
-                              offset: Offset(dx + textWidth + _gap, 0),
-                              child: copy,
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
+                return BannerMarquee(
+                  text: ann.content,
+                  style: textStyle,
+                  animation: _scrollController,
+                  textWidth: textWidth,
                 );
               },
             ),

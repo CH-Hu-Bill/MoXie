@@ -69,30 +69,39 @@ $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color
         var pt = document.getElementById('pageTitle');
         if (pt) pt.style.display = '';
     }
-    var ann = document.getElementById('announcementMarquee');
-    if (ann) {
+    function setupMarquee() {
+        var ann = document.getElementById('announcementMarquee');
+        if (!ann) return;
         var annId = ann.getAttribute('data-ann-id');
         if (annId && localStorage.getItem('ann_dismissed_' + annId)) {
             restoreNoBanner();
-        } else {
-            var track = document.getElementById('announcementTrack');
-            var textEl = ann.querySelector('.announcement-text');
-            if (track && textEl) {
-                var avail = track.clientWidth;
-                var tw = textEl.scrollWidth;
-                if (tw > avail + 4) {
-                    // 无缝跑马灯：复制两份文本 + 位移循环
-                    var textHtml = textEl.outerHTML;
-                    track.innerHTML = '<div class="announcement-marquee">' + textHtml + textHtml + '</div>';
-                    var marquee = track.querySelector('.announcement-marquee');
-                    var gap = 40;
-                    marquee.style.setProperty('--end', '-' + (tw + gap) + 'px');
-                    marquee.style.setProperty('--dur', Math.max(5, (avail + tw) / 40) + 's');
-                    track.classList.add('track-scroll');
-                }
-            }
+            return;
+        }
+        var track = document.getElementById('announcementTrack');
+        var textEl = ann.querySelector('.announcement-text');
+        if (!track || !textEl) return;
+        if (track.querySelector('.announcement-marquee')) return; // 已构建
+        var avail = track.clientWidth;
+        var tw = textEl.scrollWidth;
+        if (tw > avail + 4) {
+            // 无缝跑马灯：复制两份文本 + 位移循环
+            var textHtml = textEl.outerHTML;
+            track.innerHTML = '<div class="announcement-marquee">' + textHtml + textHtml + '</div>';
+            var marquee = track.querySelector('.announcement-marquee');
+            var gap = 40;
+            marquee.style.setProperty('--end', '-' + (tw + gap) + 'px');
+            marquee.style.setProperty('--dur', Math.max(5, (avail + tw) / 40) + 's');
+            track.classList.add('track-scroll');
         }
     }
+    // 必须等布局完成后再测量，否则 clientWidth/scrollWidth 为 0 导致跑马灯不生效
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupMarquee);
+    } else {
+        setupMarquee();
+    }
+    window.addEventListener('load', setupMarquee);
+    setTimeout(setupMarquee, 200);
     window.dismissAnnouncement = function(id) {
         try { localStorage.setItem('ann_dismissed_' + id, '1'); } catch(e) {}
         restoreNoBanner();
