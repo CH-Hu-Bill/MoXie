@@ -184,16 +184,9 @@ class LifeScreenState extends State<LifeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final today = DateTime.now();
     final todayStr = _todayStr();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(auth.currentClassName ?? '生活'),
-        backgroundColor: AppColors.white,
-        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
-      ),
       body: PaperTexture(
         child: _loading
             ? const LoadingOverlay(message: '加载中...')

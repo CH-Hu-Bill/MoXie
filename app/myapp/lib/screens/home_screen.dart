@@ -45,6 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
     const ProfileScreen(),
   ];
 
+  static const _tabTitles = ['学习', '生活', '搜索', '画廊', '我的'];
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +109,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
+      appBar: AppBar(
+        title: Text(_currentIndex == 4
+            ? '我的'
+            : (auth.currentClassName ?? _tabTitles[_currentIndex])),
+        backgroundColor: AppColors.white,
+        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+      ),
       body: Column(
         children: [
           const AnnouncementBanner(),

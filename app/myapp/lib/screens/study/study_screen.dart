@@ -347,13 +347,6 @@ class StudyScreenState extends State<StudyScreen> {
     final classId = auth.currentClassId ?? '';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(auth.currentClassName ?? '学习'),
-        backgroundColor: AppColors.white,
-        shape: const Border(
-          bottom: BorderSide(color: AppColors.pencil, width: 3),
-        ),
-      ),
       body: PaperTexture(
         child: Column(
           children: [

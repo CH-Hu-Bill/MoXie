@@ -89,14 +89,16 @@ body {
 .status-bar .left {
   display: flex; align-items: center; gap: 10px;
   font-family: var(--font-heading);
+  flex-shrink: 0; min-width: 0;
 }
 .status-bar .left .class-name {
   font-size: 15px; font-weight: 700; color: var(--pencil);
 }
-.status-bar .title {
-  flex: 1; text-align: center;
-  font-family: var(--font-heading);
-  font-size: 18px; color: var(--pencil); font-weight: 700;
+.status-bar .left .page-name {
+  font-size: 13px; font-weight: 700; color: var(--red);
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 2px 8px; border-radius: var(--wobbly-sm);
+  background: var(--post-it); border: 1.5px solid var(--pencil);
 }
 .status-bar .right {
   display: flex; align-items: center; gap: 8px;
@@ -120,7 +122,7 @@ body {
 .status-bar .announcement .announcement-close {
   background: none; border: none; cursor: pointer;
   font-size: 16px; line-height: 1; padding: 0 4px;
-  color: var(--pencil); opacity: 0.5; flex-shrink: 0;
+  color: inherit; opacity: 0.5; flex-shrink: 0;
 }
 .status-bar .announcement .announcement-close:hover { opacity: 1; }
 @keyframes annMarquee {
@@ -790,7 +792,7 @@ body {
   .word-card .meaning { font-size: 18px; }
   .word-card .pos { font-size: 14px; }
   .status-bar { padding: 0 10px; }
-  .status-bar .title { font-size: 16px; }
+  .status-bar .left .page-name { max-width: 110px; }
   .content { padding: 10px 8px; }
 }
 

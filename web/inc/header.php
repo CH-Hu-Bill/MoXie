@@ -32,6 +32,7 @@ if ($classId !== '') {
         }
     } catch (Throwable $e) {}
 }
+$annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color'] ?? '#ff4d4d'), ENT_QUOTES, 'UTF-8') : '';
 ?>
 <div class="status-bar">
   <div class="left">
@@ -41,10 +42,12 @@ if ($classId !== '') {
     <?php if ($className !== ''): ?>
       <span class="class-name"><?php echo htmlspecialchars($className); ?></span>
     <?php endif; ?>
+    <?php if ($pageTitle !== ''): ?>
+      <span class="page-name"><?php echo htmlspecialchars($pageTitle); ?></span>
+    <?php endif; ?>
   </div>
-  <div class="title" id="pageTitle" style="<?php echo $webAnnouncement ? 'display:none;' : ''; ?>"><?php echo htmlspecialchars($pageTitle); ?></div>
   <?php if ($webAnnouncement): ?>
-  <div class="announcement" id="announcementMarquee" data-ann-id="<?php echo htmlspecialchars($webAnnouncement['id']); ?>">
+  <div class="announcement" id="announcementMarquee" data-ann-id="<?php echo htmlspecialchars($webAnnouncement['id']); ?>" style="color:<?php echo $annColor; ?>">
     <span class="announcement-text"><?php echo htmlspecialchars($webAnnouncement['content']); ?></span>
     <?php if (!empty($webAnnouncement['allow_close'])): ?>
     <button class="announcement-close" onclick="dismissAnnouncement('<?php echo htmlspecialchars($webAnnouncement['id']); ?>')" aria-label="关闭公告">×</button>
@@ -60,8 +63,6 @@ if ($classId !== '') {
         var annId = annEl.getAttribute('data-ann-id');
         if (annId && localStorage.getItem('ann_dismissed_' + annId)) {
             annEl.style.display = 'none';
-            var pt = document.getElementById('pageTitle');
-            if (pt) pt.style.display = '';
         } else {
             // 检测溢出并启用滚动
             var textEl = annEl.querySelector('.announcement-text');
@@ -80,7 +81,5 @@ function dismissAnnouncement(id) {
     try { localStorage.setItem('ann_dismissed_' + id, '1'); } catch(e) {}
     var el = document.getElementById('announcementMarquee');
     if (el) el.style.display = 'none';
-    var pt = document.getElementById('pageTitle');
-    if (pt) pt.style.display = '';
 }
 </script>

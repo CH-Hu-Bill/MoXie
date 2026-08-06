@@ -61,7 +61,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final auth = context.watch<AuthProvider>();
     final user = auth.user;
     return Scaffold(
-      appBar: AppBar(title: const Text('我的')),
       body: PaperTexture(
         child: ListView(
           padding: const EdgeInsets.all(16),

@@ -97,13 +97,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
     return Scaffold(
-      appBar: AppBar(
-        title: Text(auth.currentClassName ?? '搜索'),
-        backgroundColor: AppColors.white,
-        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
-      ),
       body: PaperTexture(
         child: Column(
           children: [

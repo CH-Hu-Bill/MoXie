@@ -17,19 +17,13 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
     with SingleTickerProviderStateMixin {
   Announcement? _announcement;
   late AnimationController _scrollController;
-  late Animation<double> _scrollAnimation;
   bool _dismissed = false;
+  bool _animating = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = AnimationController(
-      duration: const Duration(seconds: 8),
-      vsync: this,
-    );
-    _scrollAnimation = Tween<double>(begin: 0, end: -1).animate(
-      CurvedAnimation(parent: _scrollController, curve: Curves.linear),
-    );
+    _scrollController = AnimationController(vsync: this);
     _fetchAnnouncement();
   }
 
@@ -51,23 +45,42 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
         final prefs = await SharedPreferences.getInstance();
         final dismissed = prefs.getString('ann_dismissed_${ann.id}');
         if (dismissed != null) {
-          setState(() => _dismissed = true);
+          setState(() {
+            _dismissed = true;
+            _announcement = null;
+          });
+          _stopAnimating();
           return;
         }
         setState(() {
           _announcement = ann;
           _dismissed = false;
         });
-        _scrollController.repeat(reverse: true);
       } else {
         setState(() {
           _announcement = null;
           _dismissed = false;
         });
-        _scrollController.stop();
+        _stopAnimating();
       }
     } catch (_) {
       setState(() => _announcement = null);
+      _stopAnimating();
+    }
+  }
+
+  void _startAnimating(double travel) {
+    if (_animating || _announcement == null) return;
+    final ms = (travel / 30 * 1000).round().clamp(4000, 40000);
+    _scrollController.duration = Duration(milliseconds: ms);
+    _scrollController.repeat();
+    _animating = true;
+  }
+
+  void _stopAnimating() {
+    if (_animating) {
+      _scrollController.stop();
+      _animating = false;
     }
   }
 
@@ -79,7 +92,7 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
       _dismissed = true;
       _announcement = null;
     });
-    _scrollController.stop();
+    _stopAnimating();
   }
 
   Color _parseColor(String hex) {
@@ -117,30 +130,57 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
         children: [
           const SizedBox(width: 12),
           Expanded(
-            child: AnimatedBuilder(
-              animation: _scrollAnimation,
-              builder: (context, child) {
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final availableWidth = constraints.maxWidth;
+                final textWidth = _textWidth(ann.content, context);
+                final overflow = textWidth > availableWidth;
+                if (overflow) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _startAnimating(availableWidth + textWidth);
+                  });
+                } else {
+                  _stopAnimating();
+                }
+                final textStyle = TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: AppTheme.fontBody,
+                );
+                if (!overflow) {
+                  return Align(
+                    alignment: Alignment.center,
+                    child: Text(
+                      ann.content,
+                      style: textStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }
                 return ClipRect(
-                  child: OverflowBox(
-                    alignment: Alignment.centerLeft,
-                    child: Transform.translate(
-                      offset: Offset(
-                        _scrollAnimation.value *
-                            (_textWidth(ann.content, context) + 40),
-                        0,
-                      ),
-                      child: Text(
-                        ann.content,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: AppTheme.fontBody,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.visible,
-                        softWrap: false,
-                      ),
+                  child: AnimatedBuilder(
+                    animation: _scrollController,
+                    builder: (context, child) {
+                      final total = availableWidth + textWidth;
+                      final dx = availableWidth - total * _scrollController.value;
+                      return Stack(
+                        alignment: Alignment.centerLeft,
+                        children: [
+                          Transform.translate(
+                            offset: Offset(dx, 0),
+                            child: child,
+                          ),
+                        ],
+                      );
+                    },
+                    child: Text(
+                      ann.content,
+                      style: textStyle,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
                     ),
                   ),
                 );
@@ -164,7 +204,7 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           fontFamily: AppTheme.fontBody,
