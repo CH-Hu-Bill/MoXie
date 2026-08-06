@@ -9,6 +9,34 @@ function historyStrictDate($value) {
     return $date && $date->format('Y-m-d') === $value;
 }
 
+/**
+ * 判断某日期当前是否可编辑（"仅今日可编辑"规则的时钟容差版）。
+ *
+ * 服务器与客户端（手机/浏览器）的系统时钟可能存在偏差（例如服务器未启用
+ * NTP 同步，落后真实时间数十分钟）。当跨过午夜时，客户端认定的"今天"
+ * 可能是服务器的昨天或明天，导致合法的当日记录被误拒绝。
+ *
+ * 为容忍这类时钟偏差：
+ *   - 服务器的"今天" → 可编辑
+ *   - 服务器的"昨天"（服务器时间 < 03:00）→ 可编辑（容忍客户端时钟快于服务器）
+ *   - 服务器的"明天"（服务器时间 >= 21:00）→ 可编辑（容忍客户端时钟慢于服务器）
+ *
+ * 时钟校准后（推荐 `timedatectl set-ntp true`），该容差仅在跨午夜的
+ * 数小时内生效，不影响"仅今日可编辑"的规则本意。
+ *
+ * @param mixed $date 日期字符串 Y-m-d
+ * @return bool
+ */
+function historyIsEditableDate($date) {
+    if (!is_string($date) || !historyStrictDate($date)) return false;
+    $now = time();
+    if ($date === date('Y-m-d', $now)) return true;
+    $hour = (int)date('G', $now);
+    if ($date === date('Y-m-d', $now - 86400) && $hour < 3) return true;
+    if ($date === date('Y-m-d', $now + 86400) && $hour >= 21) return true;
+    return false;
+}
+
 function historySanitizeHtml($html) {
     if (!is_string($html) || strlen($html) > HISTORY_CONTENT_MAX_BYTES) {
         throw new LengthException('内容过长');

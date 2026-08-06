@@ -20,11 +20,11 @@ $webAnnouncement = null;
 if ($classId !== '') {
     try {
         $allAnnouncements = Database::getAnnouncements();
-        $now = date('Y-m-d H:i:s');
+        $nowTs = time();
         foreach ($allAnnouncements as $ann) {
-            $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
-            $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
-            if ($annStart > $now || $annEnd < $now) continue;
+            $annStartTs = strtotime((string)($ann['start_time'] ?? ''));
+            $annEndTs = strtotime((string)($ann['end_time'] ?? ''));
+            if ($annStartTs === false || $annEndTs === false || $annStartTs > $nowTs || $annEndTs < $nowTs) continue;
             if (!in_array('all', $ann['target_classes'] ?? []) && !in_array($classId, $ann['target_classes'] ?? [])) continue;
             if (!in_array('web', $ann['target_platforms'] ?? [])) continue;
             $webAnnouncement = $ann;

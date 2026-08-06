@@ -80,6 +80,12 @@ lib/
 - 因此 APP 端设置的字体颜色等格式可完全保留，同时不影响 Web 端读取。
 - **颜色格式归一化**：flutter_quill 的 `colorToHex` 输出 8 位 ARGB 色值（如 `#FF1E88E5`），而 HTML 转换库 `vsc_quill_delta_to_html` 默认会丢弃 8 位色值，导致 `content` HTML 丢失颜色、阅读视图变黑。`getHtml()`/`getDelta()` 在导出前统一把 `color`/`background` 的 8 位 `#AARRGGBB` 归一化为 6 位 `#RRGGBB`（alpha 固定为 FF，丢弃无影响），确保颜色在阅读视图、Web 端与服务器消毒后均完整保留。
 
+## "仅今日可编辑"判定
+
+- APP 端以**手机本地时钟**判定"今天"（`life_screen.dart` 的 `_todayStr()`），因此设备时钟应保持准确。
+- 服务器端保存校验使用容错判定（`web/inc/history.php` 的 `historyIsEditableDate()`），容忍服务器与设备跨午夜时最多 1 天的时钟偏差（服务器"昨天"在 03:00 前可编辑、服务器"明天"在 21:00 后可编辑），避免因服务器时钟漂移误拒绝当日记录。
+- **建议保持服务器系统时钟 NTP 同步**（`timedatectl set-ntp true`），这是各类时间功能一致性的根本保证。
+
 ## 打包
 
 提交代码到 main 分支后，GitHub Actions 自动构建 APK。

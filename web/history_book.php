@@ -15,7 +15,6 @@ $class = $classes[$classId];
 requireClassAuth($classId, $class);
 
 $history = historySanitizeEntries(Database::getClassData($classId, 'history'));
-$today = date('Y-m-d');
 $csrfToken = csrfToken();
 
 // ========== save_entry ==========
@@ -23,7 +22,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
     header('Content-Type: application/json; charset=UTF-8');
     requireCsrf();
     $date = $_POST['date'] ?? '';
-    if (!historyStrictDate($date) || $date !== $today) { echo json_encode(['success' => false, 'error' => '只能保存今天的记录']); exit; }
+    if (!historyIsEditableDate($date)) { echo json_encode(['success' => false, 'error' => '只能保存今天的记录']); exit; }
     try { $content = historySanitizeHtml((string)($_POST['content'] ?? '')); }
     catch (LengthException $e) { http_response_code(413); echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit; }
     catch (Exception $e) { http_response_code(400); echo json_encode(['success' => false, 'error' => '内容格式无效']); exit; }
@@ -272,7 +271,7 @@ require 'inc/header.php';
 <script src="common.js"></script>
 <script>
 var classId = <?php echo json_encode($classId); ?>;
-var today = <?php echo json_encode($today); ?>;
+var today = (function() { var n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); })();
 var historyData = <?php echo json_encode($history, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var selectedDate = null;
 var currentView = 'class';

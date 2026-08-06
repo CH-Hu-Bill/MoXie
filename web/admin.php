@@ -142,20 +142,22 @@ if ($isAuthed) {
         $allowClose = !empty($_POST['allow_close']);
         $startTime = str_replace('T', ' ', trim((string)($_POST['start_time'] ?? '')));
         $endTime = str_replace('T', ' ', trim((string)($_POST['end_time'] ?? '')));
-        if ($content === '' || $startTime === '' || $endTime === '') {
+        $startTs = strtotime($startTime);
+        $endTs = strtotime($endTime);
+        if ($content === '' || $startTs === false || $endTs === false) {
             $msg = '请填写公告内容、开始时间和结束时间';
         } elseif (!preg_match('/\A#[0-9a-fA-F]{3,8}\z/D', $color)) {
             $msg = '颜色格式无效';
-        } elseif ($startTime >= $endTime) {
+        } elseif ($startTs >= $endTs) {
             $msg = '结束时间必须晚于开始时间';
         } else {
             $announcements = Database::getAnnouncements();
-            // 检查时间冲突
+            // 检查时间冲突（timestamp 比较，兼容旧 T 格式数据）
             $conflict = false;
             foreach ($announcements as $ann) {
-                $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
-                $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
-                if ($annStart < $endTime && $annEnd > $startTime) {
+                $annStartTs = strtotime((string)($ann['start_time'] ?? ''));
+                $annEndTs = strtotime((string)($ann['end_time'] ?? ''));
+                if ($annStartTs !== false && $annEndTs !== false && $annStartTs < $endTs && $annEndTs > $startTs) {
                     $conflict = true;
                     $msg = '该时间段与已有公告（' . htmlspecialchars($ann['content']) . '）冲突';
                     break;
@@ -306,12 +308,14 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 <?php
 $announcements = Database::getAnnouncements();
 $allClassIds = is_array($classes) ? array_keys($classes) : [];
+$serverNowInput = date('Y-m-d\TH:i');
+$serverEndInput = date('Y-m-d\TH:i', time() + 3600);
 ?>
 <div class="card" style="margin-bottom:16px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📢 全服公告</h2>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
         <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">当前公告</span><b style="font-size:14px;"><?php echo count($announcements); ?> 条</b></div>
-        <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">服务时间</span><b style="font-size:14px;"><?php echo date('Y-m-d H:i'); ?></b></div>
+        <div><span style="display:block;font-size:11px;color:var(--red);margin-bottom:2px;font-weight:700;">服务器时间（以此为准）</span><b style="font-size:14px;color:var(--red);"><?php echo date('Y-m-d H:i'); ?></b></div>
     </div>
     <form method="post">
         <input type="hidden" name="action" value="save_announcement">
@@ -349,16 +353,32 @@ $allClassIds = is_array($classes) ? array_keys($classes) : [];
             </div>
             <div>
                 <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">开始时间</label>
-                <input type="datetime-local" name="start_time" class="input" style="width:180px" required>
+                <input type="datetime-local" name="start_time" class="input" style="width:180px" required value="<?php echo $serverNowInput; ?>">
             </div>
             <div>
                 <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">结束时间</label>
-                <input type="datetime-local" name="end_time" class="input" style="width:180px" required>
+                <input type="datetime-local" name="end_time" class="input" style="width:180px" required value="<?php echo $serverEndInput; ?>">
             </div>
             <button type="submit" class="btn btn-primary" style="white-space:nowrap;">发布公告</button>
         </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">同一时间段只允许一条公告。时间精确到分钟，服务时区 Asia/Shanghai（UTC+8）。</p>
+        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">已预填服务器当前时间（默认发布后立即生效，可自行改为预约时段）。公告仅在「开始~结束」时间段内显示。同一时间段只允许一条公告。</p>
     </form>
+    <script>
+    (function() {
+        var serverNow = '<?php echo $serverNowInput; ?>';
+        var form = document.querySelector('form input[name="start_time"]');
+        if (form) {
+            form.closest('form').addEventListener('submit', function(e) {
+                var startVal = form.value;
+                if (startVal && startVal > serverNow) {
+                    if (!confirm('开始时间（' + startVal + '）晚于服务器当前时间（' + serverNow + '），公告需到点才显示。确定要发布吗？')) {
+                        e.preventDefault();
+                    }
+                }
+            });
+        }
+    })();
+    </script>
 
     <?php if (count($announcements) > 0): ?>
     <h3 style="font-family:var(--font-heading);font-size:15px;margin:18px 0 10px;color:var(--pencil);">公告列表</h3>
@@ -379,11 +399,11 @@ $allClassIds = is_array($classes) ? array_keys($classes) : [];
             <tbody>
             <?php foreach ($announcements as $ann): ?>
                 <?php
-                $now = date('Y-m-d H:i:s');
-                $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
-                $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
-                $active = $annStart <= $now && $annEnd >= $now;
-                $future = $annStart > $now;
+                $now = time();
+                $annStartTs = strtotime((string)($ann['start_time'] ?? ''));
+                $annEndTs = strtotime((string)($ann['end_time'] ?? ''));
+                $active = $annStartTs !== false && $annEndTs !== false && $annStartTs <= $now && $annEndTs >= $now;
+                $future = $annStartTs !== false && $annEndTs !== false && $annStartTs > $now;
                 ?>
                 <tr>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars($ann['content']); ?></td>

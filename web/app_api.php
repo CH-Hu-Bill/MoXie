@@ -238,12 +238,12 @@ if ($action === 'get_announcements') {
     $classId = trim((string)($_POST['class_id'] ?? ''));
     $platform = trim((string)($_POST['platform'] ?? 'app'));
     $announcements = Database::getAnnouncements();
-    $now = date('Y-m-d H:i:s');
+    $nowTs = time();
     $result = [];
     foreach ($announcements as $ann) {
-        $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
-        $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
-        if ($annStart > $now || $annEnd < $now) continue;
+        $annStartTs = strtotime((string)($ann['start_time'] ?? ''));
+        $annEndTs = strtotime((string)($ann['end_time'] ?? ''));
+        if ($annStartTs === false || $annEndTs === false || $annStartTs > $nowTs || $annEndTs < $nowTs) continue;
         if (!in_array('all', $ann['target_classes'] ?? []) && !in_array($classId, $ann['target_classes'] ?? [])) continue;
         if (!in_array($platform, $ann['target_platforms'] ?? [])) continue;
         $result[] = $ann;
@@ -560,7 +560,7 @@ switch ($action) {
 
     case 'save_personal_history':
         $date = trim((string)($_POST['date'] ?? '')); $content = (string)($_POST['content'] ?? '');
-        if (!historyStrictDate($date) || $date !== date('Y-m-d')) appError('只能保存今天的史记');
+        if (!historyIsEditableDate($date)) appError('只能保存今天的史记');
         try {
             $content = historySanitizeHtml($content);
         } catch (LengthException $e) {
