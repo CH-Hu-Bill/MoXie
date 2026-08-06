@@ -55,6 +55,7 @@ lib/
 │   └── announcement.dart       # 公告模型
 ├── services/
 │   ├── api_service.dart        # API 请求封装（含 get_announcements）
+│   ├── announcement_service.dart # 公告共享服务（缓存横幅+超级公告，triggerFullscreen）
 │   └── storage_service.dart   # 本地存储
 ├── providers/
 │   └── auth_provider.dart      # 认证状态管理
@@ -72,7 +73,7 @@ lib/
     ├── rich_text_editor.dart   # Quill 富文本编辑器（HTML + Delta JSON 双存）
     ├── announcement_banner.dart # 公告横幅（AppBar 下方；文本未超出静态居中、超出时双副本无缝循环滚动 + 两侧渐变蒙板，可关闭）
     ├── announcement_marquee.dart # 无缝跑马灯组件（双副本 + 实际渲染宽度测量，拼接精确）
-    └── fullscreen_announcement_overlay.dart # 超级霸屏全屏层（切 tab/进子页时展示 1~5 秒，点击跳过，半透明底不遮横幅）
+    └── fullscreen_announcement_overlay.dart # 超级霸屏层（常驻最顶层；切 tab/进子页/启动 时展示 1~5 秒、点击任意处跳过；只占内容区——顶部栏/横幅下方 ~ tab 栏上方，不遮挡横幅）
 ```
 
 ## 富文本颜色保存说明

@@ -34,7 +34,7 @@
 | **班级图集** (`gallery.php` / `gallery_api.php`) | 图片上传 + 画廊展示；提供公开分页 API（基于 IP + 日期轮换排序，防同设备重复） |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数，按班级隔离存储 |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
-| **全服公告** | 公告分两类：**顶部横幅**（状态栏跑马灯，可关闭）与**超级霸屏**（mode=fullscreen，站内跳转时全屏展示 1~5 秒、点击任意处跳过、半透明底不遮横幅，不进顶部横幅）。两类同时间段可共存、同类互斥。后台时间选择已预填服务器当前时间（默认立即生效），并醒目显示服务器时间 |
+| **全服公告** | 公告分两类：**顶部横幅**（状态栏跑马灯，可关闭）与**超级霸屏**（mode=fullscreen）。超级霸屏：仅站内点击跳转时触发（刷新/直达/系统返回不触发），新页面**首帧即渲染**（无内容闪现），页面加载完成后开始计时展示 1~5 秒、点击任意处跳过；霸屏层只占状态栏（横幅）**下方**区域，不遮挡顶部横幅。两类同时间段可共存、同类互斥。后台时间选择已预填服务器当前时间（默认立即生效），并醒目显示服务器时间 |
 | **APP 后端 API** (`app_api.php`) | 用户注册 / 登录 / token 鉴权、单词 / 任务 / 错题本 / 收藏、史记、图集、导出等完整接口 |
 
 ---
@@ -323,7 +323,7 @@ data/
 | `users/{uid}.json` | APP 用户数据（name / password_hash / class_ids / wrong_words / consent_map） | **极高** |
 | `users/tokens.json` | 登录令牌 sha256 哈希 + next_uid | **极高** |
 | `app_versions.json` | APP 版本与发布日志（latest / history） | 中 |
-| `announcements.json` | 全服公告（id/content/color/target_classes/target_platforms/allow_close/start_time/end_time） | 中 |
+| `announcements.json` | 全服公告（id/content/color/mode/fullscreen_seconds/target_classes/target_platforms/allow_close/start_time/end_time）。`mode`: banner(顶部横幅)/fullscreen(超级霸屏)；同时间段同类互斥、两类可共存 | 中 |
 | `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/delta/title/mood/weather/location/tags） | 中 |
 | `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权；`delta` 为 APP 端 Delta JSON 无损格式，Web 忽略。APP 导出时颜色统一为 6 位 `#RRGGBB`） | 高 |
 | `classes/{classId}/gallery.json` | 图集元数据（id / image / description / uploaded_at） | 中 |
