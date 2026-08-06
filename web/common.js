@@ -156,7 +156,15 @@ function showPageLeaving() {
 
 function hidePageLeaving() {
     document.documentElement.classList.remove('page-leaving');
+    // 彻底移除蒙版元素，避免 bfcache 恢复或加载期间残留导致动画卡住
+    const overlay = document.getElementById('pageLeavingOverlay');
+    if (overlay) overlay.remove();
 }
+// 页面就绪/显示时立即隐藏离场蒙版（DOM 解析完成即可，不必等图片/字体等资源加载完）
+hidePageLeaving();
+document.addEventListener('DOMContentLoaded', hidePageLeaving);
+window.addEventListener('load', hidePageLeaving);
+window.addEventListener('pageshow', hidePageLeaving);
 
 function showOkOverlayThen(url) {
     showPageLeaving();

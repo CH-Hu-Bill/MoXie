@@ -15,6 +15,8 @@ class AnnouncementBanner extends StatefulWidget {
 
 class _AnnouncementBannerState extends State<AnnouncementBanner>
     with SingleTickerProviderStateMixin {
+  static const double _gap = 40;
+
   Announcement? _announcement;
   late AnimationController _scrollController;
   bool _dismissed = false;
@@ -135,19 +137,20 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
                 final availableWidth = constraints.maxWidth;
                 final textWidth = _textWidth(ann.content, context);
                 final overflow = textWidth > availableWidth;
-                if (overflow) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _startAnimating(availableWidth + textWidth);
-                  });
-                } else {
-                  _stopAnimating();
-                }
                 final textStyle = TextStyle(
                   color: color,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   fontFamily: AppTheme.fontBody,
                 );
+                if (overflow) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _startAnimating(textWidth + _gap);
+                  });
+                } else {
+                  _stopAnimating();
+                }
+
                 if (!overflow) {
                   return Align(
                     alignment: Alignment.center,
@@ -159,28 +162,48 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
                     ),
                   );
                 }
+
+                // 无缝跑马灯：两份相同文本首尾相接循环，两边渐变蒙板
                 return ClipRect(
-                  child: AnimatedBuilder(
-                    animation: _scrollController,
-                    builder: (context, child) {
-                      final total = availableWidth + textWidth;
-                      final dx = availableWidth - total * _scrollController.value;
-                      return Stack(
-                        alignment: Alignment.centerLeft,
-                        children: [
-                          Transform.translate(
-                            offset: Offset(dx, 0),
-                            child: child,
-                          ),
-                        ],
-                      );
-                    },
-                    child: Text(
-                      ann.content,
-                      style: textStyle,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.visible,
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black,
+                        Colors.black,
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.06, 0.94, 1.0],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.dstIn,
+                    child: AnimatedBuilder(
+                      animation: _scrollController,
+                      builder: (context, child) {
+                        final dx =
+                            -(_scrollController.value * (textWidth + _gap));
+                        final copy = Text(
+                          ann.content,
+                          style: textStyle,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                        );
+                        return Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [
+                            Transform.translate(
+                              offset: Offset(dx, 0),
+                              child: copy,
+                            ),
+                            Transform.translate(
+                              offset: Offset(dx + textWidth + _gap, 0),
+                              child: copy,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 );

@@ -42,13 +42,16 @@ $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color
     <?php if ($className !== ''): ?>
       <span class="class-name"><?php echo htmlspecialchars($className); ?></span>
     <?php endif; ?>
-    <?php if ($pageTitle !== ''): ?>
-      <span class="page-name"><?php echo htmlspecialchars($pageTitle); ?></span>
+    <?php if ($webAnnouncement && $pageTitle !== ''): ?>
+      <span class="page-name" id="statusPageName"><?php echo htmlspecialchars($pageTitle); ?></span>
     <?php endif; ?>
   </div>
+  <div class="title" id="pageTitle" style="<?php echo $webAnnouncement ? 'display:none;' : ''; ?>"><?php echo htmlspecialchars($pageTitle); ?></div>
   <?php if ($webAnnouncement): ?>
   <div class="announcement" id="announcementMarquee" data-ann-id="<?php echo htmlspecialchars($webAnnouncement['id']); ?>" style="color:<?php echo $annColor; ?>">
-    <span class="announcement-text"><?php echo htmlspecialchars($webAnnouncement['content']); ?></span>
+    <div class="announcement-track" id="announcementTrack">
+      <span class="announcement-text"><?php echo htmlspecialchars($webAnnouncement['content']); ?></span>
+    </div>
     <?php if (!empty($webAnnouncement['allow_close'])): ?>
     <button class="announcement-close" onclick="dismissAnnouncement('<?php echo htmlspecialchars($webAnnouncement['id']); ?>')" aria-label="关闭公告">×</button>
     <?php endif; ?>
@@ -58,28 +61,41 @@ $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color
 </div>
 <script>
 (function() {
-    var annEl = document.getElementById('announcementMarquee');
-    if (annEl) {
-        var annId = annEl.getAttribute('data-ann-id');
+    function restoreNoBanner() {
+        var ann = document.getElementById('announcementMarquee');
+        if (ann) ann.style.display = 'none';
+        var pn = document.getElementById('statusPageName');
+        if (pn) pn.style.display = 'none';
+        var pt = document.getElementById('pageTitle');
+        if (pt) pt.style.display = '';
+    }
+    var ann = document.getElementById('announcementMarquee');
+    if (ann) {
+        var annId = ann.getAttribute('data-ann-id');
         if (annId && localStorage.getItem('ann_dismissed_' + annId)) {
-            annEl.style.display = 'none';
+            restoreNoBanner();
         } else {
-            // 检测溢出并启用滚动
-            var textEl = annEl.querySelector('.announcement-text');
-            if (textEl) {
-                var over = textEl.scrollWidth - textEl.clientWidth;
-                if (over > 4) {
-                    textEl.style.setProperty('--mx', '-' + (over + 10) + 'px');
-                    textEl.style.setProperty('--md', Math.max(3, over / 35) + 's');
-                    textEl.classList.add('scrollable');
+            var track = document.getElementById('announcementTrack');
+            var textEl = ann.querySelector('.announcement-text');
+            if (track && textEl) {
+                var avail = track.clientWidth;
+                var tw = textEl.scrollWidth;
+                if (tw > avail + 4) {
+                    // 无缝跑马灯：复制两份文本 + 位移循环
+                    var textHtml = textEl.outerHTML;
+                    track.innerHTML = '<div class="announcement-marquee">' + textHtml + textHtml + '</div>';
+                    var marquee = track.querySelector('.announcement-marquee');
+                    var gap = 40;
+                    marquee.style.setProperty('--end', '-' + (tw + gap) + 'px');
+                    marquee.style.setProperty('--dur', Math.max(5, (avail + tw) / 40) + 's');
+                    track.classList.add('track-scroll');
                 }
             }
         }
     }
+    window.dismissAnnouncement = function(id) {
+        try { localStorage.setItem('ann_dismissed_' + id, '1'); } catch(e) {}
+        restoreNoBanner();
+    };
 })();
-function dismissAnnouncement(id) {
-    try { localStorage.setItem('ann_dismissed_' + id, '1'); } catch(e) {}
-    var el = document.getElementById('announcementMarquee');
-    if (el) el.style.display = 'none';
-}
 </script>

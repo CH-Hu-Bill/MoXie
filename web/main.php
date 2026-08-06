@@ -218,7 +218,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'translate_quote') {
     echo json_encode(['success' => true, 'translation' => trim($result['content'])]);
     exit;
 }
-$pageTitle = $class['name'] . ' - 功能主页';
+$pageTitle = '功能主页';
 require 'inc/head.php';
 ?>
 <body>
