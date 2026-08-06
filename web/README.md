@@ -441,6 +441,9 @@ data/
 - **APP token**：`bin2hex(random_bytes(32))` 生成，仅存 sha256 哈希；过期自动清理。
 - **限流**：登录 / 绑定口令 / AI 调用均有持久滑动窗口限流（`inc/ratelimit.php`）。
 - **富文本 XSS 消毒**：`inc/history.php` 的 `historySanitizeHtml` 使用 DOMDocument 白名单过滤标签与属性，拒绝 `script/iframe/on*` 等危险内容，CSS 仅放行安全声明。
+- **内联 JSON XSS 防护**：所有输出到 `<script>` 内联块的数据（班级名 / 单词 / 释义 / 图集描述 / 公告）统一用 `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)`，杜绝 `</script>` 逃逸注入。
+- **HTML 属性注入防护**：`speak()` 发音按钮等 `onclick` 内联调用均经 `htmlspecialchars(json_encode(..., JSON_HEX_*), ENT_QUOTES)` 双重转义，用户输入含引号无法逃逸属性。
+- **CSV 公式注入防护**：导出 CSV（单词库 / 任务 / 错题本）时，以 `=` `+` `-` `@` 开头的单元格前缀 `'`，防止 Excel 打开时执行公式。
 - **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。

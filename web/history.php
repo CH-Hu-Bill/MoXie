@@ -100,7 +100,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
                                         <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
                                     <?php endif; ?>
                                 </div>
-                                <button class="speaker" onclick='speak(<?php echo json_encode($w['word']); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                                <button class="speaker" onclick='speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
                             </div>
                         <?php endif; ?>
                     <?php endforeach; ?>
@@ -116,11 +116,11 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
-        const selectedTaskWordIds = <?php echo $selectedTask ? json_encode($selectedTask['word_ids']) : '[]'; ?>;
+        const selectedTaskWordIds = <?php echo $selectedTask ? json_encode($selectedTask['word_ids'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : '[]'; ?>;
 
         window.addEventListener('load', function() {
             initMarquee();
-            const highlightId = <?php echo json_encode($highlightId); ?>;
+            const highlightId = <?php echo json_encode($highlightId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
             const card = document.querySelector('.word-card[data-id="' + CSS.escape(highlightId) + '"]');
             if (highlightId && card) { card.classList.add('follow-highlight'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
         });

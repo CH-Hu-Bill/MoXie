@@ -184,9 +184,9 @@ require 'inc/head.php';
 var CSRF_TOKEN='<?php echo $csrfToken; ?>';
 var DISPLAY_VIEW='<?php echo $view; ?>';
 var DISPLAY_CID='<?php echo $classId !== '' ? htmlspecialchars($classId, ENT_QUOTES, 'UTF-8') : ''; ?>';
-var DISPLAY_CLASSES=<?php echo json_encode($publicClasses, JSON_UNESCAPED_UNICODE); ?>;
-var DISPLAY_GALLERY=<?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE); ?>;
-var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE); ?>;
+var DISPLAY_CLASSES=<?php echo json_encode($publicClasses, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+var DISPLAY_GALLERY=<?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
 
 <div class="display-root" id="displayRoot" data-view="<?php echo $view; ?>"
@@ -292,7 +292,7 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE); ?>;
     // 需要验证口令时自动弹窗（口令已重置 / cookie 失效）
     if (DISPLAY_VIEW === 'password') {
         setTimeout(function() {
-            var cid = <?php echo json_encode($classId); ?>;
+            var cid = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
             showPw(cid, true);
         }, 400);
     }

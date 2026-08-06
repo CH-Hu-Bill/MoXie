@@ -67,6 +67,9 @@ if (isset($_POST['action'])) {
         if (!$word || !$meaning) {
             header('Content-Type: application/json'); echo json_encode(['success' => false, 'error' => '单词和释义不能为空']); exit;
         }
+        if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) {
+            header('Content-Type: application/json'); echo json_encode(['success' => false, 'error' => '输入内容过长']); exit;
+        }
         $exists = false;
         foreach ($words as $w) { if (strtolower($w['word']) === strtolower($word)) { $exists = true; break; } }
         $response = ['success' => false, 'exists' => $exists, 'word' => $word];
@@ -84,6 +87,9 @@ if (isset($_POST['action'])) {
         $wordId = $_POST['word_id'] ?? ''; $word = trim($_POST['word'] ?? ''); $meaning = trim($_POST['meaning'] ?? ''); $pos = trim($_POST['pos'] ?? '');
         if (!$word || !$meaning) {
             echo json_encode(['success' => false, 'error' => '单词和释义不能为空']); exit;
+        }
+        if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) {
+            echo json_encode(['success' => false, 'error' => '输入内容过长']); exit;
         }
         $found = false;
         foreach ($words as $idx => $w) {
@@ -142,8 +148,9 @@ if (isset($_POST['action'])) {
         header('Content-Disposition: attachment; filename="' . $safeName . '_单词导出.csv"');
         $output = fopen('php://output', 'w');
         fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM
+        $csvSafe = function($v) { $v = trim((string)$v); if ($v !== '' && preg_match('/^[=+\-@]/', $v)) $v = "'" . $v; return $v; };
         foreach ($words as $w) {
-            fputcsv($output, [$w['word'], $w['meaning'], $w['pos'] ?? '']);
+            fputcsv($output, [$csvSafe($w['word']), $csvSafe($w['meaning']), $csvSafe($w['pos'] ?? '')]);
         }
         fclose($output);
         exit;
@@ -389,7 +396,7 @@ PROMPT;
                             <?php endif; ?>
                         </div>
                         <div class="corner-bl">
-                            <button class="speaker" onclick='event.stopPropagation();speak(<?php echo json_encode($w['word']); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                            <button class="speaker" onclick='event.stopPropagation();speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
                         </div>
                         <div class="corner-br">
                             <?php if (isset($wordCompletedInfo[$w['id']])): ?>
@@ -566,8 +573,8 @@ PROMPT;
     <script>
         const classId = '<?php echo $classId; ?>';
         // wordsArray is kept in sync with server state for edit/delete lookups
-        let wordsArray = <?php echo json_encode($words); ?>;
-        const searchQuery = <?php echo json_encode($searchQ); ?>;
+        let wordsArray = <?php echo json_encode($words, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        const searchQuery = <?php echo json_encode($searchQ, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
         let selectedIds = new Set();
         let previewData = [];
 
@@ -744,8 +751,8 @@ PROMPT;
                 const word = escHtml(w['word'] || '');
                 const meaning = escHtml(w['meaning'] || '');
                 const pos = escHtml(w['pos'] || '');
-                const pendingDate = <?php echo json_encode($wordPendingInfo); ?>[wid] || '';
-                const completed = <?php echo json_encode($wordCompletedInfo); ?>[wid] || false;
+                const pendingDate = <?php echo json_encode($wordPendingInfo, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>[wid] || '';
+                const completed = <?php echo json_encode($wordCompletedInfo, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>[wid] || false;
                 const selClass = selectedIds.has(wid) ? ' selected' : '';
                 html += '<div class="word-card' + selClass + '" data-id="' + wid + '" data-index="' + idx + '"' +
                     ' data-word-db="' + word + '" data-meaning-db="' + meaning + '" data-pos-db="' + pos + '">' +
@@ -762,7 +769,7 @@ PROMPT;
                         (pos ? '<div class="pos">' + pos + '</div>' : '') +
                     '</div>' +
                     '<div class="corner-bl">' +
-                        '<button class="speaker" onclick=\'event.stopPropagation();speak(' + JSON.stringify(w['word'] || '') + ')\'>' +
+                        '<button class="speaker" onclick=\'event.stopPropagation();speak(' + escHtml(JSON.stringify(w['word'] || '')) + ')\'>' +
                             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>' +
                         '</button>' +
                     '</div>' +

@@ -324,7 +324,7 @@ require 'inc/header.php';
     <script>
         const weekendClickable = <?php echo $weekendClickable ? 'true' : 'false'; ?>;
         const weekendCompleted = <?php echo $weekendCompleted ? 'true' : 'false'; ?>;
-        const weekendTaskId = <?php echo $weekendTaskId ? json_encode($weekendTaskId) : 'null'; ?>;
+        const weekendTaskId = <?php echo $weekendTaskId ? json_encode($weekendTaskId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : 'null'; ?>;
         const classId = '<?php echo $classId; ?>';
 
         async function handleWeekendClick() {

@@ -76,7 +76,7 @@ if (!empty($createError)) {
     $hasNoClass = $hasNoClass || true; // keep modal open via class below
 }
 if ($needAuth && isset($classes[$needAuth]) && !isClassAuthenticated($needAuth, $classes[$needAuth])) {
-    echo '<script>var needAuthId = ' . json_encode($needAuth) . ';</script>';
+    echo '<script>var needAuthId = ' . json_encode($needAuth, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script>';
 }
 $publicClasses = [];
 foreach ($classes as $id => $class) {
@@ -167,7 +167,7 @@ require 'inc/head.php';
 
         function showPwModal(classId) {
             pendingClassId = classId;
-            var classes = <?php echo json_encode($publicClasses); ?>;
+            var classes = <?php echo json_encode($publicClasses, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
             document.getElementById('pwClassName').textContent = '「' + (classes[classId] ? classes[classId].name : classId) + '」';
             document.getElementById('pwInput').value = '';
             document.getElementById('pwError').textContent = '';
@@ -210,7 +210,7 @@ require 'inc/head.php';
         }
 
         function selectClass(id) {
-            var classes = <?php echo json_encode($publicClasses); ?>;
+            var classes = <?php echo json_encode($publicClasses, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
             var c = classes[id];
             if (c && c.has_password) {
                 if (c.authenticated) {

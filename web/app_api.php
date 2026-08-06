@@ -704,8 +704,9 @@ switch ($action) {
         $map = []; foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
         $csvRows = ["ï»¿单词,释义,词性"];
         $textLines = [];
+        $csvSafe = function($v) { $v = trim((string)$v); if ($v !== '' && preg_match('/^[=+\-@]/', $v)) $v = "'" . $v; return $v; };
         foreach (($tasks[$taskId]['word_ids'] ?? []) as $wid) if (isset($map[$wid])) {
-            $csvRows[] = '"' . str_replace('"', '""', $map[$wid]['word']) . '","' . str_replace('"', '""', $map[$wid]['meaning']) . '","' . ($map[$wid]['pos'] ?? '') . '"';
+            $csvRows[] = '"' . str_replace('"', '""', $csvSafe($map[$wid]['word'])) . '","' . str_replace('"', '""', $csvSafe($map[$wid]['meaning'])) . '","' . $csvSafe($map[$wid]['pos'] ?? '') . '"';
             $textLines[] = $map[$wid]['word'] . ' ' . $map[$wid]['meaning'] . ' ' . ($map[$wid]['pos'] ?? '');
         }
         if (!count($textLines)) appError('任务中没有可导出的单词');
@@ -737,8 +738,9 @@ switch ($action) {
         $map = []; foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
         $csvRows = ["ï»¿单词,释义,词性"];
         $textLines = [];
+        $csvSafe = function($v) { $v = trim((string)$v); if ($v !== '' && preg_match('/^[=+\-@]/', $v)) $v = "'" . $v; return $v; };
         foreach ($wrongMap as $wid => $info) if (isset($map[$wid])) {
-            $csvRows[] = '"' . str_replace('"', '""', $map[$wid]['word']) . '","' . str_replace('"', '""', $map[$wid]['meaning']) . '","' . ($map[$wid]['pos'] ?? '') . '"';
+            $csvRows[] = '"' . str_replace('"', '""', $csvSafe($map[$wid]['word'])) . '","' . str_replace('"', '""', $csvSafe($map[$wid]['meaning'])) . '","' . $csvSafe($map[$wid]['pos'] ?? '') . '"';
             $textLines[] = $map[$wid]['word'] . ' ' . $map[$wid]['meaning'] . ' ' . ($map[$wid]['pos'] ?? '');
         }
         if (!count($textLines)) appError('错题本为空，无可导出内容');

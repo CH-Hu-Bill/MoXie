@@ -119,8 +119,8 @@ require 'inc/header.php';
 
 <script src="common.js?v=6"></script>
 <script>
-var classId = <?php echo json_encode($classId); ?>;
-var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE); ?>;
+var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
 function renderGallery() {
     var grid = document.getElementById('galleryGrid');
