@@ -70,7 +70,9 @@ lib/
 └── widgets/
     ├── hand_drawn_widgets.dart # 手绘风格通用组件
     ├── rich_text_editor.dart   # Quill 富文本编辑器（HTML + Delta JSON 双存）
-    └── announcement_banner.dart # 公告横幅（AppBar 下方；文本未超出静态居中、超出时双副本无缝循环滚动 + 两侧渐变蒙板，可关闭）
+    ├── announcement_banner.dart # 公告横幅（AppBar 下方；文本未超出静态居中、超出时双副本无缝循环滚动 + 两侧渐变蒙板，可关闭）
+    ├── announcement_marquee.dart # 无缝跑马灯组件（双副本 + 实际渲染宽度测量，拼接精确）
+    └── fullscreen_announcement_overlay.dart # 超级霸屏全屏层（切 tab/进子页时展示 1~5 秒，点击跳过，半透明底不遮横幅）
 ```
 
 ## 富文本颜色保存说明

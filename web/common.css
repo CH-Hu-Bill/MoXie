@@ -73,6 +73,37 @@ body {
 }
 @keyframes pageLoadingSpin { to { transform: rotate(360deg); } }
 
+/* ---- 超级霸屏（全屏公告）---- */
+.fs-overlay {
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(253,251,247,0.90);
+  display: flex; align-items: center; justify-content: center;
+  padding-top: 56px; /* 卡片避开顶部状态栏/横幅区域 */
+  opacity: 0; visibility: hidden; cursor: pointer;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+.fs-overlay.show {
+  opacity: 1; visibility: visible; transition-delay: 0s;
+}
+.fs-card {
+  background: var(--white);
+  border: 4px solid var(--pencil);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  box-shadow: 8px 8px 0 0 rgba(45,45,45,0.55);
+  padding: 36px 30px;
+  max-width: 580px; width: 84%;
+  text-align: center;
+}
+.fs-text {
+  font-family: var(--font-heading);
+  font-size: 28px; font-weight: 700; line-height: 1.5;
+  word-break: break-word;
+}
+.fs-hint {
+  margin-top: 22px; font-size: 13px; color: var(--pencil);
+  opacity: 0.55;
+}
+
 /* ---- 状态栏 ---- */
 .status-bar {
   height: 52px;

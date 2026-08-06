@@ -3,8 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
+import 'services/announcement_service.dart';
 import 'services/storage_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/fullscreen_announcement_overlay.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/class_selection_screen.dart';
@@ -14,6 +16,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService().init();
   runApp(const MyApp());
+}
+
+/// 进入子页面（Navigator.push）时触发超级霸屏
+class FsNavigatorObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    AnnouncementService.instance.triggerFullscreen();
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -38,6 +48,15 @@ class MyApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           FlutterQuillLocalizations.delegate,
         ],
+        navigatorObservers: [FsNavigatorObserver()],
+        builder: (context, child) {
+          return Stack(
+            children: [
+              if (child != null) child,
+              const FullscreenAnnouncementOverlay(),
+            ],
+          );
+        },
         home: Consumer<AuthProvider>(
           builder: (_, auth, __) {
             switch (auth.authState) {

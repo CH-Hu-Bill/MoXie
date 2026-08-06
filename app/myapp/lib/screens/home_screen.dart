@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/announcement_service.dart';
 import '../theme/app_theme.dart';
 import 'study/study_screen.dart';
 import 'life/life_screen.dart';
@@ -35,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _lifeKey.currentState?.resetToInitial();
     }
     setState(() => _currentIndex = index);
+    // 每次切换底部 tab 触发超级霸屏
+    AnnouncementService.instance.triggerFullscreen();
   }
 
   late final _screens = [

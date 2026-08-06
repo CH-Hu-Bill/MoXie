@@ -140,6 +140,8 @@ if ($isAuthed) {
         $targetClasses = $_POST['target_classes'] ?? [];
         $targetPlatforms = $_POST['target_platforms'] ?? [];
         $allowClose = !empty($_POST['allow_close']);
+        $mode = ($_POST['mode'] ?? 'banner') === 'fullscreen' ? 'fullscreen' : 'banner';
+        $fsSeconds = max(1, min(5, (int)($_POST['fullscreen_seconds'] ?? 1)));
         $startTime = str_replace('T', ' ', trim((string)($_POST['start_time'] ?? '')));
         $endTime = str_replace('T', ' ', trim((string)($_POST['end_time'] ?? '')));
         $startTs = strtotime($startTime);
@@ -152,14 +154,15 @@ if ($isAuthed) {
             $msg = '结束时间必须晚于开始时间';
         } else {
             $announcements = Database::getAnnouncements();
-            // 检查时间冲突（timestamp 比较，兼容旧 T 格式数据）
+            // 检查时间冲突：仅同 mode 冲突（横幅↔横幅、超级↔超级），跨 mode 可共存
             $conflict = false;
             foreach ($announcements as $ann) {
                 $annStartTs = strtotime((string)($ann['start_time'] ?? ''));
                 $annEndTs = strtotime((string)($ann['end_time'] ?? ''));
-                if ($annStartTs !== false && $annEndTs !== false && $annStartTs < $endTs && $annEndTs > $startTs) {
+                $annMode = $ann['mode'] ?? 'banner';
+                if ($annStartTs !== false && $annEndTs !== false && $annMode === $mode && $annStartTs < $endTs && $annEndTs > $startTs) {
                     $conflict = true;
-                    $msg = '该时间段与已有公告（' . htmlspecialchars($ann['content']) . '）冲突';
+                    $msg = '该时间段已有同类型公告（' . htmlspecialchars($ann['content']) . '）冲突';
                     break;
                 }
             }
@@ -168,6 +171,8 @@ if ($isAuthed) {
                     'id' => 'ann_' . time(),
                     'content' => $content,
                     'color' => $color,
+                    'mode' => $mode,
+                    'fullscreen_seconds' => $fsSeconds,
                     'target_classes' => $targetClasses,
                     'target_platforms' => $targetPlatforms,
                     'allow_close' => $allowClose,
@@ -346,6 +351,17 @@ $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
                 </div>
             </div>
             <div>
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">提醒类型</label>
+                <div style="display:flex;gap:8px;padding:4px 0;">
+                    <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="radio" name="mode" value="banner" checked onchange="toggleFsSec()"> 顶部横幅</label>
+                    <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="radio" name="mode" value="fullscreen" onchange="toggleFsSec()"> 超级霸屏</label>
+                </div>
+            </div>
+            <div id="fsSecWrap" style="display:none;">
+                <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">霸屏时长(秒)</label>
+                <input type="number" name="fullscreen_seconds" min="1" max="5" value="1" class="input" style="width:80px;">
+            </div>
+            <div>
                 <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">允许关闭</label>
                 <div style="padding:4px 0;">
                     <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" name="allow_close" value="1" checked> 是</label>
@@ -361,8 +377,14 @@ $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
             </div>
             <button type="submit" class="btn btn-primary" style="white-space:nowrap;">发布公告</button>
         </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">已预填服务器当前时间（默认发布后立即生效，可自行改为预约时段）。公告仅在「开始~结束」时间段内显示。同一时间段只允许一条公告。</p>
+        <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">已预填服务器当前时间（默认发布后立即生效，可自行改为预约时段）。公告仅在「开始~结束」时间段内显示。同一时间段**同类型**只允许一条（顶部横幅与超级霸屏可共存）。</p>
     </form>
+    <script>
+    function toggleFsSec() {
+        var fs = document.querySelector('input[name="mode"]:checked').value === 'fullscreen';
+        document.getElementById('fsSecWrap').style.display = fs ? '' : 'none';
+    }
+    </script>
     <script>
     (function() {
         var serverNow = '<?php echo $serverNowInput; ?>';
@@ -387,6 +409,7 @@ $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
             <thead>
                 <tr>
                     <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">内容</th>
+                    <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">类型</th>
                     <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">颜色</th>
                     <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">班级</th>
                     <th style="padding:6px 8px;border-bottom:2px solid var(--old-paper);text-align:left;background:var(--old-paper);color:var(--pencil);font-weight:700;font-family:var(--font-heading);">平台</th>
@@ -407,6 +430,7 @@ $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
                 ?>
                 <tr>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars($ann['content']); ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;white-space:nowrap;"><?php echo ($ann['mode'] ?? 'banner') === 'fullscreen' ? '🔊 霸屏' . (int)($ann['fullscreen_seconds'] ?? 1) . 's' : '顶部横幅'; ?></td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:<?php echo htmlspecialchars($ann['color'] ?? '#ff4d4d'); ?>;border:1px solid var(--pencil);"></span></td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo in_array('all', $ann['target_classes'] ?? []) ? '全部' : implode(', ', $ann['target_classes']); ?></td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo implode(', ', $ann['target_platforms'] ?? []); ?></td>

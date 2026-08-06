@@ -2,6 +2,8 @@ class Announcement {
   final String id;
   final String content;
   final String color;
+  final String mode;
+  final int fullscreenSeconds;
   final bool allowClose;
   final String startTime;
   final String endTime;
@@ -10,6 +12,8 @@ class Announcement {
     required this.id,
     required this.content,
     this.color = '#ff4d4d',
+    this.mode = 'banner',
+    this.fullscreenSeconds = 1,
     this.allowClose = true,
     this.startTime = '',
     this.endTime = '',
@@ -20,6 +24,8 @@ class Announcement {
       id: json['id'] ?? '',
       content: json['content'] ?? '',
       color: json['color'] ?? '#ff4d4d',
+      mode: json['mode'] ?? 'banner',
+      fullscreenSeconds: (json['fullscreen_seconds'] as num?)?.toInt() ?? 1,
       allowClose: json['allow_close'] == true,
       startTime: json['start_time'] ?? '',
       endTime: json['end_time'] ?? '',

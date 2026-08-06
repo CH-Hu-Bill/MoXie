@@ -117,7 +117,7 @@ require 'inc/header.php';
     <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);"></div>
 </div>
 
-<script src="common.js?v=4"></script>
+<script src="common.js?v=5"></script>
 <script>
 var classId = <?php echo json_encode($classId); ?>;
 var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE); ?>;

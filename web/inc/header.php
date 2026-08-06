@@ -16,7 +16,9 @@ $rightContent ??= '';
 $classId    ??= '';
 
 // 加载当前有效公告（仅在已选班级时）
+// banner（顶部横幅）与 fullscreen（超级霸屏）各取一条，可共存
 $webAnnouncement = null;
+$webFullscreen = null;
 if ($classId !== '') {
     try {
         $allAnnouncements = Database::getAnnouncements();
@@ -27,12 +29,21 @@ if ($classId !== '') {
             if ($annStartTs === false || $annEndTs === false || $annStartTs > $nowTs || $annEndTs < $nowTs) continue;
             if (!in_array('all', $ann['target_classes'] ?? []) && !in_array($classId, $ann['target_classes'] ?? [])) continue;
             if (!in_array('web', $ann['target_platforms'] ?? [])) continue;
-            $webAnnouncement = $ann;
-            break;
+            $mode = $ann['mode'] ?? 'banner';
+            if ($mode === 'fullscreen') {
+                if ($webFullscreen === null) $webFullscreen = $ann;
+            } elseif ($webAnnouncement === null) {
+                $webAnnouncement = $ann;
+            }
+            if ($webAnnouncement !== null && $webFullscreen !== null) break;
         }
     } catch (Throwable $e) {}
 }
 $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color'] ?? '#ff4d4d'), ENT_QUOTES, 'UTF-8') : '';
+// 超级霸屏数据注入页面（供加载蒙版 / 新页霸屏层使用）
+$fsColor = $webFullscreen ? htmlspecialchars((string)($webFullscreen['color'] ?? '#ff4d4d'), ENT_QUOTES, 'UTF-8') : '#ff4d4d';
+$fsContent = $webFullscreen ? htmlspecialchars((string)$webFullscreen['content'], ENT_QUOTES, 'UTF-8') : '';
+$fsSeconds = $webFullscreen ? max(1, min(5, (int)($webFullscreen['fullscreen_seconds'] ?? 1))) : 1;
 ?>
 <div class="status-bar">
   <div class="left">
@@ -105,4 +116,18 @@ $annColor = $webAnnouncement ? htmlspecialchars((string)($webAnnouncement['color
         restoreNoBanner();
     };
 })();
+</script>
+<script>
+// 超级霸屏公告数据（active 且平台含 web），供加载蒙版/新页霸屏层使用
+window.__FS_ANN = <?php
+if ($webFullscreen) {
+    echo json_encode([
+        'content' => (string)$webFullscreen['content'],
+        'color' => $fsColor,
+        'seconds' => $fsSeconds,
+    ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+} else {
+    echo 'null';
+}
+?>;
 </script>

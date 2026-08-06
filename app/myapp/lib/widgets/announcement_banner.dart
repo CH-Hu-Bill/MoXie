@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/announcement.dart';
 import '../providers/auth_provider.dart';
-import '../services/api_service.dart';
+import '../services/announcement_service.dart';
 import '../theme/app_theme.dart';
 import 'announcement_marquee.dart';
 
@@ -22,54 +22,61 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
   late AnimationController _scrollController;
   bool _dismissed = false;
   bool _animating = false;
+  String? _lastShownId;
 
   @override
   void initState() {
     super.initState();
     _scrollController = AnimationController(vsync: this);
+    AnnouncementService.instance.addListener(_onServiceChanged);
     _fetchAnnouncement();
   }
 
   @override
-  void didUpdateWidget(covariant AnnouncementBanner oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _fetchAnnouncement();
+  void dispose() {
+    AnnouncementService.instance.removeListener(_onServiceChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onServiceChanged() {
+    _applyBanner(AnnouncementService.instance.banner);
   }
 
   Future<void> _fetchAnnouncement() async {
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
     if (classId == null || classId.isEmpty) return;
-    try {
-      final res = await ApiService().getAnnouncements(classId);
-      final data = res['data'] as List<dynamic>? ?? [];
-      if (data.isNotEmpty) {
-        final ann = Announcement.fromJson(data[0] as Map<String, dynamic>);
-        final prefs = await SharedPreferences.getInstance();
-        final dismissed = prefs.getString('ann_dismissed_${ann.id}');
-        if (dismissed != null) {
-          setState(() {
-            _dismissed = true;
-            _announcement = null;
-          });
-          _stopAnimating();
-          return;
-        }
-        setState(() {
-          _announcement = ann;
-          _dismissed = false;
-        });
-      } else {
-        setState(() {
-          _announcement = null;
-          _dismissed = false;
-        });
-        _stopAnimating();
-      }
-    } catch (_) {
-      setState(() => _announcement = null);
+    await AnnouncementService.instance.refresh(classId);
+    _applyBanner(AnnouncementService.instance.banner);
+  }
+
+  Future<void> _applyBanner(Announcement? ann) async {
+    if (!mounted) return;
+    if (ann == null) {
+      setState(() {
+        _announcement = null;
+        _dismissed = false;
+      });
       _stopAnimating();
+      return;
     }
+    if (ann.id == _lastShownId && _announcement?.id == ann.id) return;
+    _lastShownId = ann.id;
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getString('ann_dismissed_${ann.id}');
+    if (dismissed != null) {
+      setState(() {
+        _dismissed = true;
+        _announcement = null;
+      });
+      _stopAnimating();
+      return;
+    }
+    setState(() {
+      _announcement = ann;
+      _dismissed = false;
+    });
   }
 
   void _startAnimating(double travel) {
@@ -105,12 +112,6 @@ class _AnnouncementBannerState extends State<AnnouncementBanner>
     }
     if (hex.length == 6) hex = 'FF$hex';
     return Color(int.parse(hex, radix: 16));
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
