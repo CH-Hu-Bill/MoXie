@@ -173,8 +173,11 @@ if ($isAuthed) {
                     'end_time' => $endTime,
                     'created_at' => date('Y-m-d H:i:s'),
                 ];
-                Database::saveAnnouncements($announcements);
-                $msg = '公告已发布';
+                if (Database::saveAnnouncements($announcements)) {
+                    $msg = '公告已发布';
+                } else {
+                    $msg = '公告保存失败：服务器数据目录不可写，请检查权限';
+                }
             }
         }
     }
@@ -185,8 +188,11 @@ if ($isAuthed) {
         $announcements = array_values(array_filter($announcements, function($a) use ($delId) {
             return ($a['id'] ?? '') !== $delId;
         }));
-        Database::saveAnnouncements($announcements);
-        $msg = '公告已删除';
+        if (Database::saveAnnouncements($announcements)) {
+            $msg = '公告已删除';
+        } else {
+            $msg = '公告删除失败：服务器数据目录不可写';
+        }
     }
 }
 $versionData = Database::read('app_versions.json');
@@ -374,8 +380,10 @@ $allClassIds = is_array($classes) ? array_keys($classes) : [];
             <?php foreach ($announcements as $ann): ?>
                 <?php
                 $now = date('Y-m-d H:i:s');
-                $active = $ann['start_time'] <= $now && $ann['end_time'] >= $now;
-                $future = $ann['start_time'] > $now;
+                $annStart = str_replace('T', ' ', (string)($ann['start_time'] ?? ''));
+                $annEnd = str_replace('T', ' ', (string)($ann['end_time'] ?? ''));
+                $active = $annStart <= $now && $annEnd >= $now;
+                $future = $annStart > $now;
                 ?>
                 <tr>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars($ann['content']); ?></td>

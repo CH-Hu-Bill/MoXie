@@ -78,6 +78,7 @@ lib/
 - 编辑器保存时**同时写入** `content`（HTML，供 Web 端）与 `delta`（Delta JSON，供 APP 无损还原）。
 - 加载时**优先使用 `delta`**，无 `delta`（如 Web 端创建的旧数据）回退到 HTML 转换。
 - 因此 APP 端设置的字体颜色等格式可完全保留，同时不影响 Web 端读取。
+- **颜色格式归一化**：flutter_quill 的 `colorToHex` 输出 8 位 ARGB 色值（如 `#FF1E88E5`），而 HTML 转换库 `vsc_quill_delta_to_html` 默认会丢弃 8 位色值，导致 `content` HTML 丢失颜色、阅读视图变黑。`getHtml()`/`getDelta()` 在导出前统一把 `color`/`background` 的 8 位 `#AARRGGBB` 归一化为 6 位 `#RRGGBB`（alpha 固定为 FF，丢弃无影响），确保颜色在阅读视图、Web 端与服务器消毒后均完整保留。
 
 ## 打包
 

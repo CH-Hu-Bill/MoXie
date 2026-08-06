@@ -64,10 +64,28 @@ class RichTextEditorState extends State<RichTextEditor> {
 
   String getDelta() {
     try {
-      return jsonEncode(_controller.document.toDelta().toJson());
+      final ops =
+          _controller.document.toDelta().toJson().cast<Map<String, dynamic>>();
+      return jsonEncode(_normalizeColorAttrs(ops));
     } catch (_) {
       return '';
     }
+  }
+
+  List<Map<String, dynamic>> _normalizeColorAttrs(
+      List<Map<String, dynamic>> ops) {
+    for (final op in ops) {
+      final attrs = op['attributes'];
+      if (attrs is Map<String, dynamic>) {
+        for (final key in ['color', 'background']) {
+          final val = attrs[key];
+          if (val is String && val.startsWith('#') && val.length == 9) {
+            attrs[key] = '#${val.substring(3)}';
+          }
+        }
+      }
+    }
+    return ops;
   }
 
   void setDelta(String delta) {
@@ -89,7 +107,7 @@ class RichTextEditorState extends State<RichTextEditor> {
   String getHtml() {
     try {
       final delta = _controller.document.toDelta();
-      final ops = delta.toJson().cast<Map<String, dynamic>>();
+      final ops = _normalizeColorAttrs(delta.toJson().cast<Map<String, dynamic>>());
       final converter = QuillDeltaToHtmlConverter(
         ops,
         ConverterOptions(

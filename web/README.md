@@ -301,7 +301,7 @@ data/
 | `app_versions.json` | APP 版本与发布日志（latest / history） | 中 |
 | `announcements.json` | 全服公告（id/content/color/target_classes/target_platforms/allow_close/start_time/end_time） | 中 |
 | `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/delta/title/mood/weather/location/tags） | 中 |
-| `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权；`delta` 为 APP 端 Delta JSON 无损格式，Web 忽略） | 高 |
+| `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权；`delta` 为 APP 端 Delta JSON 无损格式，Web 忽略。APP 导出时颜色统一为 6 位 `#RRGGBB`） | 高 |
 | `classes/{classId}/gallery.json` | 图集元数据（id / image / description / uploaded_at） | 中 |
 | `exports.json` + `exports/` | 临时导出文件与下载 token（短时有效，自动 GC） | 高 |
 | `ratelimit.json` | 限流计数（滑动窗口） | 低 |
