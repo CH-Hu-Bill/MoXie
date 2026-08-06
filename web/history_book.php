@@ -268,7 +268,7 @@ require 'inc/header.php';
 </div>
 </div>
 
-<script src="common.js?v=3"></script>
+<script src="common.js?v=4"></script>
 <script>
 var classId = <?php echo json_encode($classId); ?>;
 var today = (function() { var n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); })();

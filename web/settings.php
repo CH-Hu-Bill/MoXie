@@ -128,7 +128,7 @@ $followBuffer = $settings['follow_buffer'] ?? 0.5;
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=3"></script>
+    <script src="common.js?v=4"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         async function saveSettings() {
