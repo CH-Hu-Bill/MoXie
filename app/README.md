@@ -4,7 +4,7 @@ ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 
 - **应用名称**：ListenWrite
 - **Android 包名**：`billspace.listenwrite.flutter`
-- **当前版本**：1.0.2
+- **当前版本**：1.0.4
 
 > **注意**：GitHub Actions 自动构建的 APK 会通过 Secret `API_BASE_URL` 写入正式服务器地址；未设置该 Secret 时回退到 `http://127.0.0.1:8000/web`（本地测试）。如需连接真实服务器，请配置 GitHub Secret 或本地复制 `api_config.dart` 修改 `baseUrl` 后重新打包。
 
@@ -99,6 +99,17 @@ lib/
 > 1. 修改 `pubspec.yaml` 中的 `version`（如 `1.0.2+1`）
 > 2. 同步更新 `lib/config/api_config.example.dart` 与 `.github/workflows/build.yml` 中的 `appVersion`
 > 3. 推送触发 CI 构建，产物即为正式 APK
+
+## 刷新与搜索定位
+
+- **静默刷新**：学习/生活页的 30 秒自动刷新为静默模式——仅更新已有数据、保留滚动位置与当前选中日期，不显示全屏"加载中"遮罩（遮罩只在首次无数据时出现），刷新不会被拉回顶部或某页。
+- **升级弹窗**：检查到新版本时弹窗展示服务端 `notes` 更新内容（在"新版本 xxx 可用"下方以便签卡片显示），并提示前往 GitHub 下载。
+- **搜索单词定位**：在搜索页点中某单词后，会切换到学习页并滚动定位到该单词（卡片高亮约 3 秒）。由于单词库是分页懒加载（服务端单页上限 100），定位采用**分页拉取 + 双方向扫描**：
+  1. 若当前已加载列表未含目标词，自动按页拉取直到覆盖该词；
+  2. 用「保守低估」的每项高度估算初始位置（保证落在目标之前）；
+  3. 逐帧前进约一屏扫描，直到目标卡构建，再用 `ensureVisible` 精确对齐；
+  4. 定位期间暂停自动刷新，避免数据覆盖导致扫描中断。
+  相关算法已有 `test/scroll_locate_test.dart` 覆盖（懒加载 + 变高卡片 500 项定位到第 300 项）。
 
 ## 与后端的对接
 
