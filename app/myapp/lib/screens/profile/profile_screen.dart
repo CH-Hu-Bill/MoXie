@@ -41,9 +41,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
             side: const BorderSide(color: AppColors.border, width: 2),
           ),
           title: Text('发现新版本', style: AppTheme.headingStyle),
-          content: Text(
-            '新版本 ${info['latest']} 可用\n\n请前往 GitHub 下载更新。',
-            style: AppTheme.bodyStyle.copyWith(fontSize: 16),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '新版本 ${info['latest']} 可用',
+                style: AppTheme.bodyStyle.copyWith(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              if ((info['notes'] ?? '') is String && (info['notes'] as String).isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.postItYellow,
+                    borderRadius: AppTheme.wobblyRadius,
+                    border: Border.all(color: AppColors.border, width: 1.5),
+                  ),
+                  child: Text(
+                    '更新内容：\n${info['notes']}',
+                    style: AppTheme.bodyStyle.copyWith(fontSize: 14),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Text('请前往 GitHub 下载更新。', style: AppTheme.bodyStyle.copyWith(fontSize: 14)),
+            ],
           ),
           actions: [
             TextButton(

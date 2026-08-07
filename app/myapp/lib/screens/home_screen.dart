@@ -28,7 +28,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onWordFound(String word) {
     setState(() => _currentIndex = 0);
-    _studyKey.currentState?.scrollToWord(word);
+    // 等 tab 切换完成渲染后再定位单词，避免 IndexedStack 中滚动上下文未就绪
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _studyKey.currentState?.scrollToWord(word);
+    });
   }
 
   void _onTabChanged(int index) {

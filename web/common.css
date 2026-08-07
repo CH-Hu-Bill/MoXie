@@ -215,7 +215,7 @@ body {
   padding: 12px 24px;
   border: 2px solid var(--pencil);
   border-radius: var(--wobbly);
-  z-index: 2000; display: none;
+  z-index: 2003; display: none;
   font-family: var(--font-heading);
   font-size: 14px;
   opacity: 0; transition: opacity 0.15s, transform 0.15s;

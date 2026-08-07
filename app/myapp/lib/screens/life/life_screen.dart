@@ -186,9 +186,12 @@ class LifeScreenState extends State<LifeScreen> {
   Widget build(BuildContext context) {
     final todayStr = _todayStr();
 
+    final bool hasAnyData = _personalHistory.isNotEmpty ||
+        _classHistory.isNotEmpty ||
+        _authorizedVlogs.isNotEmpty;
     return Scaffold(
       body: PaperTexture(
-        child: _loading
+        child: _loading && !hasAnyData
             ? const LoadingOverlay(message: '加载中...')
             : RefreshIndicator(
                 onRefresh: _loadData,

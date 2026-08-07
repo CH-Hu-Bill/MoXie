@@ -105,12 +105,12 @@ class StudyScreenState extends State<StudyScreen> {
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId;
       if (classId != null && classId.isNotEmpty) {
-        _loadData();
+        _loadData(silent: true);
       }
     });
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool silent = false}) async {
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
     if (classId == null || classId.isEmpty) return;
@@ -120,12 +120,12 @@ class StudyScreenState extends State<StudyScreen> {
       setState(() => _words = cachedWords.map((w) => Word.fromJson(w)).toList());
     }
 
-    _loadWords(classId);
+    _loadWords(classId, reset: !silent, silent: silent);
     _loadWrongWords(classId);
     _loadTasks(classId);
   }
 
-  Future<void> _loadWords(String classId, {bool reset = true}) async {
+  Future<void> _loadWords(String classId, {bool reset = true, bool silent = false}) async {
     if (reset) setState(() => _loading = true);
     try {
       final page = reset ? 1 : _wordsPage + 1;
@@ -137,6 +137,18 @@ class StudyScreenState extends State<StudyScreen> {
       setState(() {
         if (reset) {
           _words = words;
+        } else if (silent) {
+          // 静默刷新：仅更新已有数据，保留滚动位置（不重新赋列表避免跳变）
+          final existingById = {for (final w in _words) w.id: w};
+          final merged = <Word>[];
+          for (final w in words) {
+            existingById[w.id] = w;
+            merged.add(w);
+          }
+          for (final w in _words) {
+            if (!merged.any((m) => m.id == w.id)) merged.add(w);
+          }
+          _words = merged;
         } else {
           _words.addAll(words);
         }
