@@ -49,41 +49,54 @@ class StudyScreenState extends State<StudyScreen> {
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId;
       if (classId != null && classId.isNotEmpty) {
-        _loadWordsForSearch(classId, word);
+        if (_words.isEmpty) {
+          // 列表尚未加载：先加载当前班级单词再定位
+          _loadWordsForSearch(classId, word);
+        } else {
+          _loadWordsForSearch(classId, word);
+        }
       }
     }
   }
 
-  /// 定位并高亮单词。先按索引估算位置滚动（触发 ListView 懒加载构建该项），
-  /// 再用 ensureVisible 精确对齐；多项未构建时通过轮询重试。
+  /// 定位并高亮单词。采用与任务详情页一致的固定高度估算滚动（可靠），
+  /// 跨 tab 切换时 IndexedStack 子页滚动上下文可能未就绪，轮询重试直到可用。
   void _scrollToHighlight(String word) {
     final targetWord = word.toLowerCase();
-    final index =
-        _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
 
     void attempt({int round = 0}) {
-      final key = _wordCardKeys[targetWord];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          alignment: 0.4,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+      if (!_wordListScrollController.hasClients) {
+        if (round < 15) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) attempt(round: round + 1);
+          });
+        }
         return;
       }
-      // 目标项尚未被 ListView 构建：先跳到估算位置再重试
-      if (index >= 0 && _wordListScrollController.hasClients) {
-        // 估算每项高度（卡片约 130px + 底部 12px 间距 + padding）
-        final estimate = index * 150.0;
-        final max = _wordListScrollController.position.maxScrollExtent;
-        _wordListScrollController.jumpTo(estimate > max ? max : estimate);
-      }
-      if (round < 10) {
-        Future.delayed(Duration(milliseconds: 120), () {
-          if (mounted) attempt(round: round + 1);
-        });
-      }
+      final index =
+          _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
+      if (index < 0) return;
+      // 单词卡片高度约 130px + 底部 12px 间距 + 顶部 padding，估算偏移
+      final offset = index * 150.0;
+      final max = _wordListScrollController.position.maxScrollExtent;
+      _wordListScrollController.animateTo(
+        offset > max ? max : offset,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+      // 滚动后若目标卡已构建，精确对齐一次（消除估算误差）
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        final key = _wordCardKeys[targetWord];
+        if (key?.currentContext != null) {
+          Scrollable.ensureVisible(
+            key!.currentContext!,
+            alignment: 0.4,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
@@ -93,19 +106,38 @@ class StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _loadWordsForSearch(String classId, String targetWord) async {
+    // 服务器 per_page 上限 100，需分页拉取直到覆盖目标单词
+    final all = <Word>[];
+    var page = 1;
+    var hasMore = true;
+    var found = false;
     try {
-      final res = await _api.getWords(classId, page: 1, perPage: 9999);
-      final data = res['data'] as Map<String, dynamic>;
-      final words = (data['words'] as List)
-          .map((w) => Word.fromJson(w as Map<String, dynamic>))
-          .toList();
+      while (hasMore && page <= 30) {
+        final res = await _api.getWords(classId, page: page, perPage: 100);
+        final data = res['data'] as Map<String, dynamic>;
+        final words = (data['words'] as List)
+            .map((w) => Word.fromJson(w as Map<String, dynamic>))
+            .toList();
+        all.addAll(words);
+        if (words.any((w) =>
+            w.word.toLowerCase() == targetWord.toLowerCase())) {
+          found = true;
+          hasMore = false;
+        } else {
+          hasMore = data['has_more'] ?? false;
+          page++;
+        }
+      }
+      if (!mounted) return;
       setState(() {
-        _words = words;
-        _wordsPage = 1;
-        _wordsTotal = data['total'] ?? 0;
+        _words = all;
+        _wordsPage = page;
+        _wordsTotal = all.length;
         _wordsHasMore = false;
       });
-      _scrollToHighlight(targetWord);
+      if (found) {
+        _scrollToHighlight(targetWord);
+      }
     } catch (_) {}
   }
 
@@ -129,6 +161,19 @@ class StudyScreenState extends State<StudyScreen> {
         _loadData(silent: true);
       }
     });
+  }
+
+  String? _lastLoadedClassId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId != null && classId.isNotEmpty && classId != _lastLoadedClassId) {
+      _lastLoadedClassId = classId;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+    }
   }
 
   Future<void> _loadData({bool silent = false}) async {

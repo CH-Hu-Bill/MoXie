@@ -588,6 +588,26 @@ PROMPT;
         }
 
         function showAddModal() { document.getElementById('addForm').reset(); document.getElementById('addModal').classList.add('active'); }
+
+        /**
+         * 将单词卡片滚动到可视区域居中并高亮。
+         * 显式滚动 .content 容器（页面 body 为 overflow:hidden，scrollIntoView 可能作用到错误滚动器导致无效果/卡顿）。
+         */
+        function scrollCardToCenter(card, highlightMs) {
+            if (!card) return;
+            var content = document.getElementById('contentWrap');
+            var scroller = content && content.scrollHeight > content.clientHeight ? content : document.scrollingElement;
+            var target = card.getBoundingClientRect().top + scroller.scrollTop - scroller.clientHeight / 2 + card.getBoundingClientRect().height / 2;
+            target = Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
+            try {
+                scroller.scrollTo({ top: target, behavior: 'smooth' });
+            } catch (e) {
+                scroller.scrollTop = target;
+            }
+            card.classList.add('highlight');
+            setTimeout(function() { card.classList.remove('highlight'); }, highlightMs || 1500);
+        }
+
         function showBatchModal() { document.getElementById('batchTextarea').value = ''; document.getElementById('batchModal').classList.add('active'); }
 
         // ==================== AI Batch Import ====================
@@ -834,7 +854,7 @@ PROMPT;
                 showToast('单词已存在：' + d.word, 'error');
                 closeModal('addModal');
                 const card = document.querySelector('.word-card[data-word-db="' + d.word.toLowerCase() + '"]');
-                if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.classList.add('highlight'); setTimeout(() => card.classList.remove('highlight'), 1500); }
+                if (card) scrollCardToCenter(card, 1500);
             } else if (d.success) {
                 showToast('添加成功', 'success'); closeModal('addModal');
                 showOkOverlayThen('words.php?id=' + classId);
@@ -966,7 +986,7 @@ PROMPT;
                     var card = document.querySelector('.word-card[data-word-db="' + info.word.toLowerCase() + '"]');
                     if (card) {
                         card.classList.add('follow-highlight');
-                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        scrollCardToCenter(card, 0);
                     }
                     // Only show the bar if not already collapsed by user scroll
                     if (!followCollapsed) {
@@ -1025,12 +1045,12 @@ PROMPT;
             const highlightId = params.get('highlight');
             if (highlightId) {
                 const hc = document.querySelector('.word-card[data-id="' + highlightId + '"]');
-                if (hc) setTimeout(() => { hc.scrollIntoView({ behavior: 'smooth', block: 'center' }); hc.classList.add('highlight'); setTimeout(() => hc.classList.remove('highlight'), 2000); }, 400);
+                if (hc) setTimeout(() => { scrollCardToCenter(hc, 2000); }, 400);
             } else {
                 const li = <?php echo $lastWordIndex; ?>;
                 if (li >= 0 && wordsArray.length > 0) {
                     const c = document.querySelector('.word-card[data-index="' + li + '"]');
-                    if (c) setTimeout(() => { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('highlight'); setTimeout(() => c.classList.remove('highlight'), 1500); }, 300);
+                    if (c) setTimeout(() => { scrollCardToCenter(c, 1500); }, 300);
                 }
             }
             const ri = localStorage.getItem('recreate_word_ids');
