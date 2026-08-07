@@ -24,6 +24,7 @@ class StudyScreenState extends State<StudyScreen> {
   final _wordListScrollController = ScrollController();
   final Map<String, GlobalKey> _wordCardKeys = {};
   String? _highlightWord;
+  bool _isLocating = false;
 
   final _api = ApiService();
   final _storage = StorageService();
@@ -38,6 +39,7 @@ class StudyScreenState extends State<StudyScreen> {
   bool _wordsHasMore = false;
 
   void scrollToWord(String word) {
+    _isLocating = true;
     setState(() {
       _mainTab = 0;
       _highlightWord = word;
@@ -49,52 +51,66 @@ class StudyScreenState extends State<StudyScreen> {
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId;
       if (classId != null && classId.isNotEmpty) {
-        if (_words.isEmpty) {
-          // 列表尚未加载：先加载当前班级单词再定位
-          _loadWordsForSearch(classId, word);
-        } else {
-          _loadWordsForSearch(classId, word);
-        }
+        _loadWordsForSearch(classId, word);
       }
     }
   }
 
-  /// 定位并高亮单词。采用与任务详情页一致的固定高度估算滚动（可靠），
-  /// 跨 tab 切换时 IndexedStack 子页滚动上下文可能未就绪，轮询重试直到可用。
+  /// 定位并高亮单词。
+  ///
+  /// 单词库是分页懒加载 + 卡片高度不一，`index * 固定高度` 估算只能粗定位。
+  /// 因此采用「扫描式定位」：
+  ///   1. 先跳到估算位置（低估单卡高度 → 落在目标之前）；
+  ///   2. 若目标卡尚未构建，则每帧前进约一屏继续扫描（ListView 在 jumpTo 后的
+  ///      下一帧构建可视区卡片，确保 key 的 context 会更新）；
+  ///   3. 一旦目标卡构建完成，用 `ensureVisible` 精确对齐并高亮。
   void _scrollToHighlight(String word) {
     final targetWord = word.toLowerCase();
+    final index =
+        _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
+    if (index < 0) return;
 
     void attempt({int round = 0}) {
       if (!_wordListScrollController.hasClients) {
-        if (round < 15) {
+        if (round < 20) {
           Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted) attempt(round: round + 1);
           });
         }
         return;
       }
-      final index =
-          _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
-      if (index < 0) return;
-      // 单词卡片高度约 130px + 底部 12px 间距 + 顶部 padding，估算偏移
-      final offset = index * 150.0;
+
+      final key = _wordCardKeys[targetWord];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          alignment: 0.4,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+        );
+        return;
+      }
+
       final max = _wordListScrollController.position.maxScrollExtent;
-      _wordListScrollController.animateTo(
-        offset > max ? max : offset,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-      // 滚动后若目标卡已构建，精确对齐一次（消除估算误差）
-      Future.delayed(const Duration(milliseconds: 300), () {
+      final viewport = _wordListScrollController.position.viewportDimension;
+      final base = index * 90.0; // 低估 → 通常落在目标之前
+      final step = viewport * 0.7;
+      double target;
+      if (round == 0) {
+        target = base;
+      } else if (round <= 12) {
+        target = base + step * round; // 向前扫描
+      } else {
+        target = base - step * (round - 12); // 向后回扫
+      }
+      target = target.clamp(0.0, max);
+      _wordListScrollController.jumpTo(target);
+
+      // jumpTo 后等待一帧让 ListView 构建可视区，再下一轮检查
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final key = _wordCardKeys[targetWord];
-        if (key?.currentContext != null) {
-          Scrollable.ensureVisible(
-            key!.currentContext!,
-            alignment: 0.4,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-          );
+        if (round < 25) {
+          attempt(round: round + 1);
         }
       });
     }
@@ -102,6 +118,7 @@ class StudyScreenState extends State<StudyScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) setState(() => _highlightWord = null);
+      _isLocating = false;
     });
   }
 
@@ -155,6 +172,7 @@ class StudyScreenState extends State<StudyScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_isLocating) return;
       final auth = context.read<AuthProvider>();
       final classId = auth.currentClassId;
       if (classId != null && classId.isNotEmpty) {
