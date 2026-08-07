@@ -54,18 +54,39 @@ class StudyScreenState extends State<StudyScreen> {
     }
   }
 
+  /// 定位并高亮单词。先按索引估算位置滚动（触发 ListView 懒加载构建该项），
+  /// 再用 ensureVisible 精确对齐；多项未构建时通过轮询重试。
   void _scrollToHighlight(String word) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _wordCardKeys[word.toLowerCase()];
+    final targetWord = word.toLowerCase();
+    final index =
+        _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
+
+    void attempt({int round = 0}) {
+      final key = _wordCardKeys[targetWord];
       if (key?.currentContext != null) {
         Scrollable.ensureVisible(
           key!.currentContext!,
           alignment: 0.4,
-          duration: const Duration(milliseconds: 400),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
+        return;
       }
-    });
+      // 目标项尚未被 ListView 构建：先跳到估算位置再重试
+      if (index >= 0 && _wordListScrollController.hasClients) {
+        // 估算每项高度（卡片约 130px + 底部 12px 间距 + padding）
+        final estimate = index * 150.0;
+        final max = _wordListScrollController.position.maxScrollExtent;
+        _wordListScrollController.jumpTo(estimate > max ? max : estimate);
+      }
+      if (round < 10) {
+        Future.delayed(Duration(milliseconds: 120), () {
+          if (mounted) attempt(round: round + 1);
+        });
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) setState(() => _highlightWord = null);
     });

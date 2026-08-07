@@ -1025,7 +1025,7 @@ PROMPT;
             const highlightId = params.get('highlight');
             if (highlightId) {
                 const hc = document.querySelector('.word-card[data-id="' + highlightId + '"]');
-                if (hc) setTimeout(() => { hc.scrollIntoView({ behavior: 'auto', block: 'center' }); hc.classList.add('highlight'); setTimeout(() => hc.classList.remove('highlight'), 2000); }, 400);
+                if (hc) setTimeout(() => { hc.scrollIntoView({ behavior: 'smooth', block: 'center' }); hc.classList.add('highlight'); setTimeout(() => hc.classList.remove('highlight'), 2000); }, 400);
             } else {
                 const li = <?php echo $lastWordIndex; ?>;
                 if (li >= 0 && wordsArray.length > 0) {

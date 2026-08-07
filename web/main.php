@@ -238,7 +238,7 @@ require 'inc/header.php';
     <div style="max-width:600px;margin:0 auto 28px;position:relative;z-index:2001;">
         <div style="display:flex;gap:8px;position:relative;z-index:2001;">
             <input type="text" id="searchInput" class="input" placeholder="搜索单词或释义..." onkeydown="if(event.key==='Enter')doSearch()" onfocus="onSearchFocus()" style="flex:1;">
-            <button class="btn btn-primary" onclick="doSearch()">搜索</button>
+            <button class="btn btn-primary" onmousedown="searchSuppressDismiss=true" onclick="doSearch()">搜索</button>
         </div>
         <div class="search-results" id="searchResults"></div>
     </div>
@@ -355,6 +355,7 @@ require 'inc/header.php';
         }
 
         // ========== 搜索聚焦 ==========
+        var searchSuppressDismiss = false;
         function onSearchFocus() {
             document.getElementById('searchFocusOverlay').classList.add('active');
             var q = document.getElementById('searchInput').value.trim();
@@ -365,8 +366,12 @@ require 'inc/header.php';
             document.getElementById('searchResults').classList.remove('active');
         }
         // Search input blur - dismiss on next tick (allow click-through on results)
+        // 但点击"搜索"按钮会触发 blur → 禁止 dismiss，避免搜索闪一下就被收起
         document.getElementById('searchInput').addEventListener('blur', function() {
-            setTimeout(function() { dismissSearch(); }, 200);
+            setTimeout(function() {
+                if (searchSuppressDismiss) { searchSuppressDismiss = false; return; }
+                dismissSearch();
+            }, 200);
         });
 
         // ========== 全局搜索 ==========

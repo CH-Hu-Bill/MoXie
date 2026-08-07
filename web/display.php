@@ -46,15 +46,22 @@ function displayTodayWords($classId) {
     try {
         $tasks = Database::getTasks($classId);
         $today = date('Y-m-d');
-        $ids = [];
+        // 取今天最早的 pending 任务（created_at 排序），只展示该任务的单词
+        $candidates = [];
         foreach ($tasks as $t) {
             if (($t['status'] ?? '') === 'pending' && ($t['date'] ?? '') === $today) {
-                foreach (($t['word_ids'] ?? []) as $wid) $ids[] = (string)$wid;
+                $candidates[] = $t;
             }
         }
-        $ids = array_values(array_unique($ids));
+        if (empty($candidates)) return [];
+        usort($candidates, function($a, $b) {
+            $ta = $a['created_at'] ?? ($a['id'] ?? '');
+            $tb = $b['created_at'] ?? ($b['id'] ?? '');
+            return strcmp((string)$ta, (string)$tb);
+        });
+        $ids = $candidates[0]['word_ids'] ?? [];
         if (empty($ids)) return [];
-        $ids = array_slice($ids, 0, 20);
+        $ids = array_slice(array_values(array_unique(array_map('strval', $ids))), 0, 20);
         $byId = [];
         foreach (Database::getWords($classId) as $w) $byId[(string)$w['id']] = $w;
         $out = [];
