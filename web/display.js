@@ -190,12 +190,14 @@ function renderWords(words) {
     }
     var cards = words.map(function(w) {
         var pos = w.pos ? '<span class="d-word-pos">' + escHtml(w.pos) + '</span>' : '';
-        var mean = w.meaning ? '<div class="d-word-mean">' + escHtml(w.meaning) + '</div>' : '';
-        return '<div class="d-word"><div class="d-word-main">' + escHtml(w.word) + pos + '</div>' + mean + '</div>';
+        var mean = w.meaning ? '<div class="d-word-mean"><span class="d-word-scroll">' + escHtml(w.meaning) + '</span></div>' : '';
+        return '<div class="d-word"><div class="d-word-main"><span class="d-word-scroll">' + escHtml(w.word) + '</span>' + pos + '</div>' + mean + '</div>';
     }).join('');
     zone.innerHTML = '<div class="d-words-header"><span class="d-words-title">今日默写</span><span class="d-words-date">' + todayStr() + '</span></div>'
         + '<div class="d-word-grid">' + cards + '</div>';
     fitWords();
+    fitWordMarquees();
+    marqueeAfterFonts();
 }
 
 /**
@@ -246,7 +248,7 @@ function fitWords() {
     grid.style.setProperty('--word-fs', fs + 'px');
     grid.style.setProperty('--word-pos-fs', Math.max(13, Math.round(fs * 0.45)) + 'px');
     grid.style.setProperty('--word-mean-fs', Math.max(14, Math.round(fs * 0.5)) + 'px');
-    // 个别超长单词：单独缩小该卡片字号，避免整屏缩小
+    // 个别超长单词：略微缩小到基准字号的 85%（保留轻微溢出 → 由滚动跑马灯展示完整内容）
     cards.forEach(function(c) {
         var t = c.querySelector('.d-word-main');
         if (!t) return;
@@ -254,18 +256,54 @@ function fitWords() {
         var txt = pos ? t.textContent.replace(pos.textContent, '') : t.textContent;
         var len = txt.trim().length || 1;
         if (len > maxLen) {
-            var f = Math.max(14, Math.floor(fs * maxLen / len));
-            t.style.fontSize = f + 'px';
+            t.style.fontSize = Math.max(14, Math.round(fs * 0.85)) + 'px';
         } else {
             t.style.fontSize = '';
         }
     });
 }
 
-let _fitResizeTimer = null;
+/**
+ * 长单词 / 长释义溢出检测 → 滚动跑马灯。
+ * 复用单词库页 .scrollable 逻辑：在块级父元素上测 scrollWidth - clientWidth（span 的 scrollWidth 在 inline 上下文为 0）。
+ * 滚动距离用相对像素 em 计算（随字号缩放），时长按溢出量换算秒。
+ */
+function fitWordMarquees() {
+    var grid = document.getElementById('dWords');
+    if (!grid) return;
+    var els = grid.querySelectorAll('.d-word-main, .d-word-mean');
+    els.forEach(function(el) {
+        el.classList.remove('scrollable');
+        el.style.removeProperty('--mx');
+        el.style.removeProperty('--md');
+        requestAnimationFrame(function() {
+            var over = el.scrollWidth - el.clientWidth;
+            if (over > 4) {
+                var fs = parseFloat(getComputedStyle(el).fontSize) || 16;
+                var overEm = (over + 8) / fs;
+                el.classList.add('scrollable');
+                el.style.setProperty('--mx', '-' + overEm.toFixed(2) + 'em');
+                el.style.setProperty('--md', Math.max(3, over / 30) + 's');
+            }
+        });
+    });
+}
+
+/** 字体加载完成后再测量一次（异步 Google Fonts 会改变宽度） */
+function marqueeAfterFonts() {
+    try {
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(function() {
+                setTimeout(fitWordMarquees, 120);
+            });
+        }
+    } catch (e) {}
+}
+
+let _marqueeResizeTimer = null;
 window.addEventListener('resize', () => {
-    clearTimeout(_fitResizeTimer);
-    _fitResizeTimer = setTimeout(fitWords, 150);
+    clearTimeout(_marqueeResizeTimer);
+    _marqueeResizeTimer = setTimeout(function() { fitWords(); fitWordMarquees(); }, 150);
 });
 
 function todayStr() {
@@ -320,7 +358,7 @@ function initDivider() {
         applyPct(pct);
         save(Math.round(pct * 10) / 10);
         startX = null;
-        setTimeout(fitWords, 50);
+        setTimeout(function() { fitWords(); fitWordMarquees(); }, 50);
     });
     divider.addEventListener('pointercancel', function() {
         divider.classList.remove('dragging');
@@ -426,8 +464,9 @@ function init() {
     setupMarquee();
     if (!document.hidden) startPolling();
     if (gallery.length > 1) startGallery();
-    setTimeout(fitWords, 0);
-    window.addEventListener('load', function() { setTimeout(fitWords, 60); });
+    setTimeout(function() { fitWords(); fitWordMarquees(); }, 0);
+    marqueeAfterFonts();
+    window.addEventListener('load', function() { setTimeout(function() { fitWords(); fitWordMarquees(); }, 60); marqueeAfterFonts(); });
 }
 
 /* 选择页标记需要口令/已认证信息 */

@@ -245,8 +245,8 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
           <div class="d-word-grid">
             <?php foreach ($words as $w): ?>
               <div class="d-word">
-                <div class="d-word-main"><?php echo htmlspecialchars($w['word']); ?><?php if ($w['pos'] !== ''): ?><span class="d-word-pos"><?php echo htmlspecialchars($w['pos']); ?></span><?php endif; ?></div>
-                <?php if ($w['meaning'] !== ''): ?><div class="d-word-mean"><?php echo htmlspecialchars($w['meaning']); ?></div><?php endif; ?>
+                <div class="d-word-main"><span class="d-word-scroll"><?php echo htmlspecialchars($w['word']); ?></span><?php if ($w['pos'] !== ''): ?><span class="d-word-pos"><?php echo htmlspecialchars($w['pos']); ?></span><?php endif; ?></div>
+                <?php if ($w['meaning'] !== ''): ?><div class="d-word-mean"><span class="d-word-scroll"><?php echo htmlspecialchars($w['meaning']); ?></span></div><?php endif; ?>
               </div>
             <?php endforeach; ?>
           </div>

@@ -280,6 +280,22 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 长单词/长释义溢出 → 滚动跑马灯（与单词库页 .scrollable 一致） */
+.d-word-main.scrollable,
+.d-word-mean.scrollable {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%);
+}
+.d-word-main.scrollable .d-word-scroll,
+.d-word-mean.scrollable .d-word-scroll {
+  display: inline-block;
+  white-space: nowrap;
+  animation: dWordMarquee var(--md, 5s) ease-in-out infinite alternate;
+}
+@keyframes dWordMarquee {
+  0%, 6% { transform: translateX(0); }
+  94%, 100% { transform: translateX(var(--mx, -30px)); }
+}
 .d-placeholder {
   flex: 1;
   display: flex;
@@ -383,4 +399,6 @@ body {
   .d-marquee-track.track-scroll { animation: none; }
   .d-gallery-img img { transition: none; }
   .d-divider::after, .d-word, .d-gear { transition: none; }
+  .d-word-main.scrollable .d-word-scroll,
+  .d-word-mean.scrollable .d-word-scroll { animation: none; }
 }
