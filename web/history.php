@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================
  * 历史记录页面
@@ -112,7 +112,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
         </div>
     </div>
 
-    <script src="common.js?v=6"></script>
+    <script src="common.js?v=7"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';

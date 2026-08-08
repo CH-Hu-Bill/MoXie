@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================
  * 功能主界面
@@ -320,7 +320,7 @@ require 'inc/header.php';
     </div>
 </div>
 
-    <script src="common.js?v=6"></script>
+    <script src="common.js?v=7"></script>
     <script>
         const weekendClickable = <?php echo $weekendClickable ? 'true' : 'false'; ?>;
         const weekendCompleted = <?php echo $weekendCompleted ? 'true' : 'false'; ?>;

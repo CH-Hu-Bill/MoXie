@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================
  * 单词库页面
@@ -573,7 +573,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=6"></script>
+    <script src="common.js?v=7"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';

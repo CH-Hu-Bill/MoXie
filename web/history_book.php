@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * 班级史记 — Vlog 日记
  * 左侧月历 + 用户列表 / 右侧完整 Vlog 编辑器
@@ -268,7 +268,7 @@ require 'inc/header.php';
 </div>
 </div>
 
-<script src="common.js?v=6"></script>
+<script src="common.js?v=7"></script>
 <script>
 var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var today = (function() { var n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); })();

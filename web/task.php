@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================
  * 默写任务页面 (重构版)
@@ -282,7 +282,7 @@ require 'inc/header.php';
     <input type="hidden" name="task_id" id="completeTaskId" value="<?php echo $selectedTask['id'] ?? ''; ?>">
 </form>
 
-<script src="common.js?v=6"></script>
+<script src="common.js?v=7"></script>
 <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
 <?php if ($selectedTask): ?>
 <script>

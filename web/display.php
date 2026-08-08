@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================
  * 壁纸展示大屏页（用于 Lively Wallpaper / 希沃大屏）
@@ -305,7 +305,7 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
     }
 })();
 </script>
-<script src="common.js?v=6"></script>
+<script src="common.js?v=7"></script>
 <script src="display.js?v=2"></script>
 </body>
 </html>

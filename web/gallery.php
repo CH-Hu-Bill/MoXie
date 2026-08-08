@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * 班级图集 — 图片上传 + 画廊展示
  * 用户上传图片并配文，以画廊形式展示。
@@ -117,7 +117,7 @@ require 'inc/header.php';
     <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);"></div>
 </div>
 
-<script src="common.js?v=6"></script>
+<script src="common.js?v=7"></script>
 <script>
 var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;

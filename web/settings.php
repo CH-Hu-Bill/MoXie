@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================
  * 设置页面
@@ -157,7 +157,7 @@ $galleryApiEnabled = $galleryApiKey !== '';
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=6"></script>
+    <script src="common.js?v=7"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {
