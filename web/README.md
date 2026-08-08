@@ -33,7 +33,7 @@
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；支持 PDF / HTML / 长图导出 |
 | **班级图集** (`gallery.php` / `gallery_api.php`) | 图片上传 + 画廊展示；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好 |
-| **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数，按班级隔离存储 |
+| **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数、图集公开 API 密钥保护、展示大屏 token，均按班级隔离存储 |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
 | **全服公告** | 公告分两类：**顶部横幅**（状态栏跑马灯，可关闭）与**超级霸屏**（mode=fullscreen）。超级霸屏：仅站内点击跳转时触发（刷新/直达/系统返回不触发），新页面**首帧即渲染**（无内容闪现），页面加载完成后开始计时展示 1~5 秒、点击任意处跳过；霸屏层只占状态栏（横幅）**下方**区域，不遮挡顶部横幅。两类同时间段可共存、同类互斥。后台时间选择已预填服务器当前时间（默认立即生效），并醒目显示服务器时间 |
 | **APP 后端 API** (`app_api.php`) | 用户注册 / 登录 / token 鉴权、单词 / 任务 / 错题本 / 收藏、史记、图集、导出等完整接口 |
@@ -277,15 +277,15 @@ Web 端日历的"今天"以**浏览器本机时钟**计算（与 APP 端手机�
 |------|------|--------------|
 | `index.php` | 班级选择 / 创建 / 口令验证；Cookie 记忆上次班级 | `?switch=1` 强制切换；`?need_auth={id}` 触发口令弹窗 |
 | `main.php` | 功能主页：卡片入口、统计、随机名言（可 AI 翻译）、周末大礼包 | `?id={classId}` |
-| `words.php` | 单词库：卡片网格、选中建任务、AI 批量导入、CSV | `?id={classId}` |
+| `words.php` | 单词库：卡片网格、选中建任务、AI 批量导入、CSV；进入时自动定位到最近一次创建任务（pending）的最后一个单词并持久高亮（用户操作后清除）；`?highlight={wordId}` 可定位到指定单词 | `?id={classId}` `?highlight={wordId}` |
 | `task.php` | 默写任务：列表视图 + 执行视图（看词/默写/听写） | `?id={classId}` `?task_id={taskId}` |
 | `history.php` | 默写记录：历史任务、重新创建 | `?id={classId}` `?task_id={taskId}` |
 | `history_book.php` | 班级史记：月历 + Quill 编辑器 + 导出 | `?id={classId}` |
-| `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词 + 图集轮播） | `?id={classId}` 指定班级；`?json=1` 轮询数据接口 |
+| `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词 + 图集轮播） | `?id={classId}` 指定班级；`?token={token}` 免口令直达（壁纸场景）；`?json=1` 轮询数据接口 |
 | `app_api.php` `get_announcements` | 获取当前有效公告（按班级 + 平台 + 时间段筛选） | POST `class_id` `platform` |
 | `gallery.php` | 图集：上传 / 删除 / 画廊 | `?id={classId}` |
 | `gallery_api.php` | 图集公开 API | `?class_id={id}` `?apikey=`（每次返回一张随机图片） |
-| `settings.php` | 听写 / 朗读 / 跟读参数 | `?id={classId}` |
+| `settings.php` | 听写 / 朗读 / 跟读参数、图集 API 密钥、展示大屏 token | `?id={classId}` |
 | `admin.php` | 管理后台（独立 Session，30 分钟有效） | — |
 | `app_api.php` | APP 全部 API（POST `action=...`） | — |
 | `upload.php` | 图片上传(POST) / 查看(GET) | `?class_id=` `?file=` |
