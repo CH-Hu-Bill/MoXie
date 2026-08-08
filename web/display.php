@@ -15,11 +15,13 @@
  *
  * URL 参数:
  *   ?id={classId} — 指定班级直达
+ *   ?token={token} — 展示大屏 token（在设置页配置），带正确 token 可免口令直达内容视图；
+ *                    适用于 Lively Wallpaper 等无法输入键盘口令的壁纸场景。展示页只读。
  *   ?json=1       — 数据接口（供 60s 轮询，需同鉴权）
  *
  * 数据依赖:
  *   data/classes.json, data/classes/{id}/{tasks,words,gallery}.json,
- *   data/announcements.json, data/settings.json(display_bottom_margin)
+ *   data/announcements.json, data/settings.json(display_bottom_margin, display_token_{classId})
  * ============================================================
  */
 require_once 'inc/db.php';
@@ -96,6 +98,15 @@ $classes = Database::getClasses();
 $settings = Database::getSettings();
 $bottomMargin = max(0, (int)($settings['display_bottom_margin'] ?? 48));
 
+// 展示大屏 token 校验：带正确 token 的链接可免口令直达壁纸页（壁纸场景无法输入键盘口令）
+// token 存于 settings.json 的 display_token_{classId}，可在班级设置页配置
+function displayTokenValid($classId, $settings) {
+    $token = trim((string)($_GET['token'] ?? ''));
+    if ($token === '') return false;
+    $expected = (string)($settings['display_token_' . $classId] ?? '');
+    return $expected !== '' && hash_equals($expected, $token);
+}
+
 // 口令验证（复用 index.php 逻辑）
 if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
     header('Content-Type: application/json');
@@ -133,7 +144,8 @@ if (($_GET['json'] ?? '') === '1') {
             echo json_encode(['ok' => false, 'code' => 'class_not_found']);
             exit;
         }
-        if (!isClassAuthenticated($classId, $classes[$classId])) {
+        // token 校验通过视为已认证（供轮询时无口令 cookie 的场景）
+        if (!isClassAuthenticated($classId, $classes[$classId]) && !displayTokenValid($classId, $settings)) {
             echo json_encode(['ok' => false, 'code' => 'need_auth']);
             exit;
         }
@@ -156,7 +168,12 @@ $view = 'selection';
 $class = null;
 if ($classId !== '' && isset($classes[$classId])) {
     $class = $classes[$classId];
-    if (isClassAuthenticated($classId, $class)) {
+    // 带正确 token 的链接：免口令直达内容视图。
+    // 注意：不种 auth cookie —— token 只解锁"只读展示页"，不会授予同浏览器其他页面
+    // （main.php/words.php 等可操作页面）任何权限。轮询由 display.js 透传 token。
+    if (displayTokenValid($classId, $settings)) {
+        $view = 'content';
+    } elseif (isClassAuthenticated($classId, $class)) {
         $view = 'content';
         setSecureCookie('current_class_id', $classId, time() + 86400 * 365);
     } else {
@@ -287,8 +304,8 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
            onkeydown="if(event.key==='Enter')submitPassword()" style="margin-bottom:8px;">
     <div style="color:var(--red);font-size:13px;text-align:center;margin-top:8px;min-height:18px;" id="pwError"></div>
     <div class="modal-btns">
-      <button type="button" class="cancel" onclick="closePw()">取消</button>
-      <button type="button" class="submit" onclick="submitPassword()">确认</button>
+      <!-- 壁纸大屏无取消按钮：避免退出后落在空白界面；口令输错需重输或刷新页面重新验证 -->
+      <button type="button" class="submit" onclick="submitPassword()" style="width:100%;">确认</button>
     </div>
   </div>
 </div>

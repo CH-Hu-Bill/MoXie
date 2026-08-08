@@ -167,6 +167,9 @@ function startPolling() {
 
 function refresh() {
     var url = 'display.php?json=1' + (DISPLAY_CID ? '&id=' + encodeURIComponent(DISPLAY_CID) : '');
+    // 壁纸页带 token 打开时，轮询同样携带 token（免口令 cookie 失效的场景也能持续拉取）
+    var token = new URLSearchParams(location.search).get('token');
+    if (token) url += '&token=' + encodeURIComponent(token);
     fetch(url, { cache: 'no-store' })
         .then(function(res) { return res.json(); })
         .then(function(data) {

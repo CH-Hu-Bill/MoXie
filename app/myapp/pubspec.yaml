@@ -2,7 +2,7 @@ name: myapp
 description: "ListenWrite 班级默写 + 班级史记 APP"
 publish_to: 'none'
 
-version: 1.0.4+1
+version: 1.0.5+1
 
 environment:
   sdk: ^3.5.0

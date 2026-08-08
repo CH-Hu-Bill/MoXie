@@ -48,6 +48,16 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
         exit;
     }
     $settings['gallery_api_key_' . $classId] = $galleryKeyEnabled ? $galleryApiKey : '';
+    // 展示大屏 token（按班级存储，用于带 token 链接免口令直达壁纸页）
+    if (isset($_POST['display_token'])) {
+        $displayToken = trim((string)$_POST['display_token']);
+        if ($displayToken !== '' && !preg_match('/\A[a-zA-Z0-9_-]{8,64}\z/D', $displayToken)) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => '展示大屏 token 需为 8-64 位字母/数字/-_']);
+            exit;
+        }
+        $settings['display_token_' . $classId] = $displayToken;
+    }
     Database::saveSettings($settings);
     header('Content-Type: application/json');
     echo json_encode(['success' => true]);
@@ -63,6 +73,7 @@ $followRepeat = $settings['follow_repeat'] ?? 1;
 $followBuffer = $settings['follow_buffer'] ?? 0.5;
 $galleryApiKey = (string)($settings['gallery_api_key_' . $classId] ?? '');
 $galleryApiEnabled = $galleryApiKey !== '';
+$displayToken = (string)($settings['display_token_' . $classId] ?? '');
 ?>
 <?php $pageTitle = '设置'; require 'inc/head.php'; ?>
 </head>
@@ -150,6 +161,23 @@ $galleryApiEnabled = $galleryApiKey !== '';
                 <div>接口每次随机返回一张图集图片及其描述，同一设备连续两次不会重复。</div>
             </div>
         </div>
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>展示大屏
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.7;margin-bottom:12px;">
+                配置后生成「带 token 的展示链接」：把该链接设为壁纸（如 Lively Wallpaper），无需键盘输入班级口令即可直达壁纸页。展示页只读展示数据，不涉及任何修改操作。
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+                <input type="text" class="input" id="displayToken" value="<?php echo htmlspecialchars($displayToken, ENT_QUOTES, 'UTF-8'); ?>" placeholder="展示 token（8-64 位字母/数字/-_）" maxlength="64" style="flex:1;">
+                <button type="button" class="btn btn-sm" onclick="generateDisplayToken()" style="white-space:nowrap;">随机生成</button>
+            </div>
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+                <div>带 token 链接：<code class="tag" id="displayLinkText" style="word-break:break-all;"><?php echo htmlspecialchars('display.php?id=' . $classId . ($displayToken !== '' ? '&token=' . $displayToken : ''), ENT_QUOTES, 'UTF-8'); ?></code></div>
+                <div style="margin-top:6px;"><button type="button" class="btn btn-sm btn-secondary" onclick="copyDisplayLink()" style="white-space:nowrap;">复制链接</button></div>
+                <div id="displayTokenHint" style="margin-top:6px;"><?php echo $displayToken !== '' ? '已配置：该链接可免口令打开壁纸页。' : '未配置：展示页仍需班级口令验证。'; ?></div>
+            </div>
+        </div>
         <div class="card mb-3" style="text-align:center;padding:18px;">
             <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-secondary" style="font-size:14px;">重新查看使用说明</button>
         </div>
@@ -178,6 +206,41 @@ $galleryApiEnabled = $galleryApiKey !== '';
         }
         document.getElementById('galleryApiEnabled').addEventListener('change', updateGalleryApiHint);
         updateGalleryApiHint();
+        // ===== 展示大屏 token =====
+        function generateDisplayToken() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const bytes = new Uint8Array(24);
+            if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+            else { for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256); }
+            let key = '';
+            for (let i = 0; i < bytes.length; i++) key += chars[bytes[i] % chars.length];
+            document.getElementById('displayToken').value = key;
+            updateDisplayLink();
+        }
+        function updateDisplayLink() {
+            const token = document.getElementById('displayToken').value.trim();
+            const base = 'display.php?id=<?php echo $classId; ?>';
+            document.getElementById('displayLinkText').textContent = token ? base + '&token=' + token : base;
+            document.getElementById('displayTokenHint').textContent = token
+                ? '已配置：该链接可免口令打开壁纸页。'
+                : '未配置：展示页仍需班级口令验证。';
+        }
+        function copyDisplayLink() {
+            const link = document.getElementById('displayLinkText').textContent.trim();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(location.origin + '/' + link).then(function() {
+                    showToast('链接已复制', 'success');
+                }).catch(function() { showToast('复制失败，请手动复制', 'error'); });
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = location.origin + '/' + link;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); showToast('链接已复制', 'success'); } catch(e) { showToast('复制失败，请手动复制', 'error'); }
+                document.body.removeChild(ta);
+            }
+        }
+        document.getElementById('displayToken').addEventListener('input', updateDisplayLink);
         async function saveSettings() {
             const fd = new FormData();
             fd.append('action', 'save_settings');
@@ -189,6 +252,7 @@ $galleryApiEnabled = $galleryApiKey !== '';
             fd.append('follow_buffer', document.getElementById('followBufInput').value);
             fd.append('gallery_api_enabled', document.getElementById('galleryApiEnabled').checked ? '1' : '0');
             fd.append('gallery_api_key', document.getElementById('galleryApiKey').value.trim());
+            fd.append('display_token', document.getElementById('displayToken').value.trim());
             fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('settings.php?id=<?php echo $classId; ?>', { method: 'POST', body: fd })).json();
             if (d.success) {
