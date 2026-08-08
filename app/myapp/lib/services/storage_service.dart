@@ -25,8 +25,7 @@ class StorageService {
   String? getToken() => _p.getString('auth_token');
   Future<void> clearToken() => _p.remove('auth_token');
 
-  Future<void> saveUserId(String userId) =>
-      _p.setString('user_id', userId);
+  Future<void> saveUserId(String userId) => _p.setString('user_id', userId);
   String? getUserId() => _p.getString('user_id');
 
   Future<void> saveUserName(String name) => _p.setString('user_name', name);
@@ -45,16 +44,36 @@ class StorageService {
 
   // ── Cache ──
 
-  static const _cacheTtl = Duration(seconds: 30);
+  // 缓存有效期：5 分钟内进入直接显示缓存（避免重复拉取），进入时仍会后台静默刷新兜底
+  static const _cacheTtl = Duration(minutes: 5);
 
-  Future<void> cacheWords(String classId, List<Map<String, dynamic>> words) async {
+  /// 清理某个班级的全部列表缓存（单词/错题本/图集）。
+  /// 删除单词/图片/错题后调用，避免下次进入仍显示已删除的项。
+  Future<void> clearClassCaches(String classId) async {
+    for (final key in [
+      'cache_words_$classId',
+      'cache_words_ts_$classId',
+      'cache_wrong_words_$classId',
+      'cache_wrong_words_ts_$classId',
+      'cache_gallery_$classId',
+      'cache_gallery_ts_$classId',
+    ]) {
+      await _p.remove(key);
+    }
+  }
+
+  Future<void> cacheWords(
+      String classId, List<Map<String, dynamic>> words) async {
     await _p.setString('cache_words_$classId', jsonEncode(words));
-    await _p.setInt('cache_words_ts_$classId', DateTime.now().millisecondsSinceEpoch);
+    await _p.setInt(
+        'cache_words_ts_$classId', DateTime.now().millisecondsSinceEpoch);
   }
 
   List<Map<String, dynamic>>? getCachedWords(String classId) {
     final ts = _p.getInt('cache_words_ts_$classId');
-    if (ts != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) < _cacheTtl) {
+    if (ts != null &&
+        DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) <
+            _cacheTtl) {
       final raw = _p.getString('cache_words_$classId');
       if (raw == null) return null;
       try {
@@ -69,14 +88,17 @@ class StorageService {
   }
 
   Future<void> cacheWrongWords(
-          String classId, List<Map<String, dynamic>> words) async {
+      String classId, List<Map<String, dynamic>> words) async {
     await _p.setString('cache_wrong_words_$classId', jsonEncode(words));
-    await _p.setInt('cache_wrong_words_ts_$classId', DateTime.now().millisecondsSinceEpoch);
+    await _p.setInt(
+        'cache_wrong_words_ts_$classId', DateTime.now().millisecondsSinceEpoch);
   }
 
   List<Map<String, dynamic>>? getCachedWrongWords(String classId) {
     final ts = _p.getInt('cache_wrong_words_ts_$classId');
-    if (ts != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) < _cacheTtl) {
+    if (ts != null &&
+        DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) <
+            _cacheTtl) {
       final raw = _p.getString('cache_wrong_words_$classId');
       if (raw == null) return null;
       try {
@@ -91,14 +113,17 @@ class StorageService {
   }
 
   Future<void> cacheGallery(
-          String classId, List<Map<String, dynamic>> items) async {
+      String classId, List<Map<String, dynamic>> items) async {
     await _p.setString('cache_gallery_$classId', jsonEncode(items));
-    await _p.setInt('cache_gallery_ts_$classId', DateTime.now().millisecondsSinceEpoch);
+    await _p.setInt(
+        'cache_gallery_ts_$classId', DateTime.now().millisecondsSinceEpoch);
   }
 
   List<Map<String, dynamic>>? getCachedGallery(String classId) {
     final ts = _p.getInt('cache_gallery_ts_$classId');
-    if (ts != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) < _cacheTtl) {
+    if (ts != null &&
+        DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) <
+            _cacheTtl) {
       final raw = _p.getString('cache_gallery_$classId');
       if (raw == null) return null;
       try {
@@ -114,8 +139,7 @@ class StorageService {
 
   // ── Consent ──
 
-  Future<void> saveConsent(bool consent) =>
-      _p.setBool('consent', consent);
+  Future<void> saveConsent(bool consent) => _p.setBool('consent', consent);
   bool getConsent() => _p.getBool('consent') ?? false;
 
   // ── Clear ──

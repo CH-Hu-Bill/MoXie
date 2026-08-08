@@ -26,7 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     header('Content-Length: ' . filesize($path));
     header('Content-Disposition: inline; filename="' . $filename . '"');
     header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: private, max-age=86400');
+    // 文件名含随机数，删除后 URL 即失效（不会命中旧缓存），可放心长缓存
+    header('Cache-Control: private, max-age=2592000'); // 30 天
     readfile($path);
     exit;
 }

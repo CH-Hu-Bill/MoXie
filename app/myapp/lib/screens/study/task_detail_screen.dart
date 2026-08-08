@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/word.dart';
 import '../../services/api_service.dart';
+import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 
@@ -95,17 +96,37 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Future<void> _toggleWrong(Word word) async {
+    final newWrong = !word.isWrong;
     try {
       if (word.isWrong) {
         await _api.unmarkWrong(widget.classId, word.id);
       } else {
         await _api.markWrong(widget.classId, word.id, true);
       }
-      _loadDetail();
+      if (!mounted) return;
+      // 本地更新该单词状态，保留当前滚动位置，不重载整个列表
+      setState(() {
+        _words = [
+          for (final w in _words)
+            if (w.id == word.id) w.copyWith(isWrong: newWrong) else w,
+        ];
+      });
+      // 清除班级缓存，避免其他页面/下次进入读到旧错题状态
+      await StorageService().clearClassCaches(widget.classId);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(newWrong ? '已加入错题本' : '已移出错题本',
+                style: const TextStyle(fontFamily: AppTheme.fontBody)),
+            duration: const Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text('操作失败: $e')),
         );
       }
     }
@@ -124,7 +145,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             borderRadius: AppTheme.wobblyRadius,
             side: const BorderSide(color: AppColors.pencil, width: 2),
           ),
-          title: Text('导出文本', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
+          title: Text('导出文本',
+              style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
           content: SizedBox(
             width: double.maxFinite,
             child: TextField(
@@ -144,11 +166,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   );
                 }
               },
-              child: Text('复制', style: TextStyle(fontFamily: AppTheme.fontBody, color: AppColors.blue)),
+              child: Text('复制',
+                  style: TextStyle(
+                      fontFamily: AppTheme.fontBody, color: AppColors.blue)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('关闭', style: TextStyle(fontFamily: AppTheme.fontBody)),
+              child:
+                  Text('关闭', style: TextStyle(fontFamily: AppTheme.fontBody)),
             ),
           ],
         ),
@@ -163,7 +188,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   bool _shouldHighlight(Word w) {
-    if (widget.highlightQuery == null || widget.highlightQuery!.isEmpty) return false;
+    if (widget.highlightQuery == null || widget.highlightQuery!.isEmpty)
+      return false;
     final q = widget.highlightQuery!.toLowerCase();
     return w.word.toLowerCase().contains(q) ||
         w.meaning.toLowerCase().contains(q);
@@ -175,14 +201,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       appBar: AppBar(
         title: Text(widget.taskLabel.isNotEmpty ? widget.taskLabel : '任务详情'),
         backgroundColor: AppColors.white,
-        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+        shape:
+            const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
         actions: [
-          IconButton(icon: const Icon(Icons.copy), tooltip: '导出文本', onPressed: _exportText),
+          IconButton(
+              icon: const Icon(Icons.copy),
+              tooltip: '导出文本',
+              onPressed: _exportText),
         ],
       ),
       body: PaperTexture(
         child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.red))
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.red))
             : _error != null
                 ? Center(child: EmptyState(message: _error!))
                 : ListView.builder(
@@ -197,16 +228,20 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             backgroundColor: AppColors.postIt,
                             child: Row(
                               children: [
-                                const Icon(Icons.event, color: AppColors.pencil),
+                                const Icon(Icons.event,
+                                    color: AppColors.pencil),
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: Text(_date,
-                                      style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 20),
+                                      style: TextStyle(
+                                          fontFamily: AppTheme.fontHeading,
+                                          fontSize: 20),
                                       overflow: TextOverflow.ellipsis),
                                 ),
                                 const Spacer(),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: _status == 'pending'
                                         ? AppColors.blue.withValues(alpha: 0.15)
@@ -215,8 +250,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                     border: Border.all(color: AppColors.pencil),
                                   ),
                                   child: Text(
-                                    _status == 'pending' ? '进行中' : _status == 'completed' ? '已完成' : '已取消',
-                                    style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
+                                    _status == 'pending'
+                                        ? '进行中'
+                                        : _status == 'completed'
+                                            ? '已完成'
+                                            : '已取消',
+                                    style: TextStyle(
+                                        fontFamily: AppTheme.fontBody,
+                                        fontSize: 14),
                                   ),
                                 ),
                               ],

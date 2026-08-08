@@ -44,6 +44,7 @@ class StudyScreenState extends State<StudyScreen> {
       _mainTab = 0;
       _highlightWord = word;
     });
+    _showLocateHint('正在定位…');
     final found = _words.any((w) => w.word.toLowerCase() == word.toLowerCase());
     if (found) {
       _scrollToHighlight(word);
@@ -52,8 +53,24 @@ class StudyScreenState extends State<StudyScreen> {
       final classId = auth.currentClassId;
       if (classId != null && classId.isNotEmpty) {
         _loadWordsForSearch(classId, word);
+      } else {
+        _isLocating = false;
       }
     }
+  }
+
+  void _showLocateHint(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content:
+              Text(msg, style: const TextStyle(fontFamily: AppTheme.fontBody)),
+          duration: const Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   /// 定位并高亮单词。
@@ -63,19 +80,27 @@ class StudyScreenState extends State<StudyScreen> {
   ///   1. 先跳到估算位置（低估单卡高度 → 落在目标之前）；
   ///   2. 若目标卡尚未构建，则每帧前进约一屏继续扫描（ListView 在 jumpTo 后的
   ///      下一帧构建可视区卡片，确保 key 的 context 会更新）；
-  ///   3. 一旦目标卡构建完成，用 `ensureVisible` 精确对齐并高亮。
+  ///   3. 一旦目标卡构建完成，用 `ensureVisible` 精确对齐并高亮；
+  ///   4. 高亮持续到用户手动滚动列表（由列表 NotificationListener 清除）。
   void _scrollToHighlight(String word) {
     final targetWord = word.toLowerCase();
-    final index =
-        _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
-    if (index < 0) return;
+    final index = _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
+    if (index < 0) {
+      _isLocating = false;
+      _showLocateHint('未找到该单词');
+      return;
+    }
 
     void attempt({int round = 0}) {
+      if (!mounted) return;
       if (!_wordListScrollController.hasClients) {
-        if (round < 20) {
+        if (round < 30) {
           Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted) attempt(round: round + 1);
           });
+        } else {
+          _isLocating = false;
+          _showLocateHint('未找到该单词');
         }
         return;
       }
@@ -88,6 +113,7 @@ class StudyScreenState extends State<StudyScreen> {
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
         );
+        _isLocating = false;
         return;
       }
 
@@ -98,10 +124,14 @@ class StudyScreenState extends State<StudyScreen> {
       double target;
       if (round == 0) {
         target = base;
-      } else if (round <= 12) {
+      } else if (round <= 30) {
         target = base + step * round; // 向前扫描
+      } else if (round <= 42) {
+        target = base - step * (round - 30); // 向后回扫
       } else {
-        target = base - step * (round - 12); // 向后回扫
+        _isLocating = false;
+        _showLocateHint('未找到该单词');
+        return;
       }
       target = target.clamp(0.0, max);
       _wordListScrollController.jumpTo(target);
@@ -109,17 +139,16 @@ class StudyScreenState extends State<StudyScreen> {
       // jumpTo 后等待一帧让 ListView 构建可视区，再下一轮检查
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (round < 25) {
+        if (round < 45) {
           attempt(round: round + 1);
+        } else {
+          _isLocating = false;
+          _showLocateHint('未找到该单词');
         }
       });
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _highlightWord = null);
-      _isLocating = false;
-    });
   }
 
   Future<void> _loadWordsForSearch(String classId, String targetWord) async {
@@ -136,8 +165,8 @@ class StudyScreenState extends State<StudyScreen> {
             .map((w) => Word.fromJson(w as Map<String, dynamic>))
             .toList();
         all.addAll(words);
-        if (words.any((w) =>
-            w.word.toLowerCase() == targetWord.toLowerCase())) {
+        if (words
+            .any((w) => w.word.toLowerCase() == targetWord.toLowerCase())) {
           found = true;
           hasMore = false;
         } else {
@@ -154,8 +183,16 @@ class StudyScreenState extends State<StudyScreen> {
       });
       if (found) {
         _scrollToHighlight(targetWord);
+      } else {
+        _isLocating = false;
+        _showLocateHint('未找到该单词');
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        _isLocating = false;
+        _showLocateHint('定位失败，请重试');
+      }
+    }
   }
 
   Timer? _refreshTimer;
@@ -188,7 +225,9 @@ class StudyScreenState extends State<StudyScreen> {
     super.didChangeDependencies();
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
-    if (classId != null && classId.isNotEmpty && classId != _lastLoadedClassId) {
+    if (classId != null &&
+        classId.isNotEmpty &&
+        classId != _lastLoadedClassId) {
       _lastLoadedClassId = classId;
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
     }
@@ -199,20 +238,31 @@ class StudyScreenState extends State<StudyScreen> {
     final classId = auth.currentClassId;
     if (classId == null || classId.isEmpty) return;
 
-    final cachedWords = _storage.getCachedWords(classId);
-    if (cachedWords != null) {
-      setState(() => _words = cachedWords.map((w) => Word.fromJson(w)).toList());
+    if (!silent) {
+      final cachedWords = _storage.getCachedWords(classId);
+      if (cachedWords != null) {
+        setState(
+            () => _words = cachedWords.map((w) => Word.fromJson(w)).toList());
+      }
     }
 
-    _loadWords(classId, reset: !silent, silent: silent);
+    // 静默刷新 / 进入时有新鲜缓存 → 静默合并（保留滚动位置、不弹 loading）
+    // 无缓存首次进入 → 全量加载
+    final useSilentMerge = silent || _hasFreshCache(classId);
+    _loadWords(classId, reset: !useSilentMerge, silent: useSilentMerge);
     _loadWrongWords(classId);
     _loadTasks(classId);
   }
 
-  Future<void> _loadWords(String classId, {bool reset = true, bool silent = false}) async {
+  bool _hasFreshCache(String classId) =>
+      _storage.getCachedWords(classId) != null;
+
+  Future<void> _loadWords(String classId,
+      {bool reset = true, bool silent = false}) async {
     if (reset) setState(() => _loading = true);
     try {
-      final page = reset ? 1 : _wordsPage + 1;
+      // 静默刷新固定拉第 1 页并合并到现有列表，避免列表越长、重建越多
+      final page = (reset || silent) ? 1 : _wordsPage + 1;
       final res = await _api.getWords(classId, page: page, perPage: 20);
       final data = res['data'] as Map<String, dynamic>;
       final words = (data['words'] as List)
@@ -221,6 +271,9 @@ class StudyScreenState extends State<StudyScreen> {
       setState(() {
         if (reset) {
           _words = words;
+          _wordsPage = page;
+          _wordsTotal = data['total'] ?? 0;
+          _wordsHasMore = data['has_more'] ?? false;
         } else if (silent) {
           // 静默刷新：仅更新已有数据，保留滚动位置（不重新赋列表避免跳变）
           final existingById = {for (final w in _words) w.id: w};
@@ -232,17 +285,33 @@ class StudyScreenState extends State<StudyScreen> {
           for (final w in _words) {
             if (!merged.any((m) => m.id == w.id)) merged.add(w);
           }
-          _words = merged;
+          // 内容无变化则不重建列表，避免定时刷新导致列表跳动/卡顿
+          if (!_sameWordList(_words, merged)) _words = merged;
+          // 不动分页计数，保持加载更多状态一致
         } else {
-          _words.addAll(words);
+          final existingIds = {for (final w in _words) w.id};
+          for (final w in words) {
+            if (!existingIds.contains(w.id)) {
+              existingIds.add(w.id);
+              _words.add(w);
+            }
+          }
+          _wordsPage = page;
+          _wordsTotal = data['total'] ?? 0;
+          _wordsHasMore = data['has_more'] ?? false;
         }
-        _wordsPage = page;
-        _wordsTotal = data['total'] ?? 0;
-        _wordsHasMore = data['has_more'] ?? false;
         _loading = false;
       });
-      _storage.cacheWords(classId,
-          _words.map((w) => {'id': w.id, 'word': w.word, 'meaning': w.meaning, 'pos': w.pos}).toList());
+      _storage.cacheWords(
+          classId,
+          _words
+              .map((w) => {
+                    'id': w.id,
+                    'word': w.word,
+                    'meaning': w.meaning,
+                    'pos': w.pos
+                  })
+              .toList());
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
@@ -253,15 +322,38 @@ class StudyScreenState extends State<StudyScreen> {
     }
   }
 
+  static bool _sameWordList(List<Word> a, List<Word> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id ||
+          a[i].isWrong != b[i].isWrong ||
+          a[i].word != b[i].word ||
+          a[i].meaning != b[i].meaning ||
+          a[i].pos != b[i].pos) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _sameTaskList(List<Task> a, List<Task> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].status != b[i].status) return false;
+    }
+    return true;
+  }
+
   Future<void> _loadWrongWords(String classId) async {
     try {
       final res = await _api.getWrongWords(classId, perPage: 100);
       final data = res['data'] as Map<String, dynamic>;
-      setState(() {
-        _wrongWords = (data['words'] as List)
-            .map((w) => Word.fromJson(w as Map<String, dynamic>))
-            .toList();
-      });
+      final words = (data['words'] as List)
+          .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .toList();
+      if (!_sameWordList(_wrongWords, words)) {
+        setState(() => _wrongWords = words);
+      }
     } catch (_) {}
   }
 
@@ -269,30 +361,58 @@ class StudyScreenState extends State<StudyScreen> {
     try {
       final pendingRes = await _api.getTasks(classId, 'pending');
       final pendingData = pendingRes['data'] as Map<String, dynamic>;
-      setState(() {
-        _pendingTasks = (pendingData['tasks'] as List)
-            .map((t) => Task.fromJson(t as Map<String, dynamic>))
-            .toList();
-      });
+      final pending = (pendingData['tasks'] as List)
+          .map((t) => Task.fromJson(t as Map<String, dynamic>))
+          .toList();
+      if (!_sameTaskList(_pendingTasks, pending)) {
+        setState(() => _pendingTasks = pending);
+      }
       final historyRes = await _api.getTasks(classId, 'history');
       final historyData = historyRes['data'] as Map<String, dynamic>;
-      setState(() {
-        _historyTasks = (historyData['tasks'] as List)
-            .map((t) => Task.fromJson(t as Map<String, dynamic>))
-            .toList();
-      });
+      final history = (historyData['tasks'] as List)
+          .map((t) => Task.fromJson(t as Map<String, dynamic>))
+          .toList();
+      if (!_sameTaskList(_historyTasks, history)) {
+        setState(() => _historyTasks = history);
+      }
     } catch (_) {}
   }
 
   Future<void> _toggleWrong(String classId, Word word) async {
+    final newWrong = !word.isWrong;
     try {
       if (word.isWrong) {
         await _api.unmarkWrong(classId, word.id);
       } else {
         await _api.markWrong(classId, word.id, true);
       }
-      _loadWords(classId);
-      _loadWrongWords(classId);
+      if (!mounted) return;
+      // 本地即时更新状态，避免整列表重载导致滚动跳动
+      setState(() {
+        _words = [
+          for (final w in _words)
+            if (w.id == word.id) w.copyWith(isWrong: newWrong) else w,
+        ];
+        if (newWrong) {
+          if (!_wrongWords.any((w) => w.id == word.id)) {
+            _wrongWords = [word.copyWith(isWrong: true), ..._wrongWords];
+          }
+        } else {
+          _wrongWords = _wrongWords.where((w) => w.id != word.id).toList();
+        }
+      });
+      // 清除班级缓存，避免其他页面/下次进入读到旧错题状态
+      await _storage.clearClassCaches(classId);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(newWrong ? '已加入错题本' : '已移出错题本',
+                style: const TextStyle(fontFamily: AppTheme.fontBody)),
+            duration: const Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -316,7 +436,8 @@ class StudyScreenState extends State<StudyScreen> {
           borderRadius: AppTheme.wobblyRadius,
           side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
-        title: Text('添加单词', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
+        title: Text('添加单词',
+            style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
         content: Form(
           key: formKey,
           child: Column(
@@ -400,7 +521,8 @@ class StudyScreenState extends State<StudyScreen> {
           borderRadius: AppTheme.wobblyRadius,
           side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
-        title: Text(title, style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
+        title: Text(title,
+            style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
         content: SizedBox(
           width: double.maxFinite,
           child: TextField(
@@ -416,7 +538,9 @@ class StudyScreenState extends State<StudyScreen> {
               _copyToClipboard(text);
               Navigator.pop(ctx);
             },
-            child: Text('复制', style: TextStyle(fontFamily: AppTheme.fontBody, color: AppColors.blue)),
+            child: Text('复制',
+                style: TextStyle(
+                    fontFamily: AppTheme.fontBody, color: AppColors.blue)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -432,7 +556,8 @@ class StudyScreenState extends State<StudyScreen> {
     Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已复制到剪贴板'), duration: Duration(seconds: 2)),
+        const SnackBar(
+            content: Text('已复制到剪贴板'), duration: Duration(seconds: 2)),
       );
     }
   }
@@ -477,7 +602,8 @@ class StudyScreenState extends State<StudyScreen> {
 
   Widget _buildWordLibrary(String classId) {
     if (_loading && _words.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.red));
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.red));
     }
     if (_words.isEmpty) {
       return const EmptyState(message: '还没有单词，点击右下角添加');
@@ -487,6 +613,13 @@ class StudyScreenState extends State<StudyScreen> {
       color: AppColors.red,
       child: NotificationListener<ScrollNotification>(
         onNotification: (notif) {
+          // 用户主动拖动滚动 → 清除定位高亮（ensureVisible 为程序滚动，dragDetails 为空，不会误清）
+          if (notif is ScrollStartNotification && notif.dragDetails != null) {
+            if (_highlightWord != null) {
+              setState(() => _highlightWord = null);
+            }
+            _isLocating = false;
+          }
           if (notif is ScrollEndNotification &&
               notif.metrics.pixels >= notif.metrics.maxScrollExtent - 100 &&
               _wordsHasMore &&
@@ -503,29 +636,31 @@ class StudyScreenState extends State<StudyScreen> {
             if (i >= _words.length) {
               return const Padding(
                 padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator(color: AppColors.red)),
+                child: Center(
+                    child: CircularProgressIndicator(color: AppColors.red)),
               );
             }
             final w = _words[i];
-            final isHighlighted = _highlightWord?.toLowerCase() == w.word.toLowerCase();
+            final isHighlighted =
+                _highlightWord?.toLowerCase() == w.word.toLowerCase();
             final key = _wordCardKeys.putIfAbsent(
               w.word.toLowerCase(),
               () => GlobalKey(),
             );
             return Container(
               key: key,
-            padding: const EdgeInsets.only(bottom: 12),
-            child: WordCard(
-              word: w.word,
-              meaning: w.meaning,
-              pos: w.pos,
-              isWrong: w.isWrong,
-              highlight: isHighlighted,
-              onToggleWrong: () => _toggleWrong(classId, w),
-            ),
-          );
-        },
-      ),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: WordCard(
+                word: w.word,
+                meaning: w.meaning,
+                pos: w.pos,
+                isWrong: w.isWrong,
+                highlight: isHighlighted,
+                onToggleWrong: () => _toggleWrong(classId, w),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -624,7 +759,9 @@ class StudyScreenState extends State<StudyScreen> {
                   Row(
                     children: [
                       Icon(
-                        type == 'pending' ? Icons.play_circle : Icons.check_circle,
+                        type == 'pending'
+                            ? Icons.play_circle
+                            : Icons.check_circle,
                         size: 28,
                         color: type == 'pending'
                             ? AppColors.blue
@@ -634,13 +771,15 @@ class StudyScreenState extends State<StudyScreen> {
                       Expanded(
                         child: Text(
                           t.label.isNotEmpty ? t.label : '未命名任务',
-                          style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 20),
+                          style: TextStyle(
+                              fontFamily: AppTheme.fontHeading, fontSize: 20),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.postIt,
                           borderRadius: AppTheme.wobblyRadius,
@@ -648,7 +787,8 @@ class StudyScreenState extends State<StudyScreen> {
                         ),
                         child: Text(
                           '${t.wordCount}词',
-                          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
+                          style: TextStyle(
+                              fontFamily: AppTheme.fontBody, fontSize: 14),
                         ),
                       ),
                     ],

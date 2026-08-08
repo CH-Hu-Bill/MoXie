@@ -107,19 +107,20 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
-        transform: _pressed
-            ? Matrix4.translationValues(3, 3, 0)
-            : Matrix4.identity(),
+        transform:
+            _pressed ? Matrix4.translationValues(3, 3, 0) : Matrix4.identity(),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: AppTheme.wobblyRadius,
             border: Border.all(color: AppColors.pencil, width: 2),
-            boxShadow: _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
+            boxShadow:
+                _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
           ),
           child: Row(
-            mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisSize:
+                widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
@@ -175,7 +176,8 @@ class HandDrawnInput extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null) ...[
-          Text(label!, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
+          Text(label!,
+              style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
           const SizedBox(height: 6),
         ],
         TextFormField(
@@ -268,7 +270,9 @@ class LoadingOverlay extends StatelessWidget {
               ),
               if (message != null) ...[
                 const SizedBox(height: 16),
-                Text(message!, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
+                Text(message!,
+                    style:
+                        TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
               ],
             ],
           ),
@@ -345,7 +349,8 @@ class WobblyTabBar extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 margin: const EdgeInsets.all(2),
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                 decoration: BoxDecoration(
                   color: selected ? AppColors.white : Colors.transparent,
                   borderRadius: AppTheme.wobblyRadius,
@@ -419,14 +424,16 @@ class _MarqueeTextState extends State<MarqueeText>
     final maxScroll = _controller.position.maxScrollExtent;
     _controller
         .animateTo(maxScroll,
-            duration: Duration(milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
+            duration: Duration(
+                milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
             curve: Curves.easeInOut)
         .then((_) {
       if (!_userInteracting && mounted) {
         Future.delayed(const Duration(milliseconds: 800), () {
           if (!_userInteracting && _controller.hasClients && mounted) {
             _controller.animateTo(0,
-                duration: Duration(milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
+                duration: Duration(
+                    milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
                 curve: Curves.easeInOut);
           }
         });
@@ -455,44 +462,62 @@ class _MarqueeTextState extends State<MarqueeText>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onHorizontalDragStart: (_) {
-        _userInteracting = true;
-        setState(() => _scrolling = false);
-      },
-      onHorizontalDragEnd: (_) {
-        _userInteracting = false;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!_userInteracting && mounted) _checkOverflow();
-        });
-      },
-      child: ShaderMask(
-        shaderCallback: (bounds) {
-          return LinearGradient(
-            colors: [
-              Colors.transparent,
-              Colors.black,
-              Colors.black,
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.08, 0.92, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.srcIn,
-        child: SingleChildScrollView(
-          controller: _controller,
-          scrollDirection: Axis.horizontal,
-          child: Text(
+    // 仅在文本溢出时启用跑马灯（ShaderMask 开销大，短词用普通文本即可）
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final style = widget.style ??
+            TextStyle(
+              fontFamily: AppTheme.fontHeading,
+              fontSize: widget.fontSize,
+              color: AppColors.pencil,
+            );
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+        painter.dispose();
+        if (!overflows) {
+          return Text(
             widget.text,
-            style: widget.style ??
-                TextStyle(
-                  fontFamily: AppTheme.fontHeading,
-                  fontSize: widget.fontSize,
-                  color: AppColors.pencil,
-                ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          );
+        }
+        return GestureDetector(
+          onHorizontalDragStart: (_) {
+            _userInteracting = true;
+            setState(() => _scrolling = false);
+          },
+          onHorizontalDragEnd: (_) {
+            _userInteracting = false;
+            Future.delayed(const Duration(seconds: 2), () {
+              if (!_userInteracting && mounted) _checkOverflow();
+            });
+          },
+          child: ShaderMask(
+            shaderCallback: (bounds) {
+              return LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.black,
+                  Colors.black,
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.08, 0.92, 1.0],
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.srcIn,
+            child: SingleChildScrollView(
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              child: Text(widget.text, style: style),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -563,7 +588,8 @@ class WordCard extends StatelessWidget {
               if (pos.isNotEmpty) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppColors.blue.withValues(alpha: 0.1),
                     borderRadius: AppTheme.wobblyRadius,

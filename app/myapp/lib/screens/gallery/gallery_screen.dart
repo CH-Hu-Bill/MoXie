@@ -52,10 +52,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (classId == null || classId.isEmpty) return;
 
     final cached = _storage.getCachedGallery(classId);
-    if (cached != null && reset) {
+    final hasCache = cached != null && cached.isNotEmpty;
+    if (hasCache && reset) {
       setState(() {
         _items = cached.map((e) => GalleryItem.fromJson(e)).toList();
       });
+    }
+
+    // 有可用缓存时先展示，不弹全屏 loading，避免每次进入都等待网络
+    if (hasCache) {
+      _loadGalleryRemote(classId, reset: reset);
+      return;
     }
 
     setState(() => _loading = true);
@@ -93,6 +100,47 @@ class _GalleryScreenState extends State<GalleryScreen> {
           SnackBar(content: Text('加载失败: $e')),
         );
       }
+    }
+  }
+
+  /// 后台静默刷新图集列表（有缓存时使用，不弹 loading，失败静默忽略）
+  Future<void> _loadGalleryRemote(String classId, {bool reset = true}) async {
+    try {
+      final page = reset ? 1 : _page + 1;
+      final res = await _api.getGallery(classId, page: page);
+      final data = res['data'] as Map<String, dynamic>;
+      final items = (data['items'] as List)
+          .map((e) => GalleryItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        if (reset) {
+          _items = items;
+        } else {
+          final existingIds = {for (final e in _items) e.id};
+          for (final e in items) {
+            if (!existingIds.contains(e.id)) {
+              existingIds.add(e.id);
+              _items.add(e);
+            }
+          }
+        }
+        _page = page;
+        _hasMore = data['has_more'] ?? false;
+        _loading = false;
+      });
+      _storage.cacheGallery(
+          classId,
+          _items
+              .map((e) => {
+                    'id': e.id,
+                    'image_url': e.imageUrl,
+                    'description': e.description,
+                    'uploaded_at': e.uploadedAt
+                  })
+              .toList());
+    } catch (_) {
+      // 静默刷新失败忽略，保留缓存数据
     }
   }
 
@@ -221,65 +269,68 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         return false;
                       },
                       child: GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.75,
+                        padding: const EdgeInsets.all(12),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.75,
+                        ),
+                        itemCount: _items.length,
+                        itemBuilder: (ctx, i) {
+                          final item = _items[i];
+                          return HandDrawnCard(
+                            padding: EdgeInsets.zero,
+                            onTap: () => _viewImage(item),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(18),
+                                      topRight: Radius.circular(18),
+                                    ),
+                                    child: CachedNetworkImage(
+                                      imageUrl: item.imageUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(
+                                        color: AppColors.oldPaper,
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                              color: AppColors.red,
+                                              strokeWidth: 2),
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) => Container(
+                                        color: AppColors.muted,
+                                        child: const Center(
+                                          child: Icon(Icons.broken_image,
+                                              size: 40),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Text(
+                                    item.description,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.bodyStyle
+                                        .copyWith(fontSize: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                      itemCount: _items.length,
-                      itemBuilder: (ctx, i) {
-                        final item = _items[i];
-                        return HandDrawnCard(
-                          padding: EdgeInsets.zero,
-                          onTap: () => _viewImage(item),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(18),
-                                    topRight: Radius.circular(18),
-                                  ),
-                                  child: CachedNetworkImage(
-                                    imageUrl: item.imageUrl,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, __) => Container(
-                                      color: AppColors.oldPaper,
-                                      child: const Center(
-                                        child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2),
-                                      ),
-                                    ),
-                                    errorWidget: (_, __, ___) => Container(
-                                      color: AppColors.muted,
-                                      child: const Center(
-                                        child: Icon(Icons.broken_image, size: 40),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Text(
-                                  item.description,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style:
-                                      AppTheme.bodyStyle.copyWith(fontSize: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
                     ),
                   ),
-                ),
-              ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _uploadImage,
         backgroundColor: AppColors.accent,

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/vlog_entry.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 import '../study/task_detail_screen.dart';
@@ -12,7 +13,8 @@ class SearchScreen extends StatefulWidget {
   final String? highlightWord;
   final ValueChanged<String>? onWordFound;
 
-  const SearchScreen({super.key, this.initialQuery, this.highlightWord, this.onWordFound});
+  const SearchScreen(
+      {super.key, this.initialQuery, this.highlightWord, this.onWordFound});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -47,6 +49,20 @@ class _SearchScreenState extends State<SearchScreen> {
       } else {
         await _api.markWrong(classId, w.id, true);
         setState(() => _wrongWordIds.add(w.id));
+      }
+      // 清除班级缓存，避免其他页面/下次进入读到旧错题状态
+      await StorageService().clearClassCaches(classId);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(isWrong ? '已移出错题本' : '已加入错题本',
+                  style: const TextStyle(fontFamily: AppTheme.fontBody)),
+              duration: const Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
       }
     } catch (e) {
       if (mounted) {
@@ -138,9 +154,11 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.red))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.red))
                   : !_searched
-                      ? const EmptyState(message: '输入关键词开始搜索', icon: Icons.search)
+                      ? const EmptyState(
+                          message: '输入关键词开始搜索', icon: Icons.search)
                       : _result == null || _result!.total == 0
                           ? const EmptyState(
                               message: '没有找到结果',
@@ -227,7 +245,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 Expanded(
                   child: Text(
                     task.label.isNotEmpty ? task.label : '未命名任务',
-                    style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 18),
+                    style: TextStyle(
+                        fontFamily: AppTheme.fontHeading, fontSize: 18),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -244,7 +263,8 @@ class _SearchScreenState extends State<SearchScreen> {
               spacing: 6,
               children: task.matchedWords.map((w) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.postIt,
                     borderRadius: AppTheme.wobblyRadius,
@@ -265,7 +285,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final lowerQuery = query.toLowerCase();
     final idx = lowerText.indexOf(lowerQuery);
     if (idx < 0) {
-      return Text(text, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14));
+      return Text(text,
+          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14));
     }
     return RichText(
       text: TextSpan(
