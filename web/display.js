@@ -18,6 +18,30 @@ var pollTimer = null;
 var polling = false;
 var reducedMotion = false;
 
+/* 图集轮播断点记忆（localStorage）：
+   同设备/浏览器记住当前班级的轮播位置，下次打开从上次位置继续。
+   图集内容（指纹=url序列）变化时自动从头开始。 */
+var STORE_IDX = 'display_gallery_idx';
+var STORE_FP = 'display_gallery_fp';
+
+function galleryFingerprint(list) {
+    try { return (list || []).map(function(it) { return it.url; }).join('|'); } catch (e) { return ''; }
+}
+function loadGalleryState() {
+    try {
+        var idx = parseInt(localStorage.getItem(STORE_IDX), 10);
+        if (isFinite(idx) && localStorage.getItem(STORE_FP) === galleryFingerprint(gallery) && idx >= 0 && idx < gallery.length) {
+            galleryIdx = idx;
+        }
+    } catch (e) {}
+}
+function saveGalleryState() {
+    try {
+        localStorage.setItem(STORE_IDX, String(galleryIdx));
+        localStorage.setItem(STORE_FP, galleryFingerprint(gallery));
+    } catch (e) {}
+}
+
 try { reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
 try { window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', function(ev) {
     reducedMotion = ev.matches;
@@ -113,6 +137,7 @@ function nextGallery() {
     if (gallery.length === 0) return;
     galleryIdx = (galleryIdx + 1) % gallery.length;
     renderGalleryItem(gallery[galleryIdx], !reducedMotion);
+    saveGalleryState();
     // 预加载再下一张
     var next = gallery[(galleryIdx + 1) % gallery.length];
     if (next) preloadImage(next.url);
@@ -160,6 +185,7 @@ function refresh() {
                 if (JSON.stringify(newGallery) !== JSON.stringify(gallery)) {
                     gallery = newGallery;
                     galleryIdx = 0;
+                    saveGalleryState();
                     renderGalleryItem(gallery.length ? gallery[0] : null, false);
                     if (gallery.length > 1) startGallery(); else stopGallery();
                 }
@@ -463,6 +489,12 @@ function init() {
 
     setupMarquee();
     if (!document.hidden) startPolling();
+    // 从上次轮播位置继续（图集一致时才生效）
+    loadGalleryState();
+    if (gallery.length > 0 && galleryIdx < gallery.length) {
+        if (galleryIdx !== 0) renderGalleryItem(gallery[galleryIdx], false);
+        saveGalleryState();
+    }
     if (gallery.length > 1) startGallery();
     setTimeout(function() { fitWords(); fitWordMarquees(); }, 0);
     marqueeAfterFonts();

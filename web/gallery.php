@@ -103,7 +103,7 @@ require 'inc/header.php';
     </div>
 
     <div class="card mb-4" style="font-size:13px;color:#888;">
-💡 公开 API：<code class="tag">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，在 settings.json 中设置 <code class="tag">gallery_api_key_<?php echo htmlspecialchars($classId); ?></code> 即可启用密钥保护，调用时加 <code class="tag">&apikey=你的密钥</code>
+💡 公开 API：<code class="tag">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，每次随机返回一张图集图片；可在<a href="settings.php?id=<?php echo htmlspecialchars($classId); ?>" style="color:var(--blue);">设置页</a>为本班启用 API 密钥保护，启用后调用需加 <code class="tag">&amp;apikey=你的密钥</code>
     </div>
 
     <div class="gallery-grid" id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;"></div>

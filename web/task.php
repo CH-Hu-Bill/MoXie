@@ -126,13 +126,13 @@ $className = $class['name'];
 $pageTitle = '默写任务';
 $rightContent = '';
 if ($selectedTask):
-    $rightContent = '<button class="btn btn-sm" style="background:var(--blue);color:var(--white);" onclick="completeTask()" title="标记完成">完成</button>'
-        . '<button class="btn btn-danger btn-sm" onclick="cancelTask()" title="取消任务">取消</button>'
+    $rightContent = '<button id="completeBtn" class="btn btn-sm" style="background:var(--blue);color:var(--white);" onclick="completeTask()" title="标记完成">完成</button>'
+        . '<button id="cancelBtn" class="btn btn-danger btn-sm" onclick="cancelTask()" title="取消任务">取消</button>'
         . '<button class="btn btn-sm" style="background:var(--blue);color:var(--white);" id="followBtn" onclick="showTaskFollow()" title="跟读单词"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:3px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>'
         . '<div style="display:flex;background:var(--old-paper);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);overflow:hidden;">'
-        . '<button id="showModeBtn" class="btn btn-sm active" style="margin:0;box-shadow:none;border:none;border-radius:0;background:var(--pencil);color:var(--white);" onclick="setMode(\'show\')">展示</button>'
-        . '<button id="hideModeBtn" class="btn btn-sm" style="margin:0;box-shadow:none;border:none;border-radius:0;background:transparent;color:var(--pencil);" onclick="setMode(\'hide\')">默写</button>'
-        . '<button id="dictModeBtn" class="btn btn-sm" style="margin:0;box-shadow:none;border:none;border-radius:0;background:transparent;color:var(--pencil);" onclick="setMode(\'dict\')">听写</button>'
+        . '<button id="showModeBtn" class="btn btn-sm mode-btn active" onclick="setMode(\'show\')">展示</button>'
+        . '<button id="hideModeBtn" class="btn btn-sm mode-btn" onclick="setMode(\'hide\')">默写</button>'
+        . '<button id="dictModeBtn" class="btn btn-sm mode-btn" onclick="setMode(\'dict\')">听写</button>'
         . '</div>';
 endif;
 require 'inc/header.php';
@@ -334,6 +334,18 @@ require 'inc/header.php';
             dictUI.style.display = 'none';
             wordGrid.querySelectorAll('.word-card').forEach(card => card.classList.toggle('hide-word', mode === 'hide'));
         }
+
+        // 听写模式下隐藏顶栏 完成/取消 按钮（听写有自己的完成流程），其余模式显示
+        const completeBtn = document.getElementById('completeBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const showActionBtns = mode !== 'dict';
+        if (completeBtn) completeBtn.style.display = showActionBtns ? '' : 'none';
+        if (cancelBtn) cancelBtn.style.display = showActionBtns ? '' : 'none';
+
+        // 默写模式下隐藏单词卡发音键（避免听音得到提示）
+        wordGrid.querySelectorAll('.word-card .speaker').forEach(btn => {
+            btn.style.display = (mode === 'hide') ? 'none' : '';
+        });
     }
 
     async function completeTask() {
@@ -655,11 +667,8 @@ require 'inc/header.php';
             await fetch('task.php?id=' + classId + '&task_id=' + encodeURIComponent(taskId), { method: 'POST', body: fd });
             showOkOverlayThen('task.php?id=' + classId);
         } else {
-            // 用户选择不完成 → 回到默写模式，显示 FAB 可后续手动完成
-            showOkOverlayOnly(function() {
-                setMode('hide');
-                if (fb) fb.style.display = 'flex';
-            });
+            // 用户选择不完成 → 回到默写模式；顶栏 完成/取消 按钮在默写模式下自动重新显示，可后续手动完成
+            setMode('hide');
         }
     }
 

@@ -1,10 +1,11 @@
 <?php
 /**
  * 图集公开 API
- * GET gallery_api.php?class_id=xxx[&page=1&per_page=10][&apikey=xxx]
- * 密钥存储于 data/settings.json 的 gallery_api_key_{classId} 字段。
- * 班级未设置密钥则免验证；设置了则需要 ?apikey=xxx 参数。
- * 基于 IP+日期 hash 轮换排序，避免同设备重复输出。
+ * GET gallery_api.php?class_id=xxx[&apikey=xxx]
+ * 每次请求随机返回图集中一张图片及其描述；同一设备（IP）连续两次不会返回同一张，
+ * 刷新后再请求会得到另一张。
+ * 密钥存储于 data/settings.json 的 gallery_api_key_{classId} 字段，可在班级设置页配置；
+ * 班级未设置密钥则免验证。
  */
 require_once 'inc/db.php';
 
@@ -57,47 +58,56 @@ if ($cleaned) {
     $gallery = $valid;
 }
 
-$page = max(1, (int)($_GET['page'] ?? 1));
-$perPage = min(50, max(1, (int)($_GET['per_page'] ?? 10)));
-
-// 防同设备重复：基于 IP + 日期生成偏移量
-$clientIp = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-$dateKey = date('Y-m-d');
-$seed = crc32($clientIp . $dateKey);
-mt_srand($seed);
-
-// 创建副本并随机打乱
-$shuffled = $gallery;
-for ($i = count($shuffled) - 1; $i > 0; $i--) {
-    $j = mt_rand(0, $i);
-    [$shuffled[$i], $shuffled[$j]] = [$shuffled[$j], $shuffled[$i]];
-}
-
-$total = count($shuffled);
-$offset = ($page - 1) * $perPage;
-$items = array_slice($shuffled, $offset, $perPage);
-
-// 构建返回数据
-$result = [];
+$total = count($gallery);
 $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
     . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
     . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/';
 
-foreach ($items as $item) {
-    $result[] = [
-        'image_url' => $baseUrl . 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($item['image'] ?? ''),
-        'description' => (string)($item['description'] ?? ''),
-        'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
-    ];
-}
-
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
-header('Cache-Control: public, max-age=300'); // 5分钟缓存
+header('Cache-Control: no-store'); // 每次随机，禁止缓存
+
+if ($total === 0) {
+    echo json_encode([
+        'image_url' => null,
+        'description' => '',
+        'uploaded_at' => '',
+        'total' => 0,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+// 同设备不连续重复：按 IP+班级 记录上次返回的图片（用图片文件名为身份）
+$clientIp = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+$pickKey = substr(sha1($classId . ':' . $clientIp), 0, 16);
+
+$picked = null;
+Database::update('gallery_random.json', function($data) use ($pickKey, $gallery, $total, &$picked) {
+    if (!is_array($data)) $data = [];
+    // 清理超过 30 天未更新的 key
+    $now = time();
+    foreach ($data as $k => $rec) {
+        if (is_array($rec) && ($now - (int)($rec['_ts'] ?? 0)) > 2592000) unset($data[$k]);
+    }
+    $lastFile = isset($data[$pickKey]) && is_array($data[$pickKey]) ? (string)($data[$pickKey]['file'] ?? '') : '';
+    // 随机选取；图集多于一张时排除上次那张
+    $candidates = $gallery;
+    if ($total > 1 && $lastFile !== '') {
+        $filtered = array_values(array_filter($gallery, function($it) use ($lastFile) {
+            return ($it['image'] ?? '') !== $lastFile;
+        }));
+        if (count($filtered) > 0) $candidates = $filtered;
+    }
+    $picked = $candidates[random_int(0, count($candidates) - 1)];
+    $data[$pickKey] = ['file' => (string)($picked['image'] ?? ''), '_ts' => $now];
+    return $data;
+});
+
+$pickedFile = (string)($picked['image'] ?? '');
+
 echo json_encode([
-    'items' => $result,
+    'image_url' => $baseUrl . 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($pickedFile),
+    'description' => (string)($picked['description'] ?? ''),
+    'uploaded_at' => (string)($picked['uploaded_at'] ?? ''),
     'total' => $total,
-    'page' => $page,
-    'per_page' => $perPage,
-    'has_more' => ($offset + $perPage) < $total,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

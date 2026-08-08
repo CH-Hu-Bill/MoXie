@@ -342,6 +342,20 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* 分段模式切换按钮（展示/默写/听写），激活项黑底白字 */
+.mode-btn {
+  margin: 0;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pencil);
+}
+.mode-btn.active {
+  background: var(--pencil);
+  color: var(--white);
+}
+
 /* ======== 卡片组件 ======== */
 .card {
   background: var(--white);
