@@ -45,6 +45,7 @@ $settings = Database::getSettings();
 $searchQ = trim($_GET['search'] ?? '');
 $lastTaskId = $settings['last_task_id_' . $classId] ?? null;
 $lastWordIndex = -1;
+$lastWordId = null;
 if ($lastTaskId && isset($tasks[$lastTaskId])) {
     $lastTask = $tasks[$lastTaskId];
     if (!empty($lastTask['word_ids'])) {
@@ -311,6 +312,10 @@ PROMPT;
     .word-card.selected { border-color: var(--blue); background: #e8f0fb; box-shadow: 0 0 0 2px rgba(45,93,161,0.25); }
     .word-card.highlight { animation: hl 1.5s ease-out; }
     @keyframes hl { 0%,20%,40% { background: var(--post-it); } 100% { background: var(--white); } }
+    /* 持久定位高亮：进入页面自动定位到最后任务单词，保持到用户操作 */
+    .word-card.locate-highlight { border-color: var(--red); background: var(--post-it); box-shadow: 0 0 0 3px rgba(255,77,77,0.4); }
+    /* 滚动性能：视口外卡片跳过渲染/合成（Chrome/Edge/Safari 16+） */
+    .word-card { content-visibility: auto; contain-intrinsic-size: 236px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .word-card .corner-tl { position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 4px; z-index: 2; }
     .word-card .number { background: var(--old-paper); color: #777; font-size: 11px; padding: 2px 8px; border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); font-family: var(--font-heading); }
@@ -590,23 +595,48 @@ PROMPT;
         function showAddModal() { document.getElementById('addForm').reset(); document.getElementById('addModal').classList.add('active'); }
 
         /**
-         * 将单词卡片滚动到可视区域居中并高亮。
+         * 将单词卡片滚动到可视区域居中。
          * 显式滚动 .content 容器（页面 body 为 overflow:hidden，scrollIntoView 可能作用到错误滚动器导致无效果/卡顿）。
+         * persistent=true 时加持久定位高亮（locate-highlight），直到用户操作清除；
+         * 否则为短暂高亮（highlight，1.5s 后自动消失）。
          */
-        function scrollCardToCenter(card, highlightMs) {
+        function scrollCardToCenter(card, persistent) {
             if (!card) return;
             var content = document.getElementById('contentWrap');
             var scroller = content && content.scrollHeight > content.clientHeight ? content : document.scrollingElement;
             var target = card.getBoundingClientRect().top + scroller.scrollTop - scroller.clientHeight / 2 + card.getBoundingClientRect().height / 2;
             target = Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
+            // 程序滚动会触发 scroll 事件，短暂屏蔽"用户操作清除高亮"（覆盖 smooth 滚动时长）
+            _interactionGuard = Date.now() + 2000;
             try {
                 scroller.scrollTo({ top: target, behavior: 'smooth' });
             } catch (e) {
                 scroller.scrollTop = target;
             }
-            card.classList.add('highlight');
-            setTimeout(function() { card.classList.remove('highlight'); }, highlightMs || 1500);
+            if (persistent) {
+                clearLocateHighlight();
+                card.classList.add('locate-highlight');
+            } else {
+                card.classList.add('highlight');
+                setTimeout(function() { card.classList.remove('highlight'); }, 1500);
+            }
         }
+
+        // 清除持久定位高亮（用户操作时调用）
+        function clearLocateHighlight() {
+            document.querySelectorAll('.word-card.locate-highlight').forEach(function(c) { c.classList.remove('locate-highlight'); });
+        }
+        // 用户主动操作（滚动/点击/触摸/按键）→ 清除定位高亮。
+        // 程序滚动（scrollCardToCenter）在 _interactionGuard 保护期内不会误清。
+        var _interactionGuard = 0;
+        ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function(evt) {
+            document.addEventListener(evt, function() { clearLocateHighlight(); }, { passive: true });
+        });
+        document.addEventListener('click', function() { clearLocateHighlight(); }, { passive: true });
+        // scroll 兜底：用户滚动（鼠标滚轮/触摸拖拽/键盘滚动）触发，程序 smooth 滚动在保护期内被屏蔽
+        document.addEventListener('scroll', function() {
+            if (Date.now() >= _interactionGuard) clearLocateHighlight();
+        }, { passive: true });
 
         function showBatchModal() { document.getElementById('batchTextarea').value = ''; document.getElementById('batchModal').classList.add('active'); }
 
@@ -854,7 +884,7 @@ PROMPT;
                 showToast('单词已存在：' + d.word, 'error');
                 closeModal('addModal');
                 const card = document.querySelector('.word-card[data-word-db="' + d.word.toLowerCase() + '"]');
-                if (card) scrollCardToCenter(card, 1500);
+                if (card) scrollCardToCenter(card, false);
             } else if (d.success) {
                 showToast('添加成功', 'success'); closeModal('addModal');
                 showOkOverlayThen('words.php?id=' + classId);
@@ -986,7 +1016,7 @@ PROMPT;
                     var card = document.querySelector('.word-card[data-word-db="' + info.word.toLowerCase() + '"]');
                     if (card) {
                         card.classList.add('follow-highlight');
-                        scrollCardToCenter(card, 0);
+                        scrollCardToCenter(card, false);
                     }
                     // Only show the bar if not already collapsed by user scroll
                     if (!followCollapsed) {
@@ -1033,6 +1063,17 @@ PROMPT;
         // ==================== Init ====================
         window.addEventListener('load', () => {
             initMarquee();
+            // content-visibility 下视口外卡片跳过布局，进入视口时重新测量跑马灯
+            if ('IntersectionObserver' in window) {
+                try {
+                    const io = new IntersectionObserver(function(entries) {
+                        entries.forEach(function(en) {
+                            if (en.isIntersecting) initMarqueeFor(en.target);
+                        });
+                    }, { rootMargin: '200px 0px' });
+                    document.querySelectorAll('.word-card').forEach(card => io.observe(card));
+                } catch (e) {}
+            }
             // Click card body to toggle selection
             document.querySelectorAll('.word-card').forEach(card => {
                 card.addEventListener('click', function(e) {
@@ -1045,12 +1086,14 @@ PROMPT;
             const highlightId = params.get('highlight');
             if (highlightId) {
                 const hc = document.querySelector('.word-card[data-id="' + highlightId + '"]');
-                if (hc) setTimeout(() => { scrollCardToCenter(hc, 2000); }, 400);
+                if (hc) setTimeout(() => { scrollCardToCenter(hc, false); }, 400);
             } else {
+                const ri = localStorage.getItem('recreate_word_ids');
                 const li = <?php echo $lastWordIndex; ?>;
-                if (li >= 0 && wordsArray.length > 0) {
-                    const c = document.querySelector('.word-card[data-index="' + li + '"]');
-                    if (c) setTimeout(() => { scrollCardToCenter(c, 1500); }, 300);
+                const lid = <?php echo $lastWordId === null ? 'null' : json_encode($lastWordId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+                if (!ri && (li >= 0 || lid) && wordsArray.length > 0) {
+                    const c = document.querySelector(lid ? '.word-card[data-id="' + lid + '"]' : '.word-card[data-index="' + li + '"]');
+                    if (c) setTimeout(() => { scrollCardToCenter(c, true); }, 300);
                 }
             }
             const ri = localStorage.getItem('recreate_word_ids');
@@ -1060,6 +1103,9 @@ PROMPT;
                     const ids = JSON.parse(ri).slice(0, 20);
                     ids.forEach(id => { const c = document.querySelector('.word-card[data-id="' + id + '"]'); if (c) { selectedIds.add(id); c.classList.add('selected'); } });
                     document.getElementById('selectedCount').textContent = selectedIds.size;
+                    // 定位到这批单词中的第一个并持久高亮，方便用户确认要重新创建任务的单词
+                    const first = document.querySelector('.word-card[data-id="' + ids[0] + '"]');
+                    if (first) setTimeout(() => { scrollCardToCenter(first, true); }, 300);
                     if (selectedIds.size > 0) showToast('已选择 ' + selectedIds.size + ' 个单词，可直接创建任务', 'success');
                 } catch(e) {}
             }

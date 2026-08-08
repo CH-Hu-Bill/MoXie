@@ -109,17 +109,25 @@ function escHtml(s) {
 
 // ---------- 单词卡片跑马灯初始化 ----------
 function initMarquee() {
-    document.querySelectorAll('.word-card .word').forEach(el => {
+    document.querySelectorAll('.word-card').forEach(card => initMarqueeFor(card));
+}
+
+// 单张卡片跑马灯测量（供 content-visibility 下卡片进入视口时调用）
+function initMarqueeFor(card) {
+    if (!card) return;
+    card.querySelectorAll('.word, .meaning').forEach(el => {
         el.style.fontSize = '';
         const len = el.textContent.trim().length;
-        if (len > 16) el.style.fontSize = '20px';
-        else if (len > 12) el.style.fontSize = '24px';
-        else if (len > 9) el.style.fontSize = '28px';
-        else if (len > 7) el.style.fontSize = '32px';
+        if (el.classList.contains('word')) {
+            if (len > 16) el.style.fontSize = '20px';
+            else if (len > 12) el.style.fontSize = '24px';
+            else if (len > 9) el.style.fontSize = '28px';
+            else if (len > 7) el.style.fontSize = '32px';
+        }
     });
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            document.querySelectorAll('.word-card .word, .word-card .meaning').forEach(el => {
+            card.querySelectorAll('.word, .meaning').forEach(el => {
                 el.classList.remove('scrollable');
                 el.style.removeProperty('--mx');
                 el.style.removeProperty('--md');
