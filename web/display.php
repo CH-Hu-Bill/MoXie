@@ -101,7 +101,7 @@ $bottomMargin = max(0, (int)($settings['display_bottom_margin'] ?? 48));
 // 展示大屏 token 校验：带正确 token 的链接可免口令直达壁纸页（壁纸场景无法输入键盘口令）
 // token 存于 settings.json 的 display_token_{classId}，可在班级设置页配置
 function displayTokenValid($classId, $settings) {
-    $token = trim((string)($_GET['token'] ?? ''));
+    $token = trim(reqGet('token'));
     if ($token === '') return false;
     $expected = (string)($settings['display_token_' . $classId] ?? '');
     return $expected !== '' && hash_equals($expected, $token);
@@ -111,8 +111,8 @@ function displayTokenValid($classId, $settings) {
 if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
     header('Content-Type: application/json');
     requireCsrf();
-    $cid = (string)($_POST['class_id'] ?? '');
-    $pw = (string)($_POST['password'] ?? '');
+    $cid = reqPost('class_id');
+    $pw = reqPost('password');
     if (!isset($classes[$cid])) { echo json_encode(['success' => false, 'error' => '班级不存在']); exit; }
     $hash = $classes[$cid]['password_hash'] ?? null;
     if (!$hash || password_verify($pw, $hash)) {
@@ -126,8 +126,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
 }
 
 // 确定当前班级
-$targetId = trim((string)($_GET['id'] ?? ''));
-$cookieId = (string)($_COOKIE['current_class_id'] ?? '');
+$targetId = trim(reqGet('id'));
+$cookieId = isset($_COOKIE['current_class_id']) && is_scalar($_COOKIE['current_class_id']) ? (string)$_COOKIE['current_class_id'] : '';
 $classId = '';
 if ($targetId !== '' && isset($classes[$targetId])) {
     $classId = $targetId;
@@ -136,7 +136,7 @@ if ($targetId !== '' && isset($classes[$targetId])) {
 }
 
 // ?json=1 数据接口（轮询）
-if (($_GET['json'] ?? '') === '1') {
+if (reqGet('json') === '1') {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store');
     try {

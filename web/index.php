@@ -24,8 +24,8 @@ $classes = Database::getClasses();
 if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
     header('Content-Type: application/json');
     requireCsrf();
-    $cid = $_POST['class_id'] ?? '';
-    $pw = $_POST['password'] ?? '';
+    $cid = reqPost('class_id');
+    $pw = reqPost('password');
     if (!isset($classes[$cid])) { echo json_encode(['success' => false, 'error' => '班级不存在']); exit; }
     $hash = $classes[$cid]['password_hash'] ?? null;
     if (!$hash || password_verify($pw, $hash)) {
@@ -39,7 +39,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
 
 $currentClassId = $_COOKIE['current_class_id'] ?? null;
 $switching = isset($_GET['switch']);
-$needAuth = $_GET['need_auth'] ?? null;
+$needAuth = reqGet('need_auth');
 // 如果是鉴权失败跳转来的，不自动跳转，直接显示密码输入框
 if ($currentClassId && isset($classes[$currentClassId]) && !$switching && !$needAuth) {
     header('Location: main.php?id=' . $currentClassId);
@@ -48,8 +48,8 @@ if ($currentClassId && isset($classes[$currentClassId]) && !$switching && !$need
 $createError = '';
 if (isset($_POST['action']) && $_POST['action'] === 'create_class') {
     requireCsrf();
-    $name = trim($_POST['class_name'] ?? '');
-    $password = trim($_POST['class_password'] ?? '');
+    $name = trim(reqPost('class_name'));
+    $password = trim(reqPost('class_password'));
     if ($name !== '' && mb_strlen($name) <= 30 && mb_strlen($password) >= 4 && preg_match('/^[a-zA-Z0-9]+$/', $password)) {
         $dup = false;
         foreach ($classes as $c) {
@@ -71,7 +71,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_class') {
     }
 }
 $hasNoClass = empty($classes);
-$needAuth = $_GET['need_auth'] ?? null;
+$needAuth = reqGet('need_auth');
 if (!empty($createError)) {
     $hasNoClass = $hasNoClass || true; // keep modal open via class below
 }

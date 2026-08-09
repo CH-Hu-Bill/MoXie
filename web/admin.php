@@ -13,7 +13,7 @@ if (empty($_SESSION['admin_csrf'])) $_SESSION['admin_csrf'] = bin2hex(random_byt
 $csrfToken = $_SESSION['admin_csrf'];
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    $submittedToken = (string)($_POST['csrf_token'] ?? '');
+    $submittedToken = reqPost('csrf_token');
     if ($submittedToken === '' || !hash_equals($csrfToken, $submittedToken)) {
         http_response_code(403); exit('CSRF validation failed');
     }
@@ -26,13 +26,15 @@ if (!empty($_SESSION['admin_authed']) && !empty($_SESSION['admin_time'])) {
 
 if (!$isAuthed && ($_POST['action'] ?? '') === 'admin_login') {
     $now = time();
-    $failures = array_values(array_filter($_SESSION['admin_login_failures'] ?? [], function($t) use ($now) {
-        return is_int($t) && $t > $now - 300;
+    $failWindow = 600; // 10 分钟内累计
+    $maxFailures = 10; // 10 次错误才临时封禁，避免误伤管理员（自 DoS）
+    $failures = array_values(array_filter($_SESSION['admin_login_failures'] ?? [], function($t) use ($now, $failWindow) {
+        return is_int($t) && $t > $now - $failWindow;
     }));
-    if (count($failures) >= 5) {
+    if (count($failures) >= $maxFailures) {
         $_SESSION['admin_login_failures'] = $failures;
-        $loginError = '登录失败次数过多，请5分钟后重试';
-    } elseif (hash_equals((string)$adminPassword, (string)($_POST['password'] ?? ''))) {
+        $loginError = '登录失败次数过多，请10分钟后重试';
+    } elseif (hash_equals((string)$adminPassword, (string)reqPost('password'))) {
         session_regenerate_id(true);
         $_SESSION['admin_authed'] = true; $_SESSION['admin_time'] = $now;
         unset($_SESSION['admin_login_failures']);
@@ -40,6 +42,8 @@ if (!$isAuthed && ($_POST['action'] ?? '') === 'admin_login') {
     } else {
         $failures[] = $now; $_SESSION['admin_login_failures'] = $failures;
         $loginError = '密码错误';
+        // 渐进式延迟（0.3s 起，最多 2s），减缓暴力破解且不锁死合法管理员
+        usleep(min(2000000, (int)count($failures) * 300000));
     }
 }
 
@@ -58,8 +62,8 @@ if ($isAuthed) {
     $classes = Database::getClasses();
 
     if (isset($_POST['action']) && $_POST['action'] === 'delete_class') {
-        $delId = trim((string)($_POST['class_id'] ?? ''));
-        $confirmName = trim($_POST['confirm_name'] ?? '');
+        $delId = trim(reqPost('class_id'));
+        $confirmName = trim(reqPost('confirm_name'));
         if (isset($classes[$delId]) && $confirmName === $classes[$delId]['name']) {
             $deleted = false;
             $classes = Database::update('classes.json', function($latest) use ($delId, $confirmName, &$deleted) {
@@ -87,8 +91,8 @@ if ($isAuthed) {
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'reset_password') {
-        $resetId = trim((string)($_POST['class_id'] ?? ''));
-        $newPw = trim($_POST['new_password'] ?? '');
+        $resetId = trim(reqPost('class_id'));
+        $newPw = trim(reqPost('new_password'));
         if (isset($classes[$resetId]) && mb_strlen($newPw) >= 4 && preg_match('/^[a-zA-Z0-9]+$/', $newPw)) {
             $updated = false;
             $hash = password_hash($newPw, PASSWORD_DEFAULT);
@@ -103,9 +107,9 @@ if ($isAuthed) {
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'publish_version') {
-        $newVer = trim((string)($_POST['version'] ?? ''));
-        $notes = trim((string)($_POST['notes'] ?? ''));
-        $channel = trim((string)($_POST['channel'] ?? 'stable'));
+        $newVer = trim(reqPost('version'));
+        $notes = trim(reqPost('notes'));
+        $channel = trim(reqPost('channel', 'stable'));
         if (!in_array($channel, ['stable', 'beta'], true)) $channel = 'stable';
         if ($newVer === '' || !preg_match('/^\d+\.\d+(\.\d+)?$/', $newVer)) {
             $msg = '版本号格式无效（如 1.0 或 1.0.1）';
@@ -135,15 +139,15 @@ if ($isAuthed) {
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'save_announcement') {
-        $content = trim((string)($_POST['content'] ?? ''));
-        $color = trim((string)($_POST['color'] ?? ''));
+        $content = sanitizePlainText(reqPost('content'));
+        $color = trim(reqPost('color'));
         $targetClasses = $_POST['target_classes'] ?? [];
         $targetPlatforms = $_POST['target_platforms'] ?? [];
         $allowClose = !empty($_POST['allow_close']);
         $mode = ($_POST['mode'] ?? 'banner') === 'fullscreen' ? 'fullscreen' : 'banner';
         $fsSeconds = max(1, min(5, (int)($_POST['fullscreen_seconds'] ?? 1)));
-        $startTime = str_replace('T', ' ', trim((string)($_POST['start_time'] ?? '')));
-        $endTime = str_replace('T', ' ', trim((string)($_POST['end_time'] ?? '')));
+        $startTime = str_replace('T', ' ', trim(reqPost('start_time')));
+        $endTime = str_replace('T', ' ', trim(reqPost('end_time')));
         $startTs = strtotime($startTime);
         $endTs = strtotime($endTime);
         if ($content === '' || $startTs === false || $endTs === false) {
@@ -190,7 +194,7 @@ if ($isAuthed) {
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'delete_announcement') {
-        $delId = (string)($_POST['id'] ?? '');
+        $delId = reqPost('id');
         $announcements = Database::getAnnouncements();
         $announcements = array_values(array_filter($announcements, function($a) use ($delId) {
             return ($a['id'] ?? '') !== $delId;

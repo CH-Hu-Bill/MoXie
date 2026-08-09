@@ -9,7 +9,7 @@
  */
 require_once 'inc/db.php';
 
-$classId = trim((string)($_GET['class_id'] ?? ''));
+$classId = trim(reqGet('class_id'));
 if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) {
     http_response_code(400);
     header('Content-Type: application/json; charset=UTF-8');
@@ -30,7 +30,7 @@ if (!isset($classes[$classId])) {
 $settings = Database::getSettings();
 $apiKey = trim((string)($settings['gallery_api_key_' . $classId] ?? ''));
 if ($apiKey !== '') {
-    $providedKey = trim((string)($_GET['apikey'] ?? ''));
+    $providedKey = trim(reqGet('apikey'));
     if (!hash_equals($apiKey, $providedKey)) {
         http_response_code(403);
         header('Content-Type: application/json; charset=UTF-8');

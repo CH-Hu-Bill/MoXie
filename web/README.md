@@ -84,6 +84,7 @@
 │   ├── head.php           # 统一 HTML <head>（Google Fonts、meta、common.css）
 │   ├── header.php         # 统一状态栏（返回按钮、班级名、标题、右侧操作区）
 │   ├── db.php             # JSON 存储层（原子写 + 文件锁 + 班级数据隔离）
+│   ├── input.php          # 请求参数安全读取（reqGet/reqPost）+ 纯文本消毒（sanitizePlainText）
 │   ├── security.php       # CSRF / 班级鉴权（HMAC 签名 Cookie）/ token
 │   ├── api.php            # DeepSeek API 封装
 │   ├── history.php        # 史记：HTML 消毒 / 导出渲染 / 图片清理
@@ -447,6 +448,7 @@ data/
 ## 安全机制
 
 - **CSRF**：所有 POST 操作校验 `csrf_token`（`inc/security.php`），管理后台使用独立 CSRF。
+- **请求参数安全**：所有 GET/POST 参数读取统一经 `inc/input.php` 的 `reqGet`/`reqPost`（数组参数 `?x[]=1` 一律视为空，杜绝 `Array to string conversion` 警告在 `display_errors` 开启时泄露服务器绝对路径）；单词 / 释义 / 图集描述 / 公告等纯文本字段写入端经 `sanitizePlainText` 消毒（解码实体 → strip_tags → 去控制字符），存储型 XSS 双保险。
 - **班级鉴权**：口令用 `password_hash(PASSWORD_DEFAULT)` 存储；通过 HMAC-SHA256 签名的 Cookie 维持会话；`auth_version` 版本号控制——重置口令即版本号 +1，所有旧 Cookie 立即失效。
 - **APP token**：`bin2hex(random_bytes(32))` 生成，仅存 sha256 哈希；过期自动清理。
 - **限流**：登录 / 绑定口令 / AI 调用均有持久滑动窗口限流（`inc/ratelimit.php`）。

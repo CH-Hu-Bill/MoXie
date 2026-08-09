@@ -31,7 +31,7 @@ require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/api.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -42,7 +42,7 @@ requireClassAuth($classId, $class);
 $words = Database::getWords($classId);
 $tasks = Database::getTasks($classId);
 $settings = Database::getSettings();
-$searchQ = trim($_GET['search'] ?? '');
+$searchQ = trim(reqGet('search'));
 $lastTaskId = $settings['last_task_id_' . $classId] ?? null;
 $lastWordIndex = -1;
 $lastWordId = null;
@@ -64,7 +64,7 @@ foreach ($completedTasks as $task) { foreach ($task['word_ids'] ?? [] as $wid) {
 if (isset($_POST['action'])) {
     if ($_POST['action'] === 'add_word') {
         requireCsrf(); // CSRF校验
-        $word = trim($_POST['word'] ?? ''); $meaning = trim($_POST['meaning'] ?? ''); $pos = trim($_POST['pos'] ?? '');
+        $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning')); $pos = sanitizePlainText(reqPost('pos'));
         if (!$word || !$meaning) {
             header('Content-Type: application/json'); echo json_encode(['success' => false, 'error' => '单词和释义不能为空']); exit;
         }
@@ -85,7 +85,7 @@ if (isset($_POST['action'])) {
     if ($_POST['action'] === 'update_word') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $wordId = $_POST['word_id'] ?? ''; $word = trim($_POST['word'] ?? ''); $meaning = trim($_POST['meaning'] ?? ''); $pos = trim($_POST['pos'] ?? '');
+        $wordId = reqPost('word_id'); $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning')); $pos = sanitizePlainText(reqPost('pos'));
         if (!$word || !$meaning) {
             echo json_encode(['success' => false, 'error' => '单词和释义不能为空']); exit;
         }
@@ -108,7 +108,7 @@ if (isset($_POST['action'])) {
     if ($_POST['action'] === 'delete_word') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $wordId = $_POST['word_id'] ?? '';
+        $wordId = reqPost('word_id');
         $found = false;
         foreach ($words as $idx => $w) { if ($w['id'] === $wordId) { $found = true; array_splice($words, $idx, 1); Database::saveWords($classId, $words); echo json_encode(['success' => true]); break; } }
         if (!$found) { echo json_encode(['success' => false, 'error' => '单词不存在']); }
@@ -117,9 +117,9 @@ if (isset($_POST['action'])) {
     if ($_POST['action'] === 'create_task') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $selectedIdsRaw = $_POST['selected_ids'] ?? '[]'; $selectedIds = json_decode($selectedIdsRaw, true) ?? []; $taskDate = $_POST['task_date'] ?? date('Y-m-d');
-        $taskLabel = trim($_POST['task_label'] ?? '');
-        $overwrite = ($_POST['overwrite'] ?? '') === '1';
+        $selectedIdsRaw = reqPost('selected_ids', '[]'); $selectedIds = json_decode($selectedIdsRaw, true) ?? []; $taskDate = reqPost('task_date', date('Y-m-d'));
+        $taskLabel = trim(reqPost('task_label'));
+        $overwrite = reqPost('overwrite') === '1';
         if (!empty($selectedIds) && count($selectedIds) <= 20) {
             // Auto-generate label if empty
             if ($taskLabel === '') {
@@ -159,7 +159,7 @@ if (isset($_POST['action'])) {
     if ($_POST['action'] === 'batch_ai_preview') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $rawText = trim($_POST['words_text'] ?? '');
+        $rawText = trim(reqPost('words_text'));
         if ($rawText === '') { echo json_encode(['success' => false, 'error' => '请输入单词']); exit; }
         $rawLines = preg_split('/[\r\n]+/', $rawText);
         $inputWords = [];
@@ -224,7 +224,7 @@ PROMPT;
     if ($_POST['action'] === 'ai_single_word') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $word = trim($_POST['word'] ?? '');
+        $word = trim(reqPost('word'));
         if ($word === '') { echo json_encode(['success' => false, 'error' => '请输入单词']); exit; }
 
         $prompt = <<<PROMPT
@@ -265,13 +265,13 @@ PROMPT;
     if ($_POST['action'] === 'batch_import') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $importData = json_decode($_POST['import_data'] ?? '[]', true);
+        $importData = json_decode(reqPost('import_data', '[]'), true);
         if (empty($importData) || !is_array($importData)) { echo json_encode(['success' => false, 'error' => '无效的导入数据']); exit; }
         $imported = 0; $skipped = 0; $newWords = [];
         foreach ($importData as $item) {
-            $w = trim($item['word'] ?? '');
-            $m = trim($item['meaning'] ?? '');
-            $p = trim($item['pos'] ?? '');
+            $w = sanitizePlainText($item['word'] ?? '');
+            $m = sanitizePlainText($item['meaning'] ?? '');
+            $p = sanitizePlainText($item['pos'] ?? '');
             if (!$w || !$m) continue;
             $exists = false;
             foreach ($words as $ew) { if (strtolower($ew['word']) === strtolower($w)) { $exists = true; break; } }
@@ -293,7 +293,7 @@ PROMPT;
         $imported = 0; $skipped = 0; $skippedList = [];
         foreach ($lines as $line) {
             $parts = str_getcsv($line); if (count($parts) < 2) continue;
-            $word = trim($parts[0]); $meaning = trim($parts[1]); $pos = isset($parts[2]) ? trim($parts[2]) : '';
+            $word = sanitizePlainText($parts[0]); $meaning = sanitizePlainText($parts[1]); $pos = isset($parts[2]) ? sanitizePlainText($parts[2]) : '';
             if (!$word || !$meaning) continue;
             $existsIdx = -1;
             foreach ($words as $idx => $w) { if (strtolower($w['word']) === strtolower($word)) { $existsIdx = $idx + 1; break; } }

@@ -27,7 +27,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -38,8 +38,8 @@ requireClassAuth($classId, $class);
 $words = Database::getWords($classId);
 $tasks = Database::getTasks($classId);
 $settings = Database::getSettings();
-$highlightId = $_GET['highlight'] ?? '';
-$searchQ = trim($_GET['search'] ?? '');
+$highlightId = reqGet('highlight');
+$searchQ = trim(reqGet('search'));
 
 // Auto-cancel expired tasks
 $tasks = Database::autoCancelExpiredTasks($classId);
@@ -63,11 +63,9 @@ usort($pendingTasks, function($a, $b) {
 
 // ---- Execution view ----
 $selectedTask = null;
-if (isset($_GET['task_id'])) {
-    $taskId = $_GET['task_id'];
-    if (isset($tasks[$taskId]) && $tasks[$taskId]['status'] === 'pending') {
-        $selectedTask = $tasks[$taskId];
-    }
+$taskId = reqGet('task_id');
+if ($taskId !== '' && isset($tasks[$taskId]) && $tasks[$taskId]['status'] === 'pending') {
+    $selectedTask = $tasks[$taskId];
 }
 
 // ---- POST handlers ----
@@ -76,8 +74,8 @@ if (isset($_POST['action'])) {
     header('Content-Type: application/json');
     $action = $_POST['action'];
     if ($action === 'complete_task') {
-        $tid = $_POST['task_id'] ?? '';
-        $currentTaskId = $_GET['task_id'] ?? '';
+        $tid = reqPost('task_id');
+        $currentTaskId = reqGet('task_id');
         $changed = false;
         if ($tid !== '' && hash_equals((string)$currentTaskId, (string)$tid)) {
             Database::updateClassData($classId, 'tasks', function($latestTasks) use ($tid, &$changed) {
@@ -94,8 +92,8 @@ if (isset($_POST['action'])) {
         echo json_encode(['success' => false, 'error' => '任务不存在或已完成']); exit;
     }
     if ($action === 'cancel_task') {
-        $tid = $_POST['task_id'] ?? '';
-        $currentTaskId = $_GET['task_id'] ?? '';
+        $tid = reqPost('task_id');
+        $currentTaskId = reqGet('task_id');
         $changed = false;
         if ($tid !== '' && hash_equals((string)$currentTaskId, (string)$tid)) {
             Database::updateClassData($classId, 'tasks', function($latestTasks) use ($tid, &$changed) {

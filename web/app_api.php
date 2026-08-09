@@ -26,7 +26,7 @@ require_once 'inc/ratelimit.php';
 
 Database::migrateAppData();
 
-$action = trim((string)($_POST['action'] ?? ''));
+$action = trim(reqPost('action'));
 if ($action === '') appError('缺少 action 参数');
 
 $clientIp = $_SERVER['REMOTE_ADDR'] ?? '';
@@ -42,7 +42,7 @@ function appRateLimit($bucket, $identity, $max, $windowSec) {
 if ($action === 'register' || $action === 'claim_legacy') {
     appRateLimit('login', $clientIp, 10, 300);
     $name = appUsername();
-    $password = (string)($_POST['password'] ?? '');
+    $password = reqPost('password');
     appValidateCredentials($name, $password);
     $uid = appFindUserId($name);
     if ($uid !== null) {
@@ -87,7 +87,7 @@ if ($action === 'register' || $action === 'claim_legacy') {
 if ($action === 'login') {
     appRateLimit('login', $clientIp, 10, 300);
     $name = appUsername();
-    $password = (string)($_POST['password'] ?? '');
+    $password = reqPost('password');
     appValidateCredentials($name, $password);
     $uid = appFindUserId($name);
 
@@ -201,7 +201,7 @@ if ($action === 'get_profile') {
 
 if ($action === 'set_global_consent') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
-    $allow = (string)($_POST['consent'] ?? $_POST['allow'] ?? '0') === '1';
+    $allow = reqPost('consent', reqPost('allow', '0')) === '1';
     Database::updateUser($userId, function($data) use ($allow) {
         $data['consent'] = $allow;
         if (!isset($data['consent_map']) || !is_array($data['consent_map'])) {
@@ -216,7 +216,7 @@ if ($action === 'set_global_consent') {
 }
 
 if ($action === 'check_version') {
-    $current = trim((string)($_POST['current_version'] ?? '1.0'));
+    $current = trim(reqPost('current_version', '1.0'));
     $versions = Database::read('app_versions.json');
     if (!is_array($versions)) $versions = ['latest' => '1.0', 'history' => []];
     $latest = (string)($versions['latest'] ?? '1.0');
@@ -235,8 +235,8 @@ if ($action === 'check_version') {
 
 if ($action === 'get_announcements') {
     list($userId, $authUser) = appRequireAuth();
-    $classId = trim((string)($_POST['class_id'] ?? ''));
-    $platform = trim((string)($_POST['platform'] ?? 'app'));
+    $classId = trim(reqPost('class_id'));
+    $platform = trim(reqPost('platform', 'app'));
     $announcements = Database::getAnnouncements();
     $nowTs = time();
     $result = [];
@@ -276,7 +276,7 @@ if ($action === 'bind_class') {
     $classes = Database::getClasses();
     if (!isset($classes[$classId])) appError('班级不存在');
     $hash = $classes[$classId]['password_hash'] ?? '';
-    $classPassword = (string)($_POST['password'] ?? $_POST['class_password'] ?? '');
+    $classPassword = reqPost('password', reqPost('class_password'));
     if ($hash !== '' && !password_verify($classPassword, $hash)) appError('口令错误');
     $version = appClassVersion($classes[$classId]);
     Database::updateUser($userId, function($data) use ($classId, $version) {
@@ -321,7 +321,7 @@ switch ($action) {
     case 'get_words':
     case 'search_word':
         $words = Database::getWords($classId);
-        $query = trim((string)($_POST['query'] ?? ''));
+        $query = trim(reqPost('query'));
         if ($action === 'search_word' && $query === '') appError('参数不全');
         $user = Database::getUser($userId);
         $wrong = $user['wrong_words'][$classId] ?? [];
@@ -338,9 +338,9 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['words' => $paged, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
 
     case 'add_word':
-        $word = trim((string)($_POST['word'] ?? ''));
-        $meaning = trim((string)($_POST['meaning'] ?? ''));
-        $pos = trim((string)($_POST['pos'] ?? ''));
+        $word = sanitizePlainText(reqPost('word'));
+        $meaning = sanitizePlainText(reqPost('meaning'));
+        $pos = sanitizePlainText(reqPost('pos'));
         if ($word === '' || $meaning === '') appError('单词和释义不能为空');
         if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) appError('输入内容过长');
         $newId = bin2hex(random_bytes(8));
@@ -355,7 +355,7 @@ switch ($action) {
 
     case 'ai_word':
         appRateLimit('ai', $userId, 40, 3600);
-        $word = trim((string)($_POST['word'] ?? ''));
+        $word = trim(reqPost('word'));
         if ($word === '' || mb_strlen($word) > 100) appError('请输入有效单词');
         $prompt = "你是一个英语词典助手。为英文单词提供简洁准确的中文释义和标准词性缩写，严格返回JSON：\n{\"word\":\"" . addslashes($word) . "\",\"meaning\":\"中文释义\",\"pos\":\"词性\"}";
         $result = DeepSeekAPI::call([['role' => 'system', 'content' => '你是专业英语词典助手，只返回JSON。'], ['role' => 'user', 'content' => $prompt]], 512, 30);
@@ -369,7 +369,7 @@ switch ($action) {
         $exists = false;
         foreach (Database::getWords($classId) as $word) if ((string)$word['id'] === $wordId) { $exists = true; break; }
         if (!$exists) appError('单词不存在');
-        $wrong = (string)($_POST['wrong'] ?? '1') === '1';
+        $wrong = reqPost('wrong', '1') === '1';
         Database::updateUser($userId, function($data) use ($classId, $wordId, $wrong) {
             if (!isset($data['wrong_words'][$classId])) $data['wrong_words'][$classId] = [];
             if ($wrong) $data['wrong_words'][$classId][$wordId] = ['marked_at' => date('Y-m-d H:i:s')];
@@ -379,7 +379,7 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['is_wrong' => $wrong]]);
 
     case 'get_tasks':
-        $type = trim((string)($_POST['type'] ?? 'pending'));
+        $type = trim(reqPost('type', 'pending'));
         if (!in_array($type, ['pending', 'history'], true)) appError('type 须为 pending 或 history');
         $map = [];
         foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
@@ -444,7 +444,7 @@ switch ($action) {
         appJson(['success' => true, 'data' => $list]);
 
     case 'search_all':
-        $query = trim((string)($_POST['query'] ?? ''));
+        $query = trim(reqPost('query'));
         if ($query === '') appError('参数不全');
         $words = Database::getWords($classId); $map = []; $wordMatches = [];
         foreach ($words as $word) {
@@ -499,7 +499,7 @@ switch ($action) {
         appJson(['success' => true, 'download_url' => 'download.php?token=' . rawurlencode($token) . '&type=html']);
 
     case 'export_personal_history':
-        $start = trim((string)($_POST['start_date'] ?? '')); $end = trim((string)($_POST['end_date'] ?? ''));
+        $start = trim(reqPost('start_date')); $end = trim(reqPost('end_date'));
         if (($start !== '' && !historyStrictDate($start)) || ($end !== '' && !historyStrictDate($end)) || ($start !== '' && $end !== '' && $start > $end)) appError('日期范围无效');
         $entries = historySanitizeEntries(Database::getClassData($classId, 'personal_history_' . $userId));
         $body = ''; $count = 0;
@@ -529,21 +529,21 @@ switch ($action) {
         appJson(['success' => true, 'download_url' => 'download.php?token=' . rawurlencode($token) . '&type=html']);
 
     case 'get_class_history':
-        $month = trim((string)($_POST['month'] ?? ''));
+        $month = trim(reqPost('month'));
         if ($month !== '' && !preg_match('/\A\d{4}-(?:0[1-9]|1[0-2])\z/D', $month)) appError('month 格式无效');
         $history = historySanitizeEntries(Database::getClassData($classId, 'history'));
         if ($month !== '') $history = array_filter($history, function($entryDate) use ($month) { return strncmp($entryDate, $month . '-', 8) === 0; }, ARRAY_FILTER_USE_KEY);
         appJson(['success' => true, 'data' => $history]);
 
     case 'get_personal_history':
-        $month = trim((string)($_POST['month'] ?? ''));
+        $month = trim(reqPost('month'));
         if ($month !== '' && !preg_match('/\A\d{4}-(?:0[1-9]|1[0-2])\z/D', $month)) appError('month 格式无效');
         $history = historySanitizeEntries(Database::getClassData($classId, 'personal_history_' . $userId));
         if ($month !== '') $history = array_filter($history, function($entryDate) use ($month) { return strncmp($entryDate, $month . '-', 8) === 0; }, ARRAY_FILTER_USE_KEY);
         appJson(['success' => true, 'data' => $history]);
 
     case 'get_authorized_vlogs':
-        $month = trim((string)($_POST['month'] ?? ''));
+        $month = trim(reqPost('month'));
         if ($month !== '' && !preg_match('/\A\d{4}-(?:0[1-9]|1[0-2])\z/D', $month)) appError('month 格式无效');
         $result = [];
         foreach (Database::getAllUsers() as $uid => $u) {
@@ -559,7 +559,7 @@ switch ($action) {
         appJson(['success' => true, 'data' => $result]);
 
     case 'save_personal_history':
-        $date = trim((string)($_POST['date'] ?? '')); $content = (string)($_POST['content'] ?? '');
+        $date = trim(reqPost('date')); $content = reqPost('content');
         if (!historyIsEditableDate($date)) appError('只能保存今天的史记');
         try {
             $content = historySanitizeHtml($content);
@@ -568,7 +568,7 @@ switch ($action) {
         } catch (Exception $e) {
             appError('内容格式无效');
         }
-        $delta = (string)($_POST['delta'] ?? '');
+        $delta = reqPost('delta');
         if ($delta !== '' && strlen($delta) <= 2097152) {
             json_decode($delta, true);
             if (json_last_error() !== JSON_ERROR_NONE) $delta = '';
@@ -582,7 +582,7 @@ switch ($action) {
             'mood' => $_POST['mood'] ?? historyDefaultMood(),
             'weather' => $_POST['weather'] ?? historyDefaultWeather(),
             'location' => $_POST['location'] ?? '',
-            'tags' => isset($_POST['tags']) ? json_decode((string)$_POST['tags'], true) : [],
+            'tags' => reqPost('tags') !== '' ? json_decode(reqPost('tags'), true) : [],
             'updated_at' => date('Y-m-d H:i:s'),
         ]);
         $entry['content'] = $content;
@@ -613,7 +613,7 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($filename)]]);
 
     case 'set_consent':
-        $allow = (string)($_POST['consent'] ?? $_POST['allow'] ?? '0') === '1';
+        $allow = reqPost('consent', reqPost('allow', '0')) === '1';
         Database::updateUser($userId, function($data) use ($classId, $allow) {
             if (!isset($data['consent_map']) || !is_array($data['consent_map'])) {
                 $data['consent_map'] = [];
@@ -792,7 +792,7 @@ switch ($action) {
         $img = $_FILES['image'];
         if (($img['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('图片上传失败');
         if (($img['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) appError('图片最大 12MB', null, 413);
-        $desc = trim((string)($_POST['description'] ?? ''));
+        $desc = sanitizePlainText(reqPost('description'));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
         try {
             $fname = Database::saveUploadedImage($classId, $img['tmp_name']);

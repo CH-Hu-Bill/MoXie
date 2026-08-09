@@ -18,7 +18,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端使用
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -29,8 +29,8 @@ requireClassAuth($classId, $class);
 $words = Database::getWords($classId);
 $tasks = Database::getTasks($classId);
 $settings = Database::getSettings();
-$highlightId = $_GET['highlight'] ?? '';
-$searchQ = trim($_GET['search'] ?? '');
+$highlightId = reqGet('highlight');
+$searchQ = trim(reqGet('search'));
 
 // Auto-cancel expired tasks
 $tasks = Database::autoCancelExpiredTasks($classId);
@@ -46,7 +46,7 @@ $completedTasks = array_filter($tasks, function($t) use ($searchQ, $words) {
     return false;
 });
 usort($completedTasks, function($a, $b) { return $b['date'] <=> $a['date']; });
-$selectedTaskId = $_GET['task_id'] ?? null;
+$selectedTaskId = reqGet('task_id');
 $selectedTask = null;
 if ($selectedTaskId && isset($tasks[$selectedTaskId])) { $selectedTask = $tasks[$selectedTaskId]; }
 $wordMap = [];

@@ -22,7 +22,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -142,7 +142,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_weekend_task') {
 if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
     requireCsrf(); // CSRF校验
     header('Content-Type: application/json');
-    $query = trim($_POST['query'] ?? '');
+    $query = trim(reqPost('query'));
     if (!$query) { echo json_encode(['success' => false, 'error' => '请输入搜索词']); exit; }
     $queryLower = mb_strtolower($query);
 
@@ -207,7 +207,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
 if (isset($_POST['action']) && $_POST['action'] === 'translate_quote') {
     requireCsrf(); // CSRF校验
     header('Content-Type: application/json');
-    $quote = trim($_POST['quote'] ?? '');
+    $quote = trim(reqPost('quote'));
     if (!$quote) { echo json_encode(['success' => false, 'error' => '无内容']); exit; }
     require_once 'inc/api.php';
     $result = DeepSeekAPI::call([

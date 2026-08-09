@@ -6,7 +6,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/history.php';
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -21,13 +21,13 @@ $csrfToken = csrfToken();
 if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
     header('Content-Type: application/json; charset=UTF-8');
     requireCsrf();
-    $date = $_POST['date'] ?? '';
+    $date = reqPost('date');
     if (!historyIsEditableDate($date)) { echo json_encode(['success' => false, 'error' => '只能保存今天的记录']); exit; }
-    try { $content = historySanitizeHtml((string)($_POST['content'] ?? '')); }
+    try { $content = historySanitizeHtml(reqPost('content')); }
     catch (LengthException $e) { http_response_code(413); echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit; }
     catch (Exception $e) { http_response_code(400); echo json_encode(['success' => false, 'error' => '内容格式无效']); exit; }
 
-    $rawTags = isset($_POST['tags']) ? json_decode((string)$_POST['tags'], true) : [];
+    $rawTags = json_decode(reqPost('tags'), true);
     $entry = [
         'content'    => $content,
         'title'      => historySanitizeTitle($_POST['title'] ?? ''),

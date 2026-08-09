@@ -6,7 +6,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/history.php';
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -41,7 +41,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     if (!$image || ($image['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         echo json_encode(['success' => false, 'error' => '请选择图片']); exit;
     }
-    $desc = trim((string)($_POST['description'] ?? ''));
+    $desc = trim(reqPost('description'));
     if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
     if (($image['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) { echo json_encode(['success' => false, 'error' => '图片最大 12MB']); exit; }
@@ -65,7 +65,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
 if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
     header('Content-Type: application/json; charset=UTF-8');
     requireCsrf();
-    $id = (string)($_POST['id'] ?? '');
+    $id = reqPost('id');
     if (!preg_match('/\A[a-f0-9]{32}\z/D', $id)) { echo json_encode(['success' => false, 'error' => '无效ID']); exit; }
     Database::updateClassData($classId, 'gallery', function($latest) use ($id, $classId) {
         if (!is_array($latest)) return null;

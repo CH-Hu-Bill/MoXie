@@ -19,7 +19,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
-$classId = $_GET['id'] ?? '';
+$classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) { header('Location: index.php'); exit; }
@@ -40,8 +40,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     if (isset($_POST['follow_repeat'])) $settings['follow_repeat'] = max(1, min(5, intval($_POST['follow_repeat'])));
     if (isset($_POST['follow_buffer'])) $settings['follow_buffer'] = max(0, min(5, floatval($_POST['follow_buffer'])));
     // 图集公开 API 密钥保护（按班级存储）
-    $galleryKeyEnabled = (string)($_POST['gallery_api_enabled'] ?? '') === '1';
-    $galleryApiKey = trim((string)($_POST['gallery_api_key'] ?? ''));
+    $galleryKeyEnabled = reqPost('gallery_api_enabled') === '1';
+    $galleryApiKey = trim(reqPost('gallery_api_key'));
     if ($galleryKeyEnabled && (strlen($galleryApiKey) < 8 || strlen($galleryApiKey) > 128)) {
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'error' => 'API 密钥需为 8-128 位字符']);
@@ -50,7 +50,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     $settings['gallery_api_key_' . $classId] = $galleryKeyEnabled ? $galleryApiKey : '';
     // 展示大屏 token（按班级存储，用于带 token 链接免口令直达壁纸页）
     if (isset($_POST['display_token'])) {
-        $displayToken = trim((string)$_POST['display_token']);
+        $displayToken = trim(reqPost('display_token'));
         if ($displayToken !== '' && !preg_match('/\A[a-zA-Z0-9_-]{8,64}\z/D', $displayToken)) {
             header('Content-Type: application/json');
             echo json_encode(['success' => false, 'error' => '展示大屏 token 需为 8-64 位字母/数字/-_']);

@@ -2,7 +2,7 @@
 
 require_once 'inc/db.php';
 
-$token = trim((string)($_GET['token'] ?? ''));
+$token = trim(reqGet('token'));
 if (!preg_match('/\A[a-f0-9]{64}\z/D', $token)) { http_response_code(404); exit('下载链接无效'); }
 
 // GC: 顺带清理过期的导出文件 (读取 → 删物理文件 → 清记录)

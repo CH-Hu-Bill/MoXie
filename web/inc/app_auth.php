@@ -15,7 +15,7 @@ function appError($message, $code = null, $status = 400) {
 }
 
 function appUsername() {
-    return trim((string)($_POST['username'] ?? $_POST['name'] ?? ''));
+    return trim(reqPost('username', reqPost('name')));
 }
 
 function appValidateCredentials($name, $password) {
@@ -48,7 +48,7 @@ function appNewToken(&$tokens, $userId) {
 function appAuthToken() {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
     if (preg_match('/^Bearer\s+([^\s]+)$/i', trim($header), $m)) return $m[1];
-    return trim((string)($_POST['token'] ?? ''));
+    return trim(reqPost('token'));
 }
 
 function appRequireAuth() {
@@ -71,6 +71,7 @@ function appRequireAuth() {
 }
 
 function appStrictId($value, $field) {
+    if (!is_scalar($value)) $value = '';
     $value = trim((string)$value);
     if ($value === '' || strlen($value) > 80 || !preg_match('/^[A-Za-z0-9_-]+$/D', $value)) {
         appError($field . ' 无效');

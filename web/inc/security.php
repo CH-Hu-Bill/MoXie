@@ -55,7 +55,9 @@ function setClassAuthCookie($classId, $authVersion, $expires = null) {
 
 function isClassAuthenticated($classId, $class) {
     if (empty($class['password_hash'])) return true;
-    $cookie = $_COOKIE[classAuthCookieName($classId)] ?? '';
+    $rawCookie = $_COOKIE[classAuthCookieName($classId)] ?? '';
+    if (!is_scalar($rawCookie)) return false;
+    $cookie = (string)$rawCookie;
     $parts = explode('.', $cookie, 2);
     if (count($parts) !== 2) return false;
     $expected = base64UrlEncode(hash_hmac('sha256', $parts[0], appSecret(), true));

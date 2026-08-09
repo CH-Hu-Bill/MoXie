@@ -229,6 +229,7 @@ function historyDefaultMood() { return '😊'; }
 function historyDefaultWeather() { return '☀️'; }
 
 function historySanitizeTitle($title) {
+    if (!is_scalar($title)) $title = '';
     $title = trim(preg_replace('/\s+/u', ' ', (string)$title));
     if (function_exists('mb_substr')) $title = mb_substr($title, 0, 80, 'UTF-8');
     else $title = substr($title, 0, 80);
@@ -236,6 +237,7 @@ function historySanitizeTitle($title) {
 }
 
 function historySanitizeLocation($location) {
+    if (!is_scalar($location)) $location = '';
     $location = trim(preg_replace('/\s+/u', ' ', (string)$location));
     if (function_exists('mb_substr')) $location = mb_substr($location, 0, 40, 'UTF-8');
     else $location = substr($location, 0, 40);
@@ -243,11 +245,13 @@ function historySanitizeLocation($location) {
 }
 
 function historySanitizeMood($mood) {
+    if (!is_scalar($mood)) $mood = '';
     $mood = (string)$mood;
     return in_array($mood, HISTORY_MOODS, true) ? $mood : historyDefaultMood();
 }
 
 function historySanitizeWeather($weather) {
+    if (!is_scalar($weather)) $weather = '';
     $weather = (string)$weather;
     return in_array($weather, HISTORY_WEATHERS, true) ? $weather : historyDefaultWeather();
 }
@@ -259,6 +263,7 @@ function historySanitizeTags($tags) {
     if (!is_array($tags)) return [];
     $out = [];
     foreach ($tags as $tag) {
+        if (!is_scalar($tag)) continue;
         $tag = trim(preg_replace('/\s+/u', ' ', (string)$tag));
         if ($tag === '') continue;
         if (function_exists('mb_substr')) $tag = mb_substr($tag, 0, 20, 'UTF-8');
@@ -276,11 +281,11 @@ function historySanitizeTags($tags) {
 function historyNormalizeEntry(array $entry) {
     $content = '';
     try {
-        $content = historySanitizeHtml((string)($entry['content'] ?? ''));
+        $content = historySanitizeHtml(is_scalar($entry['content'] ?? null) ? (string)$entry['content'] : '');
     } catch (Exception $e) {
         $content = '';
     }
-    $delta = (string)($entry['delta'] ?? '');
+    $delta = is_scalar($entry['delta'] ?? null) ? (string)$entry['delta'] : '';
     if ($delta !== '' && strlen($delta) <= 2097152) {
         json_decode($delta, true);
         if (json_last_error() !== JSON_ERROR_NONE) $delta = '';
