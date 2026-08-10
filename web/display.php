@@ -325,6 +325,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=7"></script>
-<script src="display.js?v=3"></script>
+<script src="display.js?v=4"></script>
 </body>
 </html>

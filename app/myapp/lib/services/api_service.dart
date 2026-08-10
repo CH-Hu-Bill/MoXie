@@ -410,7 +410,9 @@ class ApiService {
       },
       'image',
       image,
-      'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      image.uri.pathSegments.isNotEmpty
+          ? image.uri.pathSegments.last
+          : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
   }
 

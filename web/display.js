@@ -17,6 +17,7 @@ var galleryTimer = null;
 var pollTimer = null;
 var polling = false;
 var reducedMotion = false;
+var lastWords = (typeof DISPLAY_WORDS !== 'undefined' && DISPLAY_WORDS) ? DISPLAY_WORDS : [];
 
 /* 图集轮播断点记忆（localStorage）：
    同设备/浏览器记住当前班级的轮播位置，下次打开从上次位置继续。
@@ -99,9 +100,19 @@ function updateMarquee(ann) {
 /* =========================================================
    图集轮播（预加载下一张 + 淡入 + GIF 动图无缝轮播）
    ========================================================= */
+var gallerySizeCache = {}; // url -> {w,h} 避免重复解码探针
+
 function preloadImage(item) {
+    var url = typeof item === 'string' ? item : item.url;
+    if (gallerySizeCache[url]) return; // 已探知尺寸，跳过重复预载
     var img = new Image();
-    img.src = typeof item === 'string' ? item : item.url;
+    img.decoding = 'async'; // 异步解码，避免阻塞主线程
+    img.onload = function() {
+        try {
+            gallerySizeCache[url] = { w: img.naturalWidth, h: img.naturalHeight };
+        } catch (e) {}
+    };
+    img.src = url;
 }
 
 /* 按图片自然尺寸设置容器适配比例：
@@ -126,10 +137,18 @@ function renderGalleryItem(item, fade) {
     }
     var existing = document.getElementById('dGalleryPic');
 
-    // 探知自然尺寸以适配容器
-    var probe = new Image();
-    probe.onload = function() { fitGalleryContainer(wrap, probe.naturalWidth, probe.naturalHeight); };
-    probe.src = item.url;
+    // 探知自然尺寸以适配容器（已缓存则直接应用，避免重复解码）
+    var cached = gallerySizeCache[item.url];
+    if (cached) {
+        fitGalleryContainer(wrap, cached.w, cached.h);
+    } else {
+        var probe = new Image();
+        probe.onload = function() {
+            gallerySizeCache[item.url] = { w: probe.naturalWidth, h: probe.naturalHeight };
+            fitGalleryContainer(wrap, probe.naturalWidth, probe.naturalHeight);
+        };
+        probe.src = item.url;
+    }
 
     var isGif = item.type === 'gif';
     if (isGif) {
@@ -220,7 +239,12 @@ function refresh() {
                     root.style.setProperty('--bottom-margin', data.bottom_margin + 'px');
                 }
                 updateMarquee(data.announcement);
-                renderWords(data.words || []);
+                // 单词内容 diff：无变化跳过重建 DOM（避免 60s 一次全量 innerHTML + 测量）
+                var newWords = data.words || [];
+                if (JSON.stringify(newWords) !== JSON.stringify(lastWords)) {
+                    lastWords = newWords;
+                    renderWords(newWords);
+                }
                 var newGallery = data.gallery || [];
                 if (JSON.stringify(newGallery) !== JSON.stringify(gallery)) {
                     gallery = newGallery;
