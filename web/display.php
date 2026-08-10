@@ -86,9 +86,10 @@ function displayGallery($classId) {
         foreach ($items as $it) {
             if (empty($it['image'])) continue;
             $imgFile = (string)$it['image'];
+            $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
             $out[] = [
                 'url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
-                'type' => strtolower(pathinfo($imgFile, PATHINFO_EXTENSION)) === 'gif' ? 'gif' : 'static',
+                'type' => $ext === 'gif' ? 'gif' : ($ext === 'mp4' ? 'mp4' : 'static'),
                 'description' => (string)($it['description'] ?? ''),
             ];
         }
@@ -325,6 +326,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=7"></script>
-<script src="display.js?v=4"></script>
+<script src="display.js?v=5"></script>
 </body>
 </html>

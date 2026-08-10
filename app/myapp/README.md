@@ -9,7 +9,7 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | 学习 | 单词库（卡片+点读+添加，下拉刷新+30s 自动刷新）、错题本（标记/移出+导出）、任务（进行中/历史+详情） |
 | 生活 | 个人史记（日历+富文本编辑器+图片上传，保存后自动切换查看模式，下拉刷新+30s 自动刷新）、他人史记（授权用户，可滚动查看）、班级史记（只读） |
 | 搜索 | 全局搜索单词和任务，点击跳转+滚动定位+高亮 |
-| 画廊 | 网格浏览+上传照片（支持 GIF 动图，本地校验格式/大小，GIF 不压缩保留动画）+大图查看+图片缓存；支持修改图片描述；下拉刷新+30s 自动刷新 |
+| 画廊 | 网格浏览+上传（图片/GIF/MP4 视频，本地校验格式/大小，视频≤30s/15MB 不压缩保留原始编码）+大图查看+图片缓存；支持展示 GIF 动图与 MP4 视频（缩略图进入视口才播放、大图可缩放/播放/声音开关）；支持修改图片描述；下拉刷新+30s 自动刷新 |
 | 我的 | 用户信息、切换班级、Vlog 授权、检查更新、退出登录、注销账号。登录无闪屏（本地 loading 状态） |
 
 ## 技术栈
@@ -21,7 +21,7 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | provider | ^6.1.0 | 状态管理 |
 | http | ^1.2.0 | 网络请求（MultipartRequest） |
 | shared_preferences | ^2.2.0 | 本地缓存（token、班级、单词等） |
-| image_picker | ^1.0.0 | 图片选取（Vlog + 画廊） |
+| image_picker | ^1.0.0 | 图片/视频选取（Vlog + 画廊） |
 | flutter_widget_from_html | ^0.15.0 | Vlog HTML 内容渲染 |
 | just_audio | ^0.9.39 | 单词发音（有道词典 TTS） |
 | flutter_quill | ^11.5.1 | 富文本编辑器（Vlog 编辑，与网站端 Quill 对齐） |
@@ -29,7 +29,8 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | flutter_quill_delta_from_html | ^1.5.3 | HTML → Quill Delta 转换（加载已有内容） |
 | vsc_quill_delta_to_html | ^1.0.5 | Quill Delta → HTML 转换（保存到服务器，inline styles 模式） |
 | cached_network_image | ^3.4.1 | 图片缓存（画廊网格静态图+大图查看，避免重复下载） |
-| visibility_detector | ^0.4.0+2 | GIF 缩略图视口检测（进入视口才加载播放动图，省流量+性能） |
+| visibility_detector | ^0.4.0+2 | GIF/MP4 缩略图视口检测（进入视口才加载播放，省流量+性能） |
+| video_player | ^2.13.0 | MP4 视频播放（画廊缩略图静音循环 + 大图播放/声音开关） |
 | flutter_lints | ^4.0.0 | 代码规范（dev） |
 
 **字体**（打包到 APK，离线可用）：
@@ -193,5 +194,5 @@ flutter build apk --release
 4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
 5. **画廊上传**：已实现本地校验（JPEG/PNG/WebP + 12MB 上限）+ 服务器端二次校验
 6. **同步刷新**：三屏均已实现 30s 自动刷新 + 手动下拉刷新，编辑/滚动中不打断
-7. **图片缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 visibility_detector 视口检测（进入视口才播放、离开释放资源），大图用 Image.network 播动图；单词/史记数据使用 SharedPreferences TTL 缓存（30s）
+7. **媒体缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 flutter_cache_manager 磁盘缓存 + visibility_detector 视口检测（进入视口才播放、离开释放资源）；MP4 视频用 video_player 流式播放（不做磁盘缓存，缩略图进视口静音循环、大图可播放/声音开关）；单词/史记数据使用 SharedPreferences TTL 缓存（30s）
 8. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`

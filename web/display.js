@@ -104,7 +104,19 @@ var gallerySizeCache = {}; // url -> {w,h} 避免重复解码探针
 
 function preloadImage(item) {
     var url = typeof item === 'string' ? item : item.url;
+    var type = typeof item === 'object' ? (item.type || 'static') : 'static';
     if (gallerySizeCache[url]) return; // 已探知尺寸，跳过重复预载
+    if (type === 'mp4') {
+        // 视频预加载：metadata 就够（尺寸 + 首帧），避免全量下载 15MB 视频
+        var pv = document.createElement('video');
+        pv.preload = 'metadata';
+        pv.onloadedmetadata = function() {
+            var w = pv.videoWidth, h = pv.videoHeight;
+            if (w && h) gallerySizeCache[url] = { w: w, h: h };
+        };
+        pv.src = url;
+        return;
+    }
     var img = new Image();
     img.decoding = 'async'; // 异步解码，避免阻塞主线程
     img.onload = function() {
@@ -136,11 +148,23 @@ function renderGalleryItem(item, fade) {
         return;
     }
     var existing = document.getElementById('dGalleryPic');
+    var isMp4 = item.type === 'mp4';
 
-    // 探知自然尺寸以适配容器（已缓存则直接应用，避免重复解码）
+    // 探知尺寸以适配容器（已缓存则直接应用）
     var cached = gallerySizeCache[item.url];
     if (cached) {
         fitGalleryContainer(wrap, cached.w, cached.h);
+    } else if (isMp4) {
+        var probeV = document.createElement('video');
+        probeV.preload = 'metadata';
+        probeV.onloadedmetadata = function() {
+            var w = probeV.videoWidth, h = probeV.videoHeight;
+            if (w && h) {
+                gallerySizeCache[item.url] = { w: w, h: h };
+                fitGalleryContainer(wrap, w, h);
+            }
+        };
+        probeV.src = item.url;
     } else {
         var probe = new Image();
         probe.onload = function() {
@@ -150,10 +174,27 @@ function renderGalleryItem(item, fade) {
         probe.src = item.url;
     }
 
-    var isGif = item.type === 'gif';
-    if (isGif) {
-        // GIF：直接更新 src，浏览器无缝继续/重播动画，避免闪烁重启
-        if (existing) { existing.src = item.url; existing.alt = item.description || ''; }
+    if (isMp4) {
+        // 视频：静音循环自动播放（大屏场景无需声音开关）
+        if (existing && existing.tagName === 'VIDEO') {
+            existing.src = item.url;
+            existing.play();
+        } else {
+            wrap.innerHTML = '';
+            var v = document.createElement('video');
+            v.id = 'dGalleryPic';
+            v.muted = true;
+            v.loop = true;
+            v.autoplay = true;
+            v.playsInline = true;
+            v.preload = 'auto';
+            v.src = item.url;
+            wrap.appendChild(v);
+            v.play().catch(function() {});
+        }
+    } else if (item.type === 'gif') {
+        // GIF：直接更新 src，浏览器无缝继续/重播动画
+        if (existing && existing.tagName === 'IMG') { existing.src = item.url; existing.alt = item.description || ''; }
         else {
             wrap.innerHTML = '';
             var g = document.createElement('img');

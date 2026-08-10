@@ -53,12 +53,18 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
     $isGif = false;
+    $isMp4 = false;
     if (isset($image['tmp_name']) && is_file($image['tmp_name'])) {
         $info = @getimagesize($image['tmp_name']);
         $isGif = is_array($info) && ($info[2] ?? 0) === IMAGETYPE_GIF;
+        if (!$isGif) $isMp4 = Database::isMp4File($image['tmp_name']);
     }
-    $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
-    if (($image['size'] ?? 0) > $maxBytes) { echo json_encode(['success' => false, 'error' => $isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB']); exit; }
+    if ($isMp4) {
+        if (($image['size'] ?? 0) > Database::MP4_MAX_BYTES) { echo json_encode(['success' => false, 'error' => '视频最大 15MB']); exit; }
+    } else {
+        $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
+        if (($image['size'] ?? 0) > $maxBytes) { echo json_encode(['success' => false, 'error' => $isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB']); exit; }
+    }
 
     try {
         $filename = Database::saveUploadedImage($classId, $image['tmp_name']);
@@ -132,17 +138,21 @@ require 'inc/header.php';
 
 <div class="content">
     <div class="card mb-4" id="uploadCard">
-        <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);">📷 上传图片</h3>
-        <div class="upload-form">
-            <div class="upload-preview-wrap" id="uploadPreviewWrap" style="display:none;">
-                <img id="uploadPreview" alt="" style="max-width:100%;max-height:180px;border-radius:var(--wobbly-sm);border:2px solid var(--pencil);box-shadow:var(--shadow-sm);">
-                <span class="gif-badge" id="previewGifBadge" style="display:none;">GIF</span>
+        <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);">📷 上传图片 / 视频</h3>
+        <div class="upload-form" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;">
+            <div class="upload-preview-wrap" id="uploadPreviewWrap" style="display:none;width:100%;justify-content:center;margin-bottom:6px;">
+                <div style="position:relative;max-width:100%;overflow:hidden;">
+                    <img id="uploadPreview" alt="" style="display:none;max-width:100%;max-height:180px;border-radius:var(--wobbly-sm);border:2px solid var(--pencil);box-shadow:var(--shadow-sm);">
+                    <video id="uploadPreviewVideo" style="display:none;max-width:100%;max-height:180px;border-radius:var(--wobbly-sm);border:2px solid var(--pencil);box-shadow:var(--shadow-sm);" controls muted playsinline></video>
+                    <span class="gif-badge" id="previewGifBadge" style="display:none;">GIF</span>
+                    <span class="gif-badge mp4-badge" id="previewMp4Badge" style="display:none;">MP4</span>
+                </div>
             </div>
-            <label class="input upload-file-btn" for="galleryImage" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;min-width:200px;flex:1;">
-                <span id="uploadFileName">📎 选择图片（JPEG / PNG / WebP / GIF）</span>
-                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="previewUpload()">
+            <label class="input upload-file-btn" for="galleryImage" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;min-width:220px;flex:1;">
+                <span id="uploadFileName">📎 选择图片或视频（JPG/PNG/WebP/GIF/MP4）</span>
+                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" style="display:none;" onchange="previewUpload()">
             </label>
-            <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片的话…" maxlength="500" style="flex:2;min-width:250px;">
+            <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="flex:2;min-width:250px;">
             <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
             <button class="btn" onclick="clearUpload()" id="clearBtn" style="display:none;">清除</button>
         </div>
@@ -159,8 +169,12 @@ require 'inc/header.php';
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;">
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;width:44px;height:44px;border-radius:50%;font-size:20px;">✕</button>
-    <img id="lbImg" src="" alt="" style="max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
-    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);"></div>
+    <img id="lbImg" src="" alt="" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
+    <video id="lbVideo" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline></video>
+    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);display:flex;align-items:center;gap:10px;justify-content:center;">
+        <span id="lbDescText"></span>
+        <button id="lbSoundBtn" onclick="toggleLightboxSound()" style="display:none;background:none;border:2px solid var(--white);color:var(--white);border-radius:var(--wobbly-sm);padding:2px 10px;font-size:14px;cursor:pointer;">🔇</button>
+    </div>
 </div>
 
 <script src="common.js?v=7"></script>
@@ -177,9 +191,17 @@ function renderGallery() {
         var url = 'upload.php?class_id=' + classId + '&file=' + item.image;
         var dateText = formatDate(item.uploaded_at);
         var isGif = /\.gif$/i.test(item.image);
-        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
-            + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;"><img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">'
+        var isMp4 = /\.mp4$/i.test(item.image);
+        var media;
+        if (isMp4) {
+            media = '<video src="' + url + '" muted loop autoplay playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;pointer-events:none;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;"></video>';
+        } else {
+            media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">';
+        }
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\', ' + isMp4 + ')" style="overflow:hidden;cursor:pointer;padding:0;">'
+            + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">' + media
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
+            + (isMp4 ? '<span class="gif-badge mp4-badge">MP4</span>' : '')
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'
@@ -194,40 +216,98 @@ function formatDate(s) {
     return s.length >= 16 ? s.substring(0, 16).replace(' ', ' ') : s.substring(0, 10);
 }
 
-function openLightbox(url, desc) {
+function openLightbox(url, desc, isMp4) {
     document.getElementById('lightbox').classList.add('active');
-    document.getElementById('lbImg').src = url;
-    document.getElementById('lbDesc').textContent = desc;
+    var img = document.getElementById('lbImg');
+    var video = document.getElementById('lbVideo');
+    var descText = document.getElementById('lbDescText');
+    var soundBtn = document.getElementById('lbSoundBtn');
+    descText.textContent = desc;
+    if (isMp4) {
+        img.style.display = 'none';
+        video.style.display = '';
+        video.src = url;
+        video.muted = true;
+        video.play();
+        soundBtn.style.display = '';
+        soundBtn.textContent = '🔇';
+        soundBtn.dataset.sound = '0';
+    } else {
+        video.pause(); video.src = '';
+        video.style.display = 'none';
+        img.style.display = '';
+        img.src = url;
+        soundBtn.style.display = 'none';
+    }
 }
-function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
+function toggleLightboxSound() {
+    var video = document.getElementById('lbVideo');
+    var btn = document.getElementById('lbSoundBtn');
+    if (video.muted) {
+        video.muted = false;
+        btn.textContent = '🔊';
+        btn.dataset.sound = '1';
+        video.play();
+    } else {
+        video.muted = true;
+        btn.textContent = '🔇';
+        btn.dataset.sound = '0';
+    }
+}
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+    var video = document.getElementById('lbVideo');
+    video.pause();
+}
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 
 function previewUpload() {
     var input = document.getElementById('galleryImage');
     var wrap = document.getElementById('uploadPreviewWrap');
     var img = document.getElementById('uploadPreview');
-    var badge = document.getElementById('previewGifBadge');
+    var video = document.getElementById('uploadPreviewVideo');
+    var gifBadge = document.getElementById('previewGifBadge');
+    var mp4Badge = document.getElementById('previewMp4Badge');
     var nameEl = document.getElementById('uploadFileName');
     var clearBtn = document.getElementById('clearBtn');
     if (!input.files || !input.files[0]) return;
     var file = input.files[0];
     if (nameEl) nameEl.textContent = file.name;
     var isGif = /\.gif$/i.test(file.name);
-    if (isGif) { if (badge) badge.style.display = ''; } else { if (badge) badge.style.display = 'none'; }
-    var reader = new FileReader();
-    reader.onload = function(e) {
-        img.src = e.target.result;
-        wrap.style.display = 'block';
-        if (clearBtn) clearBtn.style.display = '';
-    };
-    reader.readAsDataURL(file);
+    var isMp4 = /\.mp4$/i.test(file.name);
+    if (gifBadge) gifBadge.style.display = isGif ? '' : 'none';
+    if (mp4Badge) mp4Badge.style.display = isMp4 ? '' : 'none';
+    img.style.display = 'none';
+    video.style.display = 'none';
+    if (video.src) { URL.revokeObjectURL(video.src); video.removeAttribute('src'); }
+    if (isMp4) {
+        video.src = URL.createObjectURL(file);
+        video.style.display = '';
+        video.muted = true;
+        video.load();
+    } else {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            img.src = e.target.result;
+            img.style.display = '';
+        };
+        reader.readAsDataURL(file);
+    }
+    wrap.style.display = 'flex';
+    if (clearBtn) clearBtn.style.display = '';
 }
 
 function clearUpload() {
     document.getElementById('galleryImage').value = '';
     document.getElementById('galleryDesc').value = '';
-    document.getElementById('uploadPreviewWrap').style.display = 'none';
-    document.getElementById('uploadFileName').textContent = '📎 选择图片（JPEG / PNG / WebP / GIF）';
+    var wrap = document.getElementById('uploadPreviewWrap');
+    wrap.style.display = 'none';
+    var img = document.getElementById('uploadPreview');
+    var video = document.getElementById('uploadPreviewVideo');
+    img.style.display = 'none'; img.src = '';
+    if (video.src) URL.revokeObjectURL(video.src);
+    video.removeAttribute('src'); video.style.display = 'none';
+    document.getElementById('uploadFileName').textContent = '📎 选择图片或视频（JPG/PNG/WebP/GIF/MP4）';
     document.getElementById('clearBtn').style.display = 'none';
     document.getElementById('uploadBtn').disabled = false;
     document.getElementById('uploadBtn').textContent = '上传';

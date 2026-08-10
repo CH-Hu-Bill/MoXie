@@ -904,3 +904,8 @@ body {
   pointer-events: none;
   user-select: none;
 }
+/* MP4 视频角标：蓝笔配色区分 */
+.gif-badge.mp4-badge {
+  background: rgba(45, 93, 161, 0.85);
+  border-color: rgba(255, 255, 255, 0.45);
+}

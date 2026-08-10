@@ -2,7 +2,7 @@ name: myapp
 description: "ListenWrite 班级默写 + 班级史记 APP"
 publish_to: 'none'
 
-version: 1.0.6+1
+version: 1.0.7+1
 
 environment:
   sdk: ^3.5.0
@@ -25,6 +25,7 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
   visibility_detector: ^0.4.0+2
+  video_player: ^2.9.1
 
 dev_dependencies:
   flutter_test:

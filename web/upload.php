@@ -15,20 +15,62 @@ if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) uploadJsonError('
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) uploadJsonError('班级不存在', 404);
 
-// GET 请求（查看图片）无需鉴权，外部 API 可直接引用
+// GET 请求（查看图片/视频）无需鉴权，外部 API 可直接引用
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $filename = reqGet('file');
     $path = Database::getUploadedImagePath($classId, $filename);
-    if ($path === null) uploadJsonError('图片不存在', 404);
+    if ($path === null) uploadJsonError('文件不存在', 404);
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    $types = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif'];
-    header('Content-Type: ' . $types[$ext]);
-    header('Content-Length: ' . filesize($path));
+    $types = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'mp4' => 'video/mp4'];
+    $mime = $types[$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
     header('Content-Disposition: inline; filename="' . $filename . '"');
     header('X-Content-Type-Options: nosniff');
+    header('Accept-Ranges: bytes');
     // 文件名含随机数，删除后 URL 即失效（不会命中旧缓存），可放心长缓存
     header('Cache-Control: private, max-age=2592000'); // 30 天
-    readfile($path);
+
+    $fileSize = filesize($path);
+    $start = 0;
+    $end = $fileSize - 1;
+    $status = 200;
+
+    // MP4 支持 Range 请求：播放器 seek/流式加载必需（图片/ GIF 也可用，无害）
+    if (isset($_SERVER['HTTP_RANGE'])) {
+        if (preg_match('/bytes=(\d*)-(\d*)/', $_SERVER['HTTP_RANGE'], $m)) {
+            $rStart = $m[1] === '' ? null : (int)$m[1];
+            $rEnd = $m[2] === '' ? null : (int)$m[2];
+            if ($rStart !== null && $rStart > 0 && $rStart >= $fileSize) {
+                header('HTTP/1.1 416 Range Not Satisfiable');
+                header('Content-Range: bytes */' . $fileSize);
+                exit;
+            }
+            $start = $rStart === null ? 0 : $rStart;
+            $end = $rEnd === null ? $fileSize - 1 : min($rEnd, $fileSize - 1);
+            if ($end < $start) $end = $start;
+            $status = 206;
+        }
+    }
+
+    header('HTTP/1.1 ' . $status . ' ' . ($status === 206 ? 'Partial Content' : 'OK'));
+    header('Content-Length: ' . ($end - $start + 1));
+    if ($status === 206) {
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $fileSize);
+    }
+
+    if ($start > 0) { /* fseek 在下面统一处理 */ }
+    $fh = fopen($path, 'rb');
+    if ($start > 0) fseek($fh, $start);
+    $bytesLeft = $end - $start + 1;
+    $chunk = 8192;
+    while ($bytesLeft > 0 && !feof($fh)) {
+        $read = min($chunk, $bytesLeft);
+        $buf = fread($fh, $read);
+        if ($buf === false || $buf === '') break;
+        echo $buf;
+        $bytesLeft -= strlen($buf);
+    }
+    fclose($fh);
     exit;
 }
 

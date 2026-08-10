@@ -527,6 +527,10 @@ class Database {
     const GIF_MAX_PIXEL_FRAMES = 80000000;
     /** @var int GIF 单边最大像素（逻辑屏/帧，防超大单帧） */
     const GIF_MAX_EDGE = 8000;
+    /** @var int MP4 单文件最大字节数 (15MB) */
+    const MP4_MAX_BYTES = 15728640;
+    /** @var int MP4 最大时长（秒） */
+    const MP4_MAX_SECONDS = 30;
 
     /**
      * 安全保存上传图片：校验 → GD 解码 → 等比缩放 → 保存 → 落盘校验。
@@ -549,6 +553,11 @@ class Database {
         // GIF 动图：走独立校验 + 原样存储分支（GD 只读首帧会丢动画）
         if ($info[2] === IMAGETYPE_GIF) {
             return self::saveGifImage($classId, $tmpPath);
+        }
+
+        // MP4 视频：纯 PHP 校验（时长/大小/结构）→ 原样存储
+        if (self::isMp4File($tmpPath)) {
+            return self::saveMp4Image($classId, $tmpPath);
         }
 
         if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
@@ -656,13 +665,63 @@ class Database {
     }
 
     /**
+     * 判断文件是否为 MP4（读前 12 字节：box size + 'ftyp'）。
+     * 独立于 getimagesize（MP4 不是图像，getimagesize 会失败）。
+     */
+    public static function isMp4File($tmpPath) {
+        $fh = @fopen($tmpPath, 'rb');
+        if (!$fh) return false;
+        $head = fread($fh, 12);
+        fclose($fh);
+        if (strlen($head) < 12) return false;
+        $boxType = substr($head, 4, 4);
+        return $boxType === 'ftyp';
+    }
+
+    /**
+     * 安全保存 MP4 视频：mp4_guard 校验（时长/大小/结构）→ 原样复制 → 落盘校验。
+     * 服务器无 ffmpeg，不转码，压缩由用户端导出时完成。
+     *
+     * @param string $classId 班级ID
+     * @param string $tmpPath 临时文件路径
+     * @return string 生成的文件名 (32位hex.mp4)
+     * @throws RuntimeException 校验或保存失败时抛出 (含可读消息)
+     */
+    public static function saveMp4Image($classId, $tmpPath) {
+        $classId = self::validateClassId($classId);
+
+        require_once __DIR__ . '/mp4_guard.php';
+        $guard = Mp4Guard::validate($tmpPath, self::MP4_MAX_SECONDS, self::MP4_MAX_BYTES);
+
+        $dir = self::getUploadsDirectory($classId);
+        if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
+            throw new RuntimeException('上传目录不可用');
+        }
+        $filename = bin2hex(random_bytes(16)) . '.mp4';
+        $path = $dir . DIRECTORY_SEPARATOR . $filename;
+
+        if (!@copy($tmpPath, $path)) {
+            @unlink($path);
+            throw new RuntimeException('视频保存失败');
+        }
+        @chmod($path, 0640);
+
+        // 落盘校验
+        if (!is_file($path) || !is_readable($path) || filesize($path) === 0) {
+            @unlink($path);
+            throw new RuntimeException('视频落盘校验失败');
+        }
+        return $filename;
+    }
+
+    /**
      * 获取班级上传图片的绝对路径 (带文件名校验，防路径穿越)。
      * @param string $classId 班级ID
      * @param string $filename 文件名 (32位hex + 扩展名)
      * @return string|null 绝对路径；文件名非法或文件不存在返回 null
      */
     public static function getUploadedImagePath($classId, $filename) {
-        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp|gif)\z/D', $filename)) return null;
+        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp|gif|mp4)\z/D', $filename)) return null;
         $path = self::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . $filename;
         return is_file($path) ? $path : null;
     }

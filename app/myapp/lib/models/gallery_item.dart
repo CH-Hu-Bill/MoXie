@@ -4,6 +4,7 @@ class GalleryItem {
   final String description;
   final String uploadedAt;
   final bool isGif;
+  final bool isVideo;
 
   GalleryItem({
     required this.id,
@@ -11,6 +12,7 @@ class GalleryItem {
     this.description = '',
     this.uploadedAt = '',
     this.isGif = false,
+    this.isVideo = false,
   });
 
   factory GalleryItem.fromJson(Map<String, dynamic> json) {
@@ -23,13 +25,15 @@ class GalleryItem {
       uploadedAt: json['uploaded_at'] ?? '',
       isGif:
           type == 'gif' || (imageUrl as String).toLowerCase().contains('.gif'),
+      isVideo:
+          type == 'mp4' || (imageUrl as String).toLowerCase().contains('.mp4'),
     );
   }
 
   Map<String, dynamic> toCacheJson() => {
         'id': id,
         'image_url': imageUrl,
-        'type': isGif ? 'gif' : 'static',
+        'type': isVideo ? 'mp4' : (isGif ? 'gif' : 'static'),
         'description': description,
         'uploaded_at': uploadedAt,
       };

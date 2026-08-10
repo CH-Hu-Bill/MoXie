@@ -784,10 +784,11 @@ switch ($action) {
         $result = [];
         foreach ($items as $item) {
             $imgFile = (string)($item['image'] ?? '');
+            $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
             $result[] = [
                 'id' => $item['id'] ?? '',
                 'image_url' => $base . '/upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
-                'type' => strtolower(pathinfo($imgFile, PATHINFO_EXTENSION)) === 'gif' ? 'gif' : 'static',
+                'type' => $ext === 'gif' ? 'gif' : ($ext === 'mp4' ? 'mp4' : 'static'),
                 'description' => (string)($item['description'] ?? ''),
                 'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
             ];
@@ -800,19 +801,25 @@ switch ($action) {
         if (($img['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('图片上传失败');
         $tmpName = $img['tmp_name'] ?? '';
         $isGif = false;
+        $isMp4 = false;
         if (is_string($tmpName) && is_file($tmpName)) {
             $info = @getimagesize($tmpName);
             $isGif = is_array($info) && ($info[2] ?? 0) === IMAGETYPE_GIF;
+            if (!$isGif) $isMp4 = Database::isMp4File($tmpName);
         }
-        $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
-        if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
+        if ($isMp4) {
+            if (($img['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 15MB', null, 413);
+        } else {
+            $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
+            if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
+        }
         $desc = sanitizePlainText(reqPost('description'));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
         try {
             $fname = Database::saveUploadedImage($classId, $img['tmp_name']);
         } catch (RuntimeException $e) {
             $msg = $e->getMessage();
-            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB')) ? 413 : 500);
+            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '秒')) ? 413 : 500);
         }
         $id = bin2hex(random_bytes(16));
         Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
