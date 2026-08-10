@@ -321,11 +321,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
           const SnackBar(content: Text('上传成功')),
         );
       }
+    } on ApiException catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(e.message.isNotEmpty ? e.message : '上传失败，请重试')),
+        );
+      }
     } catch (e) {
       if (mounted) Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('上传失败: $e')),
+          const SnackBar(content: Text('网络错误，请检查网络后重试')),
         );
       }
     }

@@ -148,9 +148,10 @@ require 'inc/header.php';
                     <span class="gif-badge mp4-badge" id="previewMp4Badge" style="display:none;">MP4</span>
                 </div>
             </div>
+            <div id="uploadHint" style="width:100%;text-align:center;font-size:13px;color:var(--red);min-height:18px;margin-bottom:4px;"></div>
             <label class="input upload-file-btn" for="galleryImage" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;min-width:220px;flex:1;">
                 <span id="uploadFileName">📎 选择图片或视频（JPG/PNG/WebP/GIF/MP4）</span>
-                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" style="display:none;" onchange="previewUpload()">
+                <input type="file" id="galleryImage" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" style="display:none;" onchange="previewUpload()">
             </label>
             <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="flex:2;min-width:250px;">
             <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
@@ -270,21 +271,59 @@ function previewUpload() {
     var mp4Badge = document.getElementById('previewMp4Badge');
     var nameEl = document.getElementById('uploadFileName');
     var clearBtn = document.getElementById('clearBtn');
+    var btn = document.getElementById('uploadBtn');
+    var hint = document.getElementById('uploadHint');
     if (!input.files || !input.files[0]) return;
     var file = input.files[0];
     if (nameEl) nameEl.textContent = file.name;
-    var isGif = /\.gif$/i.test(file.name);
-    var isMp4 = /\.mp4$/i.test(file.name);
+    var ext = (file.name.split('.').pop() || '').toLowerCase();
+    var isGif = ext === 'gif';
+    var isMp4 = ext === 'mp4' || ext === 'mov';
     if (gifBadge) gifBadge.style.display = isGif ? '' : 'none';
     if (mp4Badge) mp4Badge.style.display = isMp4 ? '' : 'none';
     img.style.display = 'none';
     video.style.display = 'none';
     if (video.src) { URL.revokeObjectURL(video.src); video.removeAttribute('src'); }
+    btn.disabled = false;
+    btn.textContent = '上传';
+    if (hint) hint.textContent = '';
+
+    // 格式预校验
+    var imgExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    if (!imgExts.includes(ext) && !isMp4) {
+        if (hint) hint.textContent = '⚠️ 不支持的文件格式：' + file.name + '（仅支持 JPG/PNG/WebP/GIF/MP4）';
+        btn.disabled = true;
+        btn.textContent = '无法上传';
+        wrap.style.display = 'flex';
+        if (clearBtn) clearBtn.style.display = '';
+        return;
+    }
+
+    // 大小预校验
+    var maxBytes = isMp4 ? 15728640 : (isGif ? 16777216 : 12582912);
+    var maxLabel = isMp4 ? '15MB' : (isGif ? '16MB' : '12MB');
+    if (file.size > maxBytes) {
+        if (hint) hint.textContent = '⚠️ 文件过大：' + (file.size / 1024 / 1024).toFixed(1) + 'MB（' + maxLabel + ' 以内）';
+        btn.disabled = true;
+        btn.textContent = '无法上传';
+        wrap.style.display = 'flex';
+        if (clearBtn) clearBtn.style.display = '';
+        return;
+    }
+
     if (isMp4) {
         video.src = URL.createObjectURL(file);
         video.style.display = '';
         video.muted = true;
         video.load();
+        // 视频时长预校验（≤30s）
+        video.onloadedmetadata = function() {
+            if (video.duration && video.duration > 30.5) {
+                if (hint) hint.textContent = '⚠️ 视频时长 ' + Math.round(video.duration) + ' 秒，不能超过 30 秒';
+                btn.disabled = true;
+                btn.textContent = '无法上传';
+            }
+        };
     } else {
         var reader = new FileReader();
         reader.onload = function(e) {
@@ -304,6 +343,8 @@ function clearUpload() {
     wrap.style.display = 'none';
     var img = document.getElementById('uploadPreview');
     var video = document.getElementById('uploadPreviewVideo');
+    var hint = document.getElementById('uploadHint');
+    if (hint) hint.textContent = '';
     img.style.display = 'none'; img.src = '';
     if (video.src) URL.revokeObjectURL(video.src);
     video.removeAttribute('src'); video.style.display = 'none';
@@ -316,24 +357,38 @@ function clearUpload() {
 async function uploadGallery() {
     var fileInput = document.getElementById('galleryImage');
     var desc = document.getElementById('galleryDesc').value.trim();
-    if (!fileInput.files || !fileInput.files[0]) { showToast('请选择图片'); return; }
+    if (!fileInput.files || !fileInput.files[0]) { showToast('请选择文件'); return; }
     if (!desc) { showToast('请填写描述'); return; }
+    var file = fileInput.files[0];
+    var ext = (file.name.split('.').pop() || '').toLowerCase();
+    var isMp4 = ext === 'mp4' || ext === 'mov';
+    var isGif = ext === 'gif';
+    var maxBytes = isMp4 ? 15728640 : (isGif ? 16777216 : 12582912);
+    if (file.size > maxBytes) { showToast((isMp4 ? '视频最大 15MB' : isGif ? 'GIF 最大 16MB' : '图片最大 12MB')); return; }
+    if (!isMp4 && !['jpg','jpeg','png','webp','gif'].includes(ext)) { showToast('不支持的文件格式'); return; }
     var btn = document.getElementById('uploadBtn'); btn.disabled = true; btn.textContent = '上传中…';
     var fd = new FormData();
     fd.append('action', 'save_gallery');
-    fd.append('image', fileInput.files[0]);
+    fd.append('image', file);
     fd.append('description', desc);
     fd.append('csrf_token', document.getElementById('csrfToken').value);
+    // 60s 超时，避免超大文件卡死无反馈
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, 60000);
     try {
-        var r = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd })).json();
+        var resp = await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd, signal: controller.signal });
+        var r = await resp.json();
         if (r.success) {
             showToast('上传成功');
             clearUpload();
             // 局部刷新网格（不整页跳转，保留滚动位置）
             var j = await (await fetch('gallery.php?id=' + classId + '&json=1', { cache: 'no-store' })).json();
             if (j.success) { galleryData = j.items || []; renderGallery(); }
-        } else { showToast(r.error || '上传失败'); }
-    } catch(e) { showToast('网络异常'); }
+        } else { showToast(r.error || '上传失败，请重试'); }
+    } catch(e) {
+        if (e.name === 'AbortError') { showToast('上传超时，请检查文件大小后重试'); }
+        else { showToast('网络错误：' + (e.message || '请重试')); }
+    } finally { clearTimeout(timer); }
     btn.disabled = false; btn.textContent = '上传';
 }
 

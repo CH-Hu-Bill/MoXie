@@ -545,19 +545,19 @@ class Database {
     public static function saveUploadedImage($classId, $tmpPath) {
         $classId = self::validateClassId($classId);
 
+        // MP4 视频：先于 getimagesize 判断（MP4 不是图像，getimagesize 会失败）
+        if (self::isMp4File($tmpPath)) {
+            return self::saveMp4Image($classId, $tmpPath);
+        }
+
         $info = @getimagesize($tmpPath);
         if (!$info) {
-            throw new RuntimeException('无法识别的图片文件');
+            throw new RuntimeException('无法识别该文件：仅支持 JPEG、PNG、WebP、GIF 图片或 MP4 视频');
         }
 
         // GIF 动图：走独立校验 + 原样存储分支（GD 只读首帧会丢动画）
         if ($info[2] === IMAGETYPE_GIF) {
             return self::saveGifImage($classId, $tmpPath);
-        }
-
-        // MP4 视频：纯 PHP 校验（时长/大小/结构）→ 原样存储
-        if (self::isMp4File($tmpPath)) {
-            return self::saveMp4Image($classId, $tmpPath);
         }
 
         if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
