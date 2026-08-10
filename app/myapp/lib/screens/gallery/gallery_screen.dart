@@ -848,20 +848,12 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
     _VideoThumbPool.activate(this);
     if (!mounted || _disposed) return;
 
-    // 缓存文件后 file 播放：命中缓存秒开，避免重复下载/网络抖动失败
-    File? cached;
+    // 优先网络流式播放（服务器支持 HEAD/Range，秒开、边下边播），
+    // 不整文件下载到本地再播（15MB 下载慢易失败导致一直转圈）
+    VideoPlayerController? c;
     try {
-      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
-    } catch (_) {
-      cached = null;
-    }
-    if (!mounted || _disposed) return;
-
-    final c = cached != null && cached.existsSync()
-        ? VideoPlayerController.file(cached)
-        : VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-    _controller = c;
-    try {
+      c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      _controller = c;
       await c.initialize();
       if (!mounted || _disposed) {
         c.dispose();
@@ -872,9 +864,40 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
       await c.setVolume(0);
       await c.play();
       setState(() {});
+      return;
     } catch (_) {
-      c.dispose();
+      // 网络播放失败：兜底用磁盘缓存文件
+      if (c != null) c.dispose();
       if (_controller == c) _controller = null;
+    }
+
+    File? cached;
+    try {
+      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
+    } catch (_) {
+      cached = null;
+    }
+    if (!mounted || _disposed) return;
+    if (cached == null || !cached.existsSync()) {
+      if (mounted) setState(() {});
+      return;
+    }
+    final cf = VideoPlayerController.file(cached);
+    _controller = cf;
+    try {
+      await cf.initialize();
+      if (!mounted || _disposed) {
+        cf.dispose();
+        if (_controller == cf) _controller = null;
+        return;
+      }
+      await cf.setLooping(true);
+      await cf.setVolume(0);
+      await cf.play();
+      setState(() {});
+    } catch (_) {
+      cf.dispose();
+      if (_controller == cf) _controller = null;
       if (mounted) setState(() {});
     }
   }
@@ -960,21 +983,12 @@ class _VideoViewerState extends State<_VideoViewer> {
   }
 
   Future<void> _init() async {
-    // 用 flutter_cache_manager 下载到本地缓存后 file 播放：
-    // 避免 networkUrl 每次重建 controller 重复下载、网络抖动失败
-    File? cached;
-    try {
-      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
-    } catch (_) {
-      cached = null;
-    }
+    // 大图：优先网络流式播放（秒开、边下边播），缓存文件作失败兜底
     if (!mounted) return;
-
-    final c = cached != null && cached.existsSync()
-        ? VideoPlayerController.file(cached)
-        : VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-    _controller = c;
+    VideoPlayerController? c;
     try {
+      c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      _controller = c;
       await c.initialize();
       if (!mounted) {
         c.dispose();
@@ -984,9 +998,38 @@ class _VideoViewerState extends State<_VideoViewer> {
       await c.setVolume(0);
       await c.play();
       setState(() {});
+      return;
     } catch (_) {
-      c.dispose();
+      if (c != null) c.dispose();
       if (_controller == c) _controller = null;
+    }
+
+    File? cached;
+    try {
+      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
+    } catch (_) {
+      cached = null;
+    }
+    if (!mounted) return;
+    if (cached == null || !cached.existsSync()) {
+      setState(() {});
+      return;
+    }
+    final cf = VideoPlayerController.file(cached);
+    _controller = cf;
+    try {
+      await cf.initialize();
+      if (!mounted) {
+        cf.dispose();
+        return;
+      }
+      await cf.setLooping(true);
+      await cf.setVolume(0);
+      await cf.play();
+      setState(() {});
+    } catch (_) {
+      cf.dispose();
+      if (_controller == cf) _controller = null;
       setState(() {});
     }
   }

@@ -218,7 +218,7 @@ function renderGalleryItem(item, fade) {
             wrap.appendChild(g);
         }
     } else if (existing) {
-        // 静态图：淡出旧图后替换
+        // 静态图：淡出旧图后替换，加载中显示占位
         existing.classList.add('swapping');
         setTimeout(function() {
             if (!fade) { wrap.innerHTML = ''; }
@@ -228,6 +228,12 @@ function renderGalleryItem(item, fade) {
             img.src = item.url;
             if (fade) img.classList.add('swapping');
             wrap.innerHTML = '';
+            // 加载占位（避免空白），图片 ready 后移除
+            var ld = document.createElement('div');
+            ld.className = 'd-gallery-loading';
+            ld.textContent = '加载中…';
+            wrap.appendChild(ld);
+            img.onload = function() { if (ld && ld.parentNode) ld.parentNode.removeChild(ld); };
             wrap.appendChild(img);
             void img.offsetWidth;
             img.classList.remove('swapping');
@@ -238,6 +244,11 @@ function renderGalleryItem(item, fade) {
         img2.id = 'dGalleryPic';
         img2.alt = item.description || '';
         img2.src = item.url;
+        var ld2 = document.createElement('div');
+        ld2.className = 'd-gallery-loading';
+        ld2.textContent = '加载中…';
+        wrap.appendChild(ld2);
+        img2.onload = function() { if (ld2 && ld2.parentNode) ld2.parentNode.removeChild(ld2); };
         wrap.appendChild(img2);
     }
     desc.textContent = item.description || '';
@@ -249,9 +260,11 @@ function nextGallery() {
     galleryIdx = (galleryIdx + 1) % gallery.length;
     renderGalleryItem(gallery[galleryIdx], !reducedMotion);
     saveGalleryState();
-    // 预加载再下一张
-    var next = gallery[(galleryIdx + 1) % gallery.length];
-    if (next) preloadImage(next);
+    // 预加载后两张（视频只预取 metadata 头，图片用 Image）——提前起拉，切换零等待
+    for (var i = 1; i <= 2; i++) {
+        var next = gallery[(galleryIdx + i) % gallery.length];
+        if (next) preloadImage(next);
+    }
 }
 
 function startGallery() {

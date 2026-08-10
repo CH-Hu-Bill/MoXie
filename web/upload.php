@@ -15,8 +15,8 @@ if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) uploadJsonError('
 $classes = Database::getClasses();
 if (!isset($classes[$classId])) uploadJsonError('班级不存在', 404);
 
-// GET 请求（查看图片/视频）无需鉴权，外部 API 可直接引用
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+// GET/HEAD 请求（查看图片/视频）无需鉴权，外部 API 可直接引用
+if ($_SERVER['REQUEST_METHOD'] === 'GET' || $_SERVER['REQUEST_METHOD'] === 'HEAD') {
     $filename = reqGet('file');
     $path = Database::getUploadedImagePath($classId, $filename);
     if ($path === null) uploadJsonError('文件不存在', 404);
@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     header('X-Content-Type-Options: nosniff');
     header('Accept-Ranges: bytes');
     // 文件名含随机数，删除后 URL 即失效（不会命中旧缓存），可放心长缓存
-    header('Cache-Control: private, max-age=2592000'); // 30 天
+    header('Cache-Control: private, max-age=31536000, immutable'); // 1 年 + immutable（文件名随机不可变）
 
     $fileSize = filesize($path);
     $start = 0;
@@ -40,14 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (preg_match('/bytes=(\d*)-(\d*)/', $_SERVER['HTTP_RANGE'], $m)) {
             $rStart = $m[1] === '' ? null : (int)$m[1];
             $rEnd = $m[2] === '' ? null : (int)$m[2];
-            if ($rStart !== null && $rStart > 0 && $rStart >= $fileSize) {
-                header('HTTP/1.1 416 Range Not Satisfiable');
-                header('Content-Range: bytes */' . $fileSize);
-                exit;
+            if ($rStart === null && $rEnd !== null) {
+                // 后缀范围 bytes=-N：取文件末尾 N 字节
+                $start = max(0, $fileSize - $rEnd);
+                $end = $fileSize - 1;
+            } else {
+                if ($rStart !== null && $rStart >= $fileSize) {
+                    header('HTTP/1.1 416 Range Not Satisfiable');
+                    header('Content-Range: bytes */' . $fileSize);
+                    exit;
+                }
+                $start = $rStart === null ? 0 : $rStart;
+                $end = $rEnd === null ? $fileSize - 1 : min($rEnd, $fileSize - 1);
+                if ($end < $start) $end = $start;
             }
-            $start = $rStart === null ? 0 : $rStart;
-            $end = $rEnd === null ? $fileSize - 1 : min($rEnd, $fileSize - 1);
-            if ($end < $start) $end = $start;
             $status = 206;
         }
     }
@@ -58,7 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         header('Content-Range: bytes ' . $start . '-' . $end . '/' . $fileSize);
     }
 
-    if ($start > 0) { /* fseek 在下面统一处理 */ }
+    // HEAD 请求：只返回头部，不输出 body（播放器探测用）
+    if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+        exit;
+    }
+
     $fh = fopen($path, 'rb');
     if ($start > 0) fseek($fh, $start);
     $bytesLeft = $end - $start + 1;
