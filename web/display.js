@@ -175,22 +175,36 @@ function renderGalleryItem(item, fade) {
     }
 
     if (isMp4) {
-        // 视频：静音循环自动播放（大屏场景无需声音开关）
+        // 视频：静音循环自动播放（大屏场景无声音开关）
         if (existing && existing.tagName === 'VIDEO') {
             existing.src = item.url;
-            existing.play();
+            try { existing.play(); } catch (e) {}
         } else {
             wrap.innerHTML = '';
             var v = document.createElement('video');
             v.id = 'dGalleryPic';
-            v.muted = true;
+            v.setAttribute('muted', '');
+            v.setAttribute('loop', '');
+            v.setAttribute('autoplay', '');
+            v.setAttribute('playsinline', '');
+            v.muted = true; // 确保 muted 属性，浏览器 autoplay 策略要求
             v.loop = true;
             v.autoplay = true;
             v.playsInline = true;
             v.preload = 'auto';
             v.src = item.url;
+            // 显示加载提示，避免视频缓冲时一片黑
+            var ld = document.createElement('div');
+            ld.className = 'd-gallery-loading';
+            ld.textContent = '视频加载中…';
+            wrap.appendChild(ld);
             wrap.appendChild(v);
-            v.play().catch(function() {});
+            var tryPlay = function() { try { v.play().catch(function() {}); } catch (e) {} };
+            v.addEventListener('loadeddata', tryPlay, { once: true });
+            v.addEventListener('canplay', tryPlay, { once: true });
+            // 兜底：muted 已设，直接尝试播放
+            setTimeout(tryPlay, 150);
+            v.addEventListener('playing', function() { if (ld && ld.parentNode) ld.parentNode.removeChild(ld); });
         }
     } else if (item.type === 'gif') {
         // GIF：直接更新 src，浏览器无缝继续/重播动画

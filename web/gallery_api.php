@@ -70,6 +70,7 @@ header('Cache-Control: no-store'); // 每次随机，禁止缓存
 if ($total === 0) {
     echo json_encode([
         'image_url' => null,
+        'type' => 'static',
         'description' => '',
         'uploaded_at' => '',
         'total' => 0,
@@ -104,9 +105,11 @@ Database::update('gallery_random.json', function($data) use ($pickKey, $gallery,
 });
 
 $pickedFile = (string)($picked['image'] ?? '');
+$pickedExt = strtolower(pathinfo($pickedFile, PATHINFO_EXTENSION));
 
 echo json_encode([
     'image_url' => $baseUrl . 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($pickedFile),
+    'type' => $pickedExt === 'gif' ? 'gif' : ($pickedExt === 'mp4' ? 'mp4' : 'static'),
     'description' => (string)($picked['description'] ?? ''),
     'uploaded_at' => (string)($picked['uploaded_at'] ?? ''),
     'total' => $total,

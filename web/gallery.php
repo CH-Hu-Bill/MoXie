@@ -172,9 +172,8 @@ require 'inc/header.php';
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;width:44px;height:44px;border-radius:50%;font-size:20px;">✕</button>
     <img id="lbImg" src="" alt="" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
     <video id="lbVideo" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline></video>
-    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);display:flex;align-items:center;gap:10px;justify-content:center;">
+    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
         <span id="lbDescText"></span>
-        <button id="lbSoundBtn" onclick="toggleLightboxSound()" style="display:none;background:none;border:2px solid var(--white);color:var(--white);border-radius:var(--wobbly-sm);padding:2px 10px;font-size:14px;cursor:pointer;">🔇</button>
     </div>
 </div>
 
@@ -222,7 +221,6 @@ function openLightbox(url, desc, isMp4) {
     var img = document.getElementById('lbImg');
     var video = document.getElementById('lbVideo');
     var descText = document.getElementById('lbDescText');
-    var soundBtn = document.getElementById('lbSoundBtn');
     descText.textContent = desc;
     if (isMp4) {
         img.style.display = 'none';
@@ -230,29 +228,11 @@ function openLightbox(url, desc, isMp4) {
         video.src = url;
         video.muted = true;
         video.play();
-        soundBtn.style.display = '';
-        soundBtn.textContent = '🔇';
-        soundBtn.dataset.sound = '0';
     } else {
         video.pause(); video.src = '';
         video.style.display = 'none';
         img.style.display = '';
         img.src = url;
-        soundBtn.style.display = 'none';
-    }
-}
-function toggleLightboxSound() {
-    var video = document.getElementById('lbVideo');
-    var btn = document.getElementById('lbSoundBtn');
-    if (video.muted) {
-        video.muted = false;
-        btn.textContent = '🔊';
-        btn.dataset.sound = '1';
-        video.play();
-    } else {
-        video.muted = true;
-        btn.textContent = '🔇';
-        btn.dataset.sound = '0';
     }
 }
 function closeLightbox() {

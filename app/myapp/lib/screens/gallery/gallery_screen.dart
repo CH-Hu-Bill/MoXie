@@ -782,7 +782,35 @@ class _UploadMenuTile extends StatelessWidget {
   }
 }
 
-/// MP4 网格缩略图：进入视口才初始化视频播放（静音循环），离开视口释放控制器。
+/// 全局视频解码器单例管理：同时只允许一个视频缩略图在解码播放，
+/// 避免网格里多个 ExoPlayer 全尺寸解码导致卡顿/突然暂停。
+class _VideoThumbPool {
+  static _VideoThumbnailState? _active;
+
+  static void activate(_VideoThumbnailState s) {
+    final prev = _active;
+    if (prev != null && prev != s && prev.mounted) {
+      prev._releaseNow();
+    }
+    _active = s;
+  }
+
+  static void release(_VideoThumbnailState s) {
+    if (_active == s) _active = null;
+  }
+
+  /// 释放当前活跃的缩略图（大图播放器打开时调用，避免双解码器竞争）
+  static void stopAll() {
+    final prev = _active;
+    _active = null;
+    if (prev != null && prev.mounted) {
+      prev._releaseNow();
+    }
+  }
+}
+
+/// MP4 网格缩略图：进入视口才初始化视频播放（静音循环），离开视口彻底释放解码器。
+/// 通过全局单例保证同时只有一个视频在解码，避免多实例竞争导致卡顿/失败。
 class _VideoThumbnail extends StatefulWidget {
   final String videoUrl;
   const _VideoThumbnail({required this.videoUrl});
@@ -794,21 +822,50 @@ class _VideoThumbnail extends StatefulWidget {
 class _VideoThumbnailState extends State<_VideoThumbnail> {
   bool _visible = false;
   VideoPlayerController? _controller;
+  bool _disposed = false;
 
   @override
   void dispose() {
+    _disposed = true;
+    _VideoThumbPool.release(this);
     _controller?.dispose();
+    _controller = null;
     super.dispose();
+  }
+
+  /// 立即释放控制器（被单例停掉时调用）
+  void _releaseNow() {
+    if (!mounted || _disposed) return;
+    final c = _controller;
+    _controller = null;
+    c?.dispose();
+    if (mounted) setState(() {});
   }
 
   Future<void> _initAndPlay() async {
     if (_controller != null) return;
-    final c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    // 全局单例：停掉正在播放的其他缩略图
+    _VideoThumbPool.activate(this);
+    if (!mounted || _disposed) return;
+
+    // 缓存文件后 file 播放：命中缓存秒开，避免重复下载/网络抖动失败
+    File? cached;
+    try {
+      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
+    } catch (_) {
+      cached = null;
+    }
+    if (!mounted || _disposed) return;
+
+    final c = cached != null && cached.existsSync()
+        ? VideoPlayerController.file(cached)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
     _controller = c;
     try {
       await c.initialize();
-      if (!mounted) {
+      if (!mounted || _disposed) {
         c.dispose();
+        if (_controller == c) _controller = null;
         return;
       }
       await c.setLooping(true);
@@ -818,6 +875,7 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
     } catch (_) {
       c.dispose();
       if (_controller == c) _controller = null;
+      if (mounted) setState(() {});
     }
   }
 
@@ -832,7 +890,9 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
           if (visible) {
             _initAndPlay();
           } else {
-            _controller?.pause();
+            // 离开视口：彻底释放解码器，避免资源堆积
+            _releaseNow();
+            _VideoThumbPool.release(this);
           }
         }
       },
@@ -858,7 +918,20 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
           : Container(
               color: AppColors.oldPaper,
               child: const Center(
-                child: Icon(Icons.videocam, size: 36, color: AppColors.muted),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          color: AppColors.red, strokeWidth: 2),
+                    ),
+                    SizedBox(height: 6),
+                    Text('加载中…',
+                        style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                  ],
+                ),
               ),
             ),
     );
@@ -881,11 +954,25 @@ class _VideoViewerState extends State<_VideoViewer> {
   @override
   void initState() {
     super.initState();
+    // 大图播放时停掉缩略图的解码器，避免双实例竞争
+    _VideoThumbPool.stopAll();
     _init();
   }
 
   Future<void> _init() async {
-    final c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    // 用 flutter_cache_manager 下载到本地缓存后 file 播放：
+    // 避免 networkUrl 每次重建 controller 重复下载、网络抖动失败
+    File? cached;
+    try {
+      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
+    } catch (_) {
+      cached = null;
+    }
+    if (!mounted) return;
+
+    final c = cached != null && cached.existsSync()
+        ? VideoPlayerController.file(cached)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
     _controller = c;
     try {
       await c.initialize();
@@ -922,58 +1009,78 @@ class _VideoViewerState extends State<_VideoViewer> {
   @override
   Widget build(BuildContext context) {
     final c = _controller;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border, width: 3),
-            borderRadius: AppTheme.wobblyRadius,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: c != null && c.value.isInitialized
-              ? AspectRatio(
+    final initialized = c != null && c.value.isInitialized;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border, width: 3),
+        borderRadius: AppTheme.wobblyRadius,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: initialized
+          ? Stack(
+              alignment: Alignment.center,
+              children: [
+                AspectRatio(
                   aspectRatio: c.value.aspectRatio,
                   child: VideoPlayer(c),
-                )
-              : const AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Center(
-                    child: CircularProgressIndicator(color: Colors.white),
+                ),
+                // 底部悬浮控制条：播放/暂停 + 声音开关（点击事件不会被视频吞掉）
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: Colors.black45,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            if (c.value.isPlaying) {
+                              c.pause();
+                            } else {
+                              c.play();
+                            }
+                            setState(() {});
+                          },
+                          icon: Icon(
+                            c.value.isPlaying
+                                ? Icons.pause_circle
+                                : Icons.play_circle,
+                            color: Colors.white,
+                            size: 36,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _toggleSound,
+                          icon: Icon(
+                            _soundOn ? Icons.volume_up : Icons.volume_off,
+                            color: Colors.white,
+                            size: 30,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-        ),
-        const SizedBox(height: 8),
-        if (c != null && c.value.isInitialized)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: () {
-                  if (c.value.isPlaying) {
-                    c.pause();
-                  } else {
-                    c.play();
-                  }
-                  setState(() {});
-                },
-                icon: Icon(
-                  c.value.isPlaying ? Icons.pause_circle : Icons.play_circle,
-                  color: Colors.white,
-                  size: 34,
+              ],
+            )
+          : const AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 10),
+                    Text('视频加载中…',
+                        style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  ],
                 ),
               ),
-              IconButton(
-                onPressed: _toggleSound,
-                icon: Icon(
-                  _soundOn ? Icons.volume_up : Icons.volume_off,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-            ],
-          ),
-      ],
+            ),
     );
   }
 }

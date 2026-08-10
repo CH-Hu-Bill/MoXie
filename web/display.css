@@ -324,6 +324,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   background: var(--white);
   border: 2px solid var(--pencil);
   border-radius: var(--wobbly);
@@ -342,6 +343,22 @@ body {
   object-fit: contain;
   border-radius: var(--wobbly-sm);
   transition: opacity 0.45s ease;
+}
+.d-gallery-img video {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--wobbly-sm);
+}
+.d-gallery-loading {
+  position: absolute;
+  color: var(--pencil);
+  font-size: 16px;
+  font-family: var(--font-body);
+  opacity: 0.7;
+  text-align: center;
 }
 .d-gallery-img img.swapping { opacity: 0; }
 .d-gallery-desc {

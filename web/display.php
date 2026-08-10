@@ -204,7 +204,7 @@ $csrfToken = csrfToken();
 $pageTitle = '展示大屏';
 require 'inc/head.php';
 ?>
-<link rel="stylesheet" href="display.css?v=2">
+<link rel="stylesheet" href="display.css?v=3">
 </head>
 <body>
 <script>
@@ -283,7 +283,11 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
       <div class="d-gallery" id="dGallery">
         <div class="d-gallery-img" id="dGalleryImg">
           <?php if (!empty($gallery)): ?>
-            <img id="dGalleryPic" alt="" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>">
+            <?php if ($gallery[0]['type'] === 'mp4'): ?>
+              <video id="dGalleryPic" muted loop autoplay playsinline preload="metadata" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>"></video>
+            <?php else: ?>
+              <img id="dGalleryPic" alt="" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>">
+            <?php endif; ?>
           <?php else: ?>
             <div class="d-placeholder d-placeholder-sm">暂无图集</div>
           <?php endif; ?>
@@ -326,6 +330,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=7"></script>
-<script src="display.js?v=5"></script>
+<script src="display.js?v=6"></script>
 </body>
 </html>
