@@ -194,5 +194,5 @@ flutter build apk --release
 4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
 5. **画廊上传**：已实现本地校验（JPEG/PNG/WebP + 12MB 上限）+ 服务器端二次校验
 6. **同步刷新**：三屏均已实现 30s 自动刷新 + 手动下拉刷新，编辑/滚动中不打断
-7. **媒体缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 flutter_cache_manager 磁盘缓存 + visibility_detector 视口检测（进入视口才播放、离开释放资源）；MP4 视频用 video_player 流式播放（不做磁盘缓存，缩略图进视口静音循环、大图可播放/声音开关）；单词/史记数据使用 SharedPreferences TTL 缓存（30s）
+7. **媒体缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 flutter_cache_manager 磁盘缓存 + visibility_detector 视口检测（进入视口才播放、离开释放资源）；MP4 视频**网络流式播放优先**（服务器 HEAD/Range 支持，秒开边下边播），磁盘缓存作失败兜底，网格缩略图全局单例仅一个解码器（避免多实例卡顿）、离开视口彻底释放，大图播放/声音开关；单词/史记数据使用 SharedPreferences TTL 缓存（30s）
 8. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`

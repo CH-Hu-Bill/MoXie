@@ -410,7 +410,7 @@ data/
 
 - **公告**：仅 `mode=banner`（顶部跑马灯），超级霸屏通告不进壁纸页。跑马灯**复用顶部栏横幅的实现**（双副本 `translateX(-50%)` 无缝循环 + 左右 `mask` 渐隐遮罩），文本不溢出时居中显示
 - **单词**：取今天最早创建的 `status=pending` 任务（按 `created_at` 排序取第一个），展示该任务的全部单词（上限 20）；当天有多个任务时只展示最早那个；无任务显示占位。**字号自适应**：按内容区宽高 + 单词数（75 分位长度）动态算列数与字号（16~64px），个别超长单词单独缩小该卡片并滚动展示，保证后排可读
-- **图集**：仅班级图集 `gallery.json`，15s 轮播 + 预加载下一张
+- **图集**：仅班级图集 `gallery.json`，15s 轮播 + **预加载后两张**（视频用 `preload=auto` muted 真缓冲数据，图片用 Image），切换时占位"加载中…"避免黑屏
 - **可拖拽竖线**：调整可用区域左边界（存每台设备 `localStorage['display_left_pct']`），默认 33.3%
 - **底部避让**：后台「大屏壁纸设置」配置 `display_bottom_margin`（px），防止被任务栏遮挡
 
@@ -456,7 +456,7 @@ data/
 - **内联 JSON XSS 防护**：所有输出到 `<script>` 内联块的数据（班级名 / 单词 / 释义 / 图集描述 / 公告）统一用 `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)`，杜绝 `</script>` 逃逸注入。
 - **HTML 属性注入防护**：`speak()` 发音按钮等 `onclick` 内联调用均经 `htmlspecialchars(json_encode(..., JSON_HEX_*), ENT_QUOTES)` 双重转义，用户输入含引号无法逃逸属性。
 - **CSV 公式注入防护**：导出 CSV（单词库 / 任务 / 错题本）时，以 `=` `+` `-` `@` 开头的单元格前缀 `'`，防止 Excel 打开时执行公式。
-- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + 单帧像素×帧数 ≤8000 万 + 单边 ≤8000px + 单文件 ≤16MB），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，时长 ≤30s + 文件 ≤15MB + 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4` 且支持 HTTP Range（206 Partial Content，视频 seek 必需），路径穿越防护沿用 32 位 hex 文件名校验。
+- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + 单帧像素×帧数 ≤8000 万 + 单边 ≤8000px + 单文件 ≤16MB），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，时长 ≤30s + 文件 ≤15MB + 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4`，**支持 HTTP HEAD 与 Range（206 Partial Content，含后缀 `bytes=-N`）**，视频 seek/流式播放必需，Cache-Control 用 `immutable` 强缓存（文件名随机不可变）；路径穿越防护沿用 32 位 hex 文件名校验。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。
 - **数据保护**：`data/` 目录禁止 Web 直链（`.htaccess`）。**生产环境必须额外配置 Web 服务器规则**，拦截 `inc/`、`.json`、隐藏文件等，详见 [部署安全加固](#部署安全加固)。

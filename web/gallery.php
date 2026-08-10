@@ -194,13 +194,13 @@ function renderGallery() {
         var isMp4 = /\.mp4$/i.test(item.image);
         var media;
         if (isMp4) {
-            media = '<video src="' + url + '" muted loop autoplay playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;pointer-events:none;background:#eee;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;"></video>';
+            media = '<video src="' + url + '" muted loop autoplay playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;pointer-events:none;background:#eee;position:relative;z-index:1;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;" onplaying="hideGalleryPlaceholder(this)"></video>';
         } else {
-            media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;" onload="this.style.opacity=1;">';
+            media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)">';
         }
         return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\', ' + isMp4 + ')" style="overflow:hidden;cursor:pointer;padding:0;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
-            + '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;">📷</div>'
+            + '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;display:flex;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;">📷</div>'
             + media
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
             + (isMp4 ? '<span class="gif-badge mp4-badge">MP4</span>' : '')
@@ -213,6 +213,14 @@ function renderGallery() {
             + '</div></div></div>';
     }).join('');
 }
+function hideGalleryPlaceholder(el) {
+    if (!el) return;
+    var p = el.parentNode;
+    if (!p) return;
+    var ph = p.querySelector('.gallery-placeholder');
+    if (ph) ph.style.display = 'none';
+}
+
 function formatDate(s) {
     if (!s) return '';
     return s.length >= 16 ? s.substring(0, 16).replace(' ', ' ') : s.substring(0, 10);

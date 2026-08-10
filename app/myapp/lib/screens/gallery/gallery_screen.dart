@@ -809,6 +809,37 @@ class _VideoThumbPool {
   }
 }
 
+/// 视频缩略图表面：cover 适配，尺寸为 0 时兜底用 AspectRatio（避免 SizedBox 0x0 黑屏）
+class _VideoThumbSurface extends StatelessWidget {
+  final VideoPlayerController controller;
+  const _VideoThumbSurface({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = controller.value.size;
+    if (size.width > 0 && size.height > 0) {
+      return FittedBox(
+        fit: BoxFit.cover,
+        clipBehavior: Clip.hardEdge,
+        child: SizedBox(
+          width: size.width,
+          height: size.height,
+          child: VideoPlayer(controller),
+        ),
+      );
+    }
+    // 尺寸未知：用宽高比兜底，保证有画面
+    return Center(
+      child: AspectRatio(
+        aspectRatio: controller.value.aspectRatio > 0
+            ? controller.value.aspectRatio
+            : 16 / 9,
+        child: VideoPlayer(controller),
+      ),
+    );
+  }
+}
+
 /// MP4 网格缩略图：进入视口才初始化视频播放（静音循环），离开视口彻底释放解码器。
 /// 通过全局单例保证同时只有一个视频在解码，避免多实例竞争导致卡顿/失败。
 class _VideoThumbnail extends StatefulWidget {
@@ -923,15 +954,7 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
           ? Stack(
               fit: StackFit.expand,
               children: [
-                FittedBox(
-                  fit: BoxFit.cover,
-                  clipBehavior: Clip.hardEdge,
-                  child: SizedBox(
-                    width: _controller!.value.size.width,
-                    height: _controller!.value.size.height,
-                    child: VideoPlayer(_controller!),
-                  ),
-                ),
+                _VideoThumbSurface(controller: _controller!),
                 const Center(
                   child: Icon(Icons.play_circle_outline,
                       color: Colors.white70, size: 40),

@@ -107,14 +107,19 @@ function preloadImage(item) {
     var type = typeof item === 'object' ? (item.type || 'static') : 'static';
     if (gallerySizeCache[url]) return; // 已探知尺寸，跳过重复预载
     if (type === 'mp4') {
-        // 视频预加载：metadata 就够（尺寸 + 首帧），避免全量下载 15MB 视频
+        // 视频预加载：preload=auto + muted 让浏览器真正缓冲数据（metadata 只取头部，
+        // 切换时仍要重新拉流导致黑屏）。muted 才能绕过自动播放限制静默预载。
         var pv = document.createElement('video');
-        pv.preload = 'metadata';
+        pv.preload = 'auto';
+        pv.muted = true;
+        pv.setAttribute('muted', '');
+        pv.playsInline = true;
         pv.onloadedmetadata = function() {
             var w = pv.videoWidth, h = pv.videoHeight;
             if (w && h) gallerySizeCache[url] = { w: w, h: h };
         };
         pv.src = url;
+        try { pv.load(); } catch (e) {}
         return;
     }
     var img = new Image();
@@ -178,6 +183,14 @@ function renderGalleryItem(item, fade) {
         // 视频：静音循环自动播放（大屏场景无声音开关）
         if (existing && existing.tagName === 'VIDEO') {
             existing.src = item.url;
+            // 复用元素时也补加载占位
+            var ldOld = document.createElement('div');
+            ldOld.className = 'd-gallery-loading';
+            ldOld.textContent = '视频加载中…';
+            wrap.appendChild(ldOld);
+            var rem = function() { if (ldOld && ldOld.parentNode) ldOld.parentNode.removeChild(ldOld); };
+            existing.addEventListener('playing', rem, { once: true });
+            existing.addEventListener('loadeddata', rem, { once: true });
             try { existing.play(); } catch (e) {}
         } else {
             wrap.innerHTML = '';
