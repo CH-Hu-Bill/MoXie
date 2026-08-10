@@ -31,7 +31,7 @@
 | **默写记录** (`history.php`) | 历史任务列表（按日期倒序）、单词详情、一键重新创建任务 |
 | **周末大礼包** | 周末从本周已默写单词中随机抽 20 个组成加练任务，周一随机决定本周是否开启 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；支持 PDF / HTML / 长图导出 |
-| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片上传 + 画廊展示；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
+| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片上传 + 画廊展示；支持 GIF 动图（炸弹防护 + 原样存储）；支持修改描述；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好 |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数、图集公开 API 密钥保护、展示大屏 token，均按班级隔离存储 |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
@@ -284,7 +284,7 @@ Web 端日历的"今天"以**浏览器本机时钟**计算（与 APP 端手机�
 | `history_book.php` | 班级史记：月历 + Quill 编辑器 + 导出 | `?id={classId}` |
 | `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词 + 图集轮播） | `?id={classId}` 指定班级；`?token={token}` 免口令直达（壁纸场景）；`?json=1` 轮询数据接口 |
 | `app_api.php` `get_announcements` | 获取当前有效公告（按班级 + 平台 + 时间段筛选） | POST `class_id` `platform` |
-| `gallery.php` | 图集：上传 / 删除 / 画廊 | `?id={classId}` |
+| `gallery.php` | 图集：上传 / 编辑描述 / 删除 / 画廊（支持 GIF 动图） | `?id={classId}` |
 | `gallery_api.php` | 图集公开 API | `?class_id={id}` `?apikey=`（每次返回一张随机图片） |
 | `settings.php` | 听写 / 朗读 / 跟读参数、图集 API 密钥、展示大屏 token | `?id={classId}` |
 | `admin.php` | 管理后台（独立 Session，30 分钟有效） | — |
@@ -356,7 +356,7 @@ data/
 | 错题 / 收藏 | `mark_wrong` `unmark_wrong` `get_wrong_words` `toggle_favorite` `get_favorites` |
 | 史记 | `get_class_history` `get_personal_history` `save_personal_history` `export_personal_history` |
 | 公告 | `get_announcements` |
-| 图集 | `get_gallery` `save_gallery` `delete_gallery` `upload_image` |
+| 图集 | `get_gallery` `save_gallery` `update_gallery` `delete_gallery` `upload_image` |
 | 授权 | `set_global_consent` `set_consent` `get_consent` |
 | 版本 | `check_version` |
 | 导出 | `export_words_pdf` `export_task_csv` `export_task_text` `export_wrong_csv` `export_wrong_text` |
@@ -456,7 +456,7 @@ data/
 - **内联 JSON XSS 防护**：所有输出到 `<script>` 内联块的数据（班级名 / 单词 / 释义 / 图集描述 / 公告）统一用 `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)`，杜绝 `</script>` 逃逸注入。
 - **HTML 属性注入防护**：`speak()` 发音按钮等 `onclick` 内联调用均经 `htmlspecialchars(json_encode(..., JSON_HEX_*), ENT_QUOTES)` 双重转义，用户输入含引号无法逃逸属性。
 - **CSV 公式注入防护**：导出 CSV（单词库 / 任务 / 错题本）时，以 `=` `+` `-` `@` 开头的单元格前缀 `'`，防止 Excel 打开时执行公式。
-- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px。
+- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + 单帧像素×帧数 ≤8000 万 + 单边 ≤8000px + 单文件 ≤16MB），校验通过后原样存储保留动画；图集图片输出 MIME 白名单含 `image/gif`，路径穿越防护沿用 32 位 hex 文件名校验。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。
 - **数据保护**：`data/` 目录禁止 Web 直链（`.htaccess`）。**生产环境必须额外配置 Web 服务器规则**，拦截 `inc/`、`.json`、隐藏文件等，详见 [部署安全加固](#部署安全加固)。

@@ -519,6 +519,14 @@ class Database {
     const UPLOAD_MAX_PIXELS = 25000000;
     /** @var int 缩放后最长边像素 */
     const UPLOAD_MAX_EDGE = 1600;
+    /** @var int GIF 单文件最大字节数 (16MB) */
+    const GIF_MAX_BYTES = 16777216;
+    /** @var int GIF 最大帧数 */
+    const GIF_MAX_FRAMES = 300;
+    /** @var int GIF 单帧像素 × 帧数 上限 (8000 万) */
+    const GIF_MAX_PIXEL_FRAMES = 80000000;
+    /** @var int GIF 单边最大像素（逻辑屏/帧，防超大单帧） */
+    const GIF_MAX_EDGE = 8000;
 
     /**
      * 安全保存上传图片：校验 → GD 解码 → 等比缩放 → 保存 → 落盘校验。
@@ -533,13 +541,22 @@ class Database {
     public static function saveUploadedImage($classId, $tmpPath) {
         $classId = self::validateClassId($classId);
 
+        $info = @getimagesize($tmpPath);
+        if (!$info) {
+            throw new RuntimeException('无法识别的图片文件');
+        }
+
+        // GIF 动图：走独立校验 + 原样存储分支（GD 只读首帧会丢动画）
+        if ($info[2] === IMAGETYPE_GIF) {
+            return self::saveGifImage($classId, $tmpPath);
+        }
+
         if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
             throw new RuntimeException('服务器未启用 GD，无法处理图片');
         }
-        $info = @getimagesize($tmpPath);
         $allowed = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
-        if (!$info || !isset($allowed[$info[2]])) {
-            throw new RuntimeException('仅支持 JPEG、PNG 或 WebP 图片');
+        if (!isset($allowed[$info[2]])) {
+            throw new RuntimeException('仅支持 JPEG、PNG、WebP 或 GIF 图片');
         }
         $width = (int)$info[0];
         $height = (int)$info[1];
@@ -597,13 +614,55 @@ class Database {
     }
 
     /**
+     * 安全保存 GIF 动图：GIF 炸弹校验 → 原样复制 → 落盘校验。
+     * GIF 走独立路径（不经 GD 重采样），以保证多帧动画完整保留。
+     *
+     * @param string $classId 班级ID
+     * @param string $tmpPath 临时文件路径
+     * @return string 生成的文件名 (32位hex.gif)
+     * @throws RuntimeException 校验或保存失败时抛出 (含可读消息)
+     */
+    public static function saveGifImage($classId, $tmpPath) {
+        $classId = self::validateClassId($classId);
+
+        // 文件大小限制
+        $size = @filesize($tmpPath);
+        if ($size === false || $size <= 0) throw new RuntimeException('无法读取上传文件');
+        if ($size > self::GIF_MAX_BYTES) throw new RuntimeException('GIF 动图最大 16MB');
+
+        // GIF 炸弹校验（帧数 / 像素×帧 / 结构合法性）
+        require_once __DIR__ . '/gif_guard.php';
+        $guard = GifGuard::validate($tmpPath, self::GIF_MAX_FRAMES, self::GIF_MAX_PIXEL_FRAMES);
+
+        $dir = self::getUploadsDirectory($classId);
+        if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
+            throw new RuntimeException('上传目录不可用');
+        }
+        $filename = bin2hex(random_bytes(16)) . '.gif';
+        $path = $dir . DIRECTORY_SEPARATOR . $filename;
+
+        if (!@copy($tmpPath, $path)) {
+            @unlink($path);
+            throw new RuntimeException('GIF 保存失败');
+        }
+        @chmod($path, 0640);
+
+        // 落盘校验
+        if (!is_file($path) || !is_readable($path) || filesize($path) === 0) {
+            @unlink($path);
+            throw new RuntimeException('GIF 落盘校验失败');
+        }
+        return $filename;
+    }
+
+    /**
      * 获取班级上传图片的绝对路径 (带文件名校验，防路径穿越)。
      * @param string $classId 班级ID
      * @param string $filename 文件名 (32位hex + 扩展名)
      * @return string|null 绝对路径；文件名非法或文件不存在返回 null
      */
     public static function getUploadedImagePath($classId, $filename) {
-        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp)\z/D', $filename)) return null;
+        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp|gif)\z/D', $filename)) return null;
         $path = self::getUploadsDirectory($classId) . DIRECTORY_SEPARATOR . $filename;
         return is_file($path) ? $path : null;
     }

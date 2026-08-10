@@ -53,9 +53,9 @@ class ApiService {
     }
 
     final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 30),
-      onTimeout: () => throw ApiException('请求超时，请检查网络连接'),
-    );
+          const Duration(seconds: 30),
+          onTimeout: () => throw ApiException('请求超时，请检查网络连接'),
+        );
     final response = await http.Response.fromStream(streamedResponse);
     return _handleResponse(response);
   }
@@ -81,9 +81,9 @@ class ApiService {
         filename: filename));
 
     final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 60),
-      onTimeout: () => throw ApiException('上传超时，请重试'),
-    );
+          const Duration(seconds: 60),
+          onTimeout: () => throw ApiException('上传超时，请重试'),
+        );
     final response = await http.Response.fromStream(streamedResponse);
     return _handleResponse(response);
   }
@@ -100,7 +100,9 @@ class ApiService {
     }
     if (json['success'] != true) {
       final code = json['code']?.toString();
-      if (code == 'CLASS_AUTH_EXPIRED' || code == 'CLASS_NOT_BOUND' || code == 'CLASS_DELETED') {
+      if (code == 'CLASS_AUTH_EXPIRED' ||
+          code == 'CLASS_NOT_BOUND' ||
+          code == 'CLASS_DELETED') {
         onClassAuthExpired?.call();
       }
       throw ApiException(
@@ -376,8 +378,8 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> uploadImage(String classId, File file,
-      String filename) {
+  Future<Map<String, dynamic>> uploadImage(
+      String classId, File file, String filename) {
     return _postWithFile(
       'upload_image',
       {'class_id': classId},
@@ -416,6 +418,15 @@ class ApiService {
     return _post('delete_gallery', fields: {
       'class_id': classId,
       'id': id,
+    });
+  }
+
+  Future<void> updateGalleryDescription(
+      String classId, String id, String description) {
+    return _post('update_gallery', fields: {
+      'class_id': classId,
+      'id': id,
+      'description': description,
     });
   }
 }

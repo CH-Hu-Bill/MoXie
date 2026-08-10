@@ -783,7 +783,14 @@ switch ($action) {
         $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '');
         $result = [];
         foreach ($items as $item) {
-            $result[] = ['id' => $item['id'] ?? '', 'image_url' => $base . '/upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($item['image'] ?? ''), 'description' => (string)($item['description'] ?? ''), 'uploaded_at' => (string)($item['uploaded_at'] ?? '')];
+            $imgFile = (string)($item['image'] ?? '');
+            $result[] = [
+                'id' => $item['id'] ?? '',
+                'image_url' => $base . '/upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
+                'type' => strtolower(pathinfo($imgFile, PATHINFO_EXTENSION)) === 'gif' ? 'gif' : 'static',
+                'description' => (string)($item['description'] ?? ''),
+                'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
+            ];
         }
         appJson(['success' => true, 'data' => ['items' => $result, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
 
@@ -791,7 +798,14 @@ switch ($action) {
         if (!isset($_FILES['image']) || !is_array($_FILES['image'])) appError('请选择图片');
         $img = $_FILES['image'];
         if (($img['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('图片上传失败');
-        if (($img['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) appError('图片最大 12MB', null, 413);
+        $tmpName = $img['tmp_name'] ?? '';
+        $isGif = false;
+        if (is_string($tmpName) && is_file($tmpName)) {
+            $info = @getimagesize($tmpName);
+            $isGif = is_array($info) && ($info[2] ?? 0) === IMAGETYPE_GIF;
+        }
+        $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
+        if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
         $desc = sanitizePlainText(reqPost('description'));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
         try {
@@ -820,6 +834,22 @@ switch ($action) {
             return null;
         });
         appJson(['success' => true]);
+
+    case 'update_gallery':
+        $gid = appStrictId(reqPost('id'), 'id');
+        $desc = sanitizePlainText(reqPost('description'));
+        if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
+        $updated = false;
+        Database::updateClassData($classId, 'gallery', function($latest) use ($gid, $desc, &$updated) {
+            if (!is_array($latest)) return null;
+            foreach ($latest as $i => $item) if (($item['id'] ?? '') === $gid) {
+                $latest[$i]['description'] = $desc;
+                $updated = true;
+                return $latest;
+            }
+            return null;
+        });
+        appJson(['success' => $updated]);
 
 
     default:

@@ -97,11 +97,21 @@ function updateMarquee(ann) {
 }
 
 /* =========================================================
-   图集轮播（预加载下一张 + 淡入）
+   图集轮播（预加载下一张 + 淡入 + GIF 动图无缝轮播）
    ========================================================= */
-function preloadImage(url) {
+function preloadImage(item) {
     var img = new Image();
-    img.src = url;
+    img.src = typeof item === 'string' ? item : item.url;
+}
+
+/* 按图片自然尺寸设置容器适配比例：
+   宽幅/竖幅等极端比例也完整 contain 显示，不被裁切。 */
+function fitGalleryContainer(wrap, width, height) {
+    if (!wrap || !width || !height) return;
+    var ratio = width / height;
+    // 比例钳制到 [1/2.2, 2.2]：避免极端图把容器撑得过大/过小
+    var clamped = Math.min(2.2, Math.max(1 / 2.2, ratio));
+    wrap.style.aspectRatio = String(clamped);
 }
 
 function renderGalleryItem(item, fade) {
@@ -110,25 +120,52 @@ function renderGalleryItem(item, fade) {
     if (!wrap || !desc) return;
     if (!item) {
         wrap.innerHTML = '<div class="d-placeholder d-placeholder-sm">暂无图集</div>';
+        wrap.style.aspectRatio = '';
         desc.textContent = '';
         return;
     }
     var existing = document.getElementById('dGalleryPic');
-    if (existing) existing.classList.add('swapping');
-    setTimeout(function() {
-        if (!fade) { wrap.innerHTML = ''; }
-        var img = document.createElement('img');
-        img.id = 'dGalleryPic';
-        img.alt = item.description || '';
-        img.src = item.url;
-        if (fade) img.classList.add('swapping');
+
+    // 探知自然尺寸以适配容器
+    var probe = new Image();
+    probe.onload = function() { fitGalleryContainer(wrap, probe.naturalWidth, probe.naturalHeight); };
+    probe.src = item.url;
+
+    var isGif = item.type === 'gif';
+    if (isGif) {
+        // GIF：直接更新 src，浏览器无缝继续/重播动画，避免闪烁重启
+        if (existing) { existing.src = item.url; existing.alt = item.description || ''; }
+        else {
+            wrap.innerHTML = '';
+            var g = document.createElement('img');
+            g.id = 'dGalleryPic';
+            g.alt = item.description || '';
+            g.src = item.url;
+            wrap.appendChild(g);
+        }
+    } else if (existing) {
+        // 静态图：淡出旧图后替换
+        existing.classList.add('swapping');
+        setTimeout(function() {
+            if (!fade) { wrap.innerHTML = ''; }
+            var img = document.createElement('img');
+            img.id = 'dGalleryPic';
+            img.alt = item.description || '';
+            img.src = item.url;
+            if (fade) img.classList.add('swapping');
+            wrap.innerHTML = '';
+            wrap.appendChild(img);
+            void img.offsetWidth;
+            img.classList.remove('swapping');
+        }, fade ? 200 : 0);
+    } else {
         wrap.innerHTML = '';
-        wrap.appendChild(img);
-        // 触发回流后去掉类名以淡入
-        void img.offsetWidth;
-        img.classList.remove('swapping');
-        if (existing) existing = null;
-    }, fade ? 200 : 0);
+        var img2 = document.createElement('img');
+        img2.id = 'dGalleryPic';
+        img2.alt = item.description || '';
+        img2.src = item.url;
+        wrap.appendChild(img2);
+    }
     desc.textContent = item.description || '';
     desc.setAttribute('data-empty', item.description ? '0' : '1');
 }
@@ -140,7 +177,7 @@ function nextGallery() {
     saveGalleryState();
     // 预加载再下一张
     var next = gallery[(galleryIdx + 1) % gallery.length];
-    if (next) preloadImage(next.url);
+    if (next) preloadImage(next);
 }
 
 function startGallery() {

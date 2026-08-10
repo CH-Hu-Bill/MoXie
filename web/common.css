@@ -886,3 +886,21 @@ body {
   }
   .page-loading-spinner { animation: none; border-color: var(--pencil); }
 }
+
+/* GIF 动图角标（图集卡片） */
+.gif-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  user-select: none;
+}

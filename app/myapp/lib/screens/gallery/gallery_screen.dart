@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import '../../models/gallery_item.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
@@ -84,15 +85,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
       });
       _storage.cacheGallery(
-          classId,
-          _items
-              .map((e) => {
-                    'id': e.id,
-                    'image_url': e.imageUrl,
-                    'description': e.description,
-                    'uploaded_at': e.uploadedAt
-                  })
-              .toList());
+          classId, _items.map((e) => e.toCacheJson()).toList());
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
@@ -130,15 +123,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
       });
       _storage.cacheGallery(
-          classId,
-          _items
-              .map((e) => {
-                    'id': e.id,
-                    'image_url': e.imageUrl,
-                    'description': e.description,
-                    'uploaded_at': e.uploadedAt
-                  })
-              .toList());
+          classId, _items.map((e) => e.toCacheJson()).toList());
     } catch (_) {
       // 静默刷新失败忽略，保留缓存数据
     }
@@ -238,9 +223,79 @@ class _GalleryScreenState extends State<GalleryScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _GalleryViewerScreen(item: item),
+        builder: (_) => _GalleryViewerScreen(
+          item: item,
+          onEditDescription: _editDescription,
+        ),
       ),
     );
+  }
+
+  Future<void> _editDescription(GalleryItem item) async {
+    final controller = TextEditingController(text: item.description);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('编辑描述', style: AppTheme.headingStyle),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: '描述这张图片...'),
+          maxLines: 3,
+          maxLength: 500,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('取消', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: Text('保存', style: AppTheme.bodyStyle),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty || result == item.description) return;
+    if (!mounted) return;
+
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+
+    try {
+      await _api.updateGalleryDescription(classId, item.id, result);
+      if (mounted) {
+        setState(() {
+          _items = _items
+              .map((e) => e.id == item.id
+                  ? GalleryItem(
+                      id: e.id,
+                      imageUrl: e.imageUrl,
+                      description: result,
+                      uploadedAt: e.uploadedAt,
+                      isGif: e.isGif,
+                    )
+                  : e)
+              .toList();
+        });
+        _storage.cacheGallery(
+            classId, _items.map((e) => e.toCacheJson()).toList());
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('描述已更新')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更新失败: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -292,25 +347,29 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                       topLeft: Radius.circular(18),
                                       topRight: Radius.circular(18),
                                     ),
-                                    child: CachedNetworkImage(
-                                      imageUrl: item.imageUrl,
-                                      fit: BoxFit.cover,
-                                      placeholder: (_, __) => Container(
-                                        color: AppColors.oldPaper,
-                                        child: const Center(
-                                          child: CircularProgressIndicator(
-                                              color: AppColors.red,
-                                              strokeWidth: 2),
-                                        ),
-                                      ),
-                                      errorWidget: (_, __, ___) => Container(
-                                        color: AppColors.muted,
-                                        child: const Center(
-                                          child: Icon(Icons.broken_image,
-                                              size: 40),
-                                        ),
-                                      ),
-                                    ),
+                                    child: item.isGif
+                                        ? _GifThumbnail(imageUrl: item.imageUrl)
+                                        : CachedNetworkImage(
+                                            imageUrl: item.imageUrl,
+                                            fit: BoxFit.cover,
+                                            placeholder: (_, __) => Container(
+                                              color: AppColors.oldPaper,
+                                              child: const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        color: AppColors.red,
+                                                        strokeWidth: 2),
+                                              ),
+                                            ),
+                                            errorWidget: (_, __, ___) =>
+                                                Container(
+                                              color: AppColors.muted,
+                                              child: const Center(
+                                                child: Icon(Icons.broken_image,
+                                                    size: 40),
+                                              ),
+                                            ),
+                                          ),
                                   ),
                                 ),
                                 Padding(
@@ -342,8 +401,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
 class _GalleryViewerScreen extends StatelessWidget {
   final GalleryItem item;
+  final void Function(GalleryItem item) onEditDescription;
 
-  const _GalleryViewerScreen({required this.item});
+  const _GalleryViewerScreen(
+      {required this.item, required this.onEditDescription});
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +417,13 @@ class _GalleryViewerScreen extends StatelessWidget {
           style: AppTheme.bodyStyle.copyWith(fontSize: 16, color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            tooltip: '编辑描述',
+            icon: const Icon(Icons.edit, color: Colors.white),
+            onPressed: () => onEditDescription(item),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -370,18 +438,38 @@ class _GalleryViewerScreen extends StatelessWidget {
                     ),
                     child: ClipRRect(
                       borderRadius: AppTheme.wobblyRadius,
-                      child: CachedNetworkImage(
-                        imageUrl: item.imageUrl,
-                        fit: BoxFit.contain,
-                        placeholder: (_, __) => const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                        errorWidget: (_, __, ___) => const Icon(
-                          Icons.broken_image,
-                          size: 64,
-                          color: AppColors.muted,
-                        ),
-                      ),
+                      child: item.isGif
+                          ? Image.network(
+                              item.imageUrl,
+                              fit: BoxFit.contain,
+                              gaplessPlayback: true,
+                              frameBuilder: (context, child, frame,
+                                      wasSynchronouslyLoaded) =>
+                                  frame == null
+                                      ? const Center(
+                                          child: CircularProgressIndicator(
+                                              color: Colors.white),
+                                        )
+                                      : child,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.broken_image,
+                                size: 64,
+                                color: AppColors.muted,
+                              ),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: item.imageUrl,
+                              fit: BoxFit.contain,
+                              placeholder: (_, __) => const Center(
+                                child: CircularProgressIndicator(
+                                    color: Colors.white),
+                              ),
+                              errorWidget: (_, __, ___) => const Icon(
+                                Icons.broken_image,
+                                size: 64,
+                                color: AppColors.muted,
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -409,6 +497,53 @@ class _GalleryViewerScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// GIF 网格缩略图：进入视口才加载并播放动图，离开视口释放资源（省流量+性能）。
+class _GifThumbnail extends StatefulWidget {
+  final String imageUrl;
+  const _GifThumbnail({required this.imageUrl});
+
+  @override
+  State<_GifThumbnail> createState() => _GifThumbnailState();
+}
+
+class _GifThumbnailState extends State<_GifThumbnail> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return VisibilityDetector(
+      key: Key('gif_thumb_${widget.imageUrl}'),
+      onVisibilityChanged: (info) {
+        final visible = info.visibleFraction > 0.1;
+        if (visible != _visible) {
+          setState(() => _visible = visible);
+        }
+      },
+      child: _visible
+          ? Image.network(
+              widget.imageUrl,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                  frame == null
+                      ? Container(
+                          color: AppColors.oldPaper,
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.red, strokeWidth: 2),
+                          ),
+                        )
+                      : child,
+              errorBuilder: (_, __, ___) => Container(
+                color: AppColors.muted,
+                child: const Center(child: Icon(Icons.broken_image, size: 40)),
+              ),
+            )
+          : Container(color: AppColors.oldPaper),
     );
   }
 }

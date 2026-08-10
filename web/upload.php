@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $path = Database::getUploadedImagePath($classId, $filename);
     if ($path === null) uploadJsonError('图片不存在', 404);
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    $types = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+    $types = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif'];
     header('Content-Type: ' . $types[$ext]);
     header('Content-Length: ' . filesize($path));
     header('Content-Disposition: inline; filename="' . $filename . '"');

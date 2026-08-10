@@ -85,8 +85,10 @@ function displayGallery($classId) {
         $out = [];
         foreach ($items as $it) {
             if (empty($it['image'])) continue;
+            $imgFile = (string)$it['image'];
             $out[] = [
-                'url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode((string)$it['image']),
+                'url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
+                'type' => strtolower(pathinfo($imgFile, PATHINFO_EXTENSION)) === 'gif' ? 'gif' : 'static',
                 'description' => (string)($it['description'] ?? ''),
             ];
         }
@@ -201,7 +203,7 @@ $csrfToken = csrfToken();
 $pageTitle = '展示大屏';
 require 'inc/head.php';
 ?>
-<link rel="stylesheet" href="display.css?v=1">
+<link rel="stylesheet" href="display.css?v=2">
 </head>
 <body>
 <script>
@@ -323,6 +325,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=7"></script>
-<script src="display.js?v=2"></script>
+<script src="display.js?v=3"></script>
 </body>
 </html>

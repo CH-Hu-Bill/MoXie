@@ -61,6 +61,30 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     echo json_encode(['success' => true, 'id' => $id]); exit;
 }
 
+// ========== update_gallery ==========
+if (isset($_POST['action']) && $_POST['action'] === 'update_gallery') {
+    header('Content-Type: application/json; charset=UTF-8');
+    requireCsrf();
+    $id = reqPost('id');
+    if (!preg_match('/\A[a-f0-9]{32}\z/D', $id)) { echo json_encode(['success' => false, 'error' => '无效ID']); exit; }
+    $desc = sanitizePlainText(reqPost('description'));
+    if ($desc === '') { echo json_encode(['success' => false, 'error' => '描述不能为空']); exit; }
+    if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
+    $updated = false;
+    Database::updateClassData($classId, 'gallery', function($latest) use ($id, $desc, &$updated) {
+        if (!is_array($latest)) return null;
+        foreach ($latest as $i => $item) {
+            if (($item['id'] ?? '') === $id) {
+                $latest[$i]['description'] = $desc;
+                $updated = true;
+                return $latest;
+            }
+        }
+        return null;
+    });
+    echo json_encode(['success' => $updated]); exit;
+}
+
 // ========== delete_gallery ==========
 if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
     header('Content-Type: application/json; charset=UTF-8');
@@ -96,7 +120,7 @@ require 'inc/header.php';
     <div class="card mb-4">
         <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);">📷 上传图片</h3>
         <div class="upload-form" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-            <div style="flex:1;min-width:200px;"><input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp" class="input" style="border-style:dashed;"></div>
+            <div style="flex:1;min-width:200px;"><input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif" class="input" style="border-style:dashed;"></div>
             <div style="flex:2;min-width:250px;"><input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片的话…" maxlength="500"></div>
             <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
         </div>
@@ -130,12 +154,16 @@ function renderGallery() {
     grid.innerHTML = galleryData.map(function(item, idx) {
         var url = 'upload.php?class_id=' + classId + '&file=' + item.image;
         var dateText = formatDate(item.uploaded_at);
+        var isGif = /\.gif$/i.test(item.image);
         return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
-            + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;"><img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;"></div>'
+            + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;"><img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">'
+            + (isGif ? '<span class="gif-badge">GIF</span>' : '')
+            + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'
             + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date">📅 ' + dateText + '</span>'
-            + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button>'
+            + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')" style="padding:2px 10px;">✏️</button>'
+            + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button></span>'
             + '</div></div></div>';
     }).join('');
 }
@@ -189,6 +217,33 @@ async function deleteGallery(id) {
 }
 
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function editGallery(id, currentDesc) {
+    var newDesc = prompt('修改图片描述：', currentDesc);
+    if (newDesc === null) return;
+    newDesc = newDesc.trim();
+    if (!newDesc) { showToast('描述不能为空'); return; }
+    if (newDesc.length > 500) { showToast('描述不能超过500字'); return; }
+    var fd = new FormData();
+    fd.append('action', 'update_gallery');
+    fd.append('id', id);
+    fd.append('description', newDesc);
+    fd.append('csrf_token', document.getElementById('csrfToken').value);
+    fetch('gallery.php?id=' + classId, { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (r.success) {
+                galleryData = galleryData.map(function(item) {
+                    return item.id === id ? Object.assign({}, item, { description: newDesc }) : item;
+                });
+                renderGallery();
+                showToast('描述已更新');
+            } else {
+                showToast(r.error || '更新失败');
+            }
+        })
+        .catch(function() { showToast('网络异常'); });
+}
 
 renderGallery();
 </script>
