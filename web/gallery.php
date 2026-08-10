@@ -33,6 +33,14 @@ if ($cleaned) {
 }
 $csrfToken = csrfToken();
 
+// ========== ?json=1 数据接口（供上传成功后局部刷新网格，不整页跳转） ==========
+if (reqGet('json') === '1') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo json_encode(['success' => true, 'items' => $gallery], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    exit;
+}
+
 // ========== save_gallery ==========
 if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     header('Content-Type: application/json; charset=UTF-8');
@@ -44,7 +52,13 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     $desc = trim(reqPost('description'));
     if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
-    if (($image['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) { echo json_encode(['success' => false, 'error' => '图片最大 12MB']); exit; }
+    $isGif = false;
+    if (isset($image['tmp_name']) && is_file($image['tmp_name'])) {
+        $info = @getimagesize($image['tmp_name']);
+        $isGif = is_array($info) && ($info[2] ?? 0) === IMAGETYPE_GIF;
+    }
+    $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
+    if (($image['size'] ?? 0) > $maxBytes) { echo json_encode(['success' => false, 'error' => $isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB']); exit; }
 
     try {
         $filename = Database::saveUploadedImage($classId, $image['tmp_name']);
@@ -117,12 +131,20 @@ require 'inc/header.php';
 ?>
 
 <div class="content">
-    <div class="card mb-4">
+    <div class="card mb-4" id="uploadCard">
         <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);">📷 上传图片</h3>
-        <div class="upload-form" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-            <div style="flex:1;min-width:200px;"><input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif" class="input" style="border-style:dashed;"></div>
-            <div style="flex:2;min-width:250px;"><input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片的话…" maxlength="500"></div>
+        <div class="upload-form">
+            <div class="upload-preview-wrap" id="uploadPreviewWrap" style="display:none;">
+                <img id="uploadPreview" alt="" style="max-width:100%;max-height:180px;border-radius:var(--wobbly-sm);border:2px solid var(--pencil);box-shadow:var(--shadow-sm);">
+                <span class="gif-badge" id="previewGifBadge" style="display:none;">GIF</span>
+            </div>
+            <label class="input upload-file-btn" for="galleryImage" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;min-width:200px;flex:1;">
+                <span id="uploadFileName">📎 选择图片（JPEG / PNG / WebP / GIF）</span>
+                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="previewUpload()">
+            </label>
+            <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片的话…" maxlength="500" style="flex:2;min-width:250px;">
             <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
+            <button class="btn" onclick="clearUpload()" id="clearBtn" style="display:none;">清除</button>
         </div>
     </div>
 
@@ -180,12 +202,43 @@ function openLightbox(url, desc) {
 function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 
+function previewUpload() {
+    var input = document.getElementById('galleryImage');
+    var wrap = document.getElementById('uploadPreviewWrap');
+    var img = document.getElementById('uploadPreview');
+    var badge = document.getElementById('previewGifBadge');
+    var nameEl = document.getElementById('uploadFileName');
+    var clearBtn = document.getElementById('clearBtn');
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    if (nameEl) nameEl.textContent = file.name;
+    var isGif = /\.gif$/i.test(file.name);
+    if (isGif) { if (badge) badge.style.display = ''; } else { if (badge) badge.style.display = 'none'; }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        img.src = e.target.result;
+        wrap.style.display = 'block';
+        if (clearBtn) clearBtn.style.display = '';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearUpload() {
+    document.getElementById('galleryImage').value = '';
+    document.getElementById('galleryDesc').value = '';
+    document.getElementById('uploadPreviewWrap').style.display = 'none';
+    document.getElementById('uploadFileName').textContent = '📎 选择图片（JPEG / PNG / WebP / GIF）';
+    document.getElementById('clearBtn').style.display = 'none';
+    document.getElementById('uploadBtn').disabled = false;
+    document.getElementById('uploadBtn').textContent = '上传';
+}
+
 async function uploadGallery() {
     var fileInput = document.getElementById('galleryImage');
     var desc = document.getElementById('galleryDesc').value.trim();
     if (!fileInput.files || !fileInput.files[0]) { showToast('请选择图片'); return; }
     if (!desc) { showToast('请填写描述'); return; }
-    var btn = document.getElementById('uploadBtn'); btn.disabled = true; btn.textContent = '...';
+    var btn = document.getElementById('uploadBtn'); btn.disabled = true; btn.textContent = '上传中…';
     var fd = new FormData();
     fd.append('action', 'save_gallery');
     fd.append('image', fileInput.files[0]);
@@ -194,8 +247,11 @@ async function uploadGallery() {
     try {
         var r = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd })).json();
         if (r.success) {
-            galleryData.unshift({id: r.id, image: '', description: desc, uploaded_at: new Date().toISOString().replace('T',' ').substring(0,19)});
-            location.reload();
+            showToast('上传成功');
+            clearUpload();
+            // 局部刷新网格（不整页跳转，保留滚动位置）
+            var j = await (await fetch('gallery.php?id=' + classId + '&json=1', { cache: 'no-store' })).json();
+            if (j.success) { galleryData = j.items || []; renderGallery(); }
         } else { showToast(r.error || '上传失败'); }
     } catch(e) { showToast('网络异常'); }
     btn.disabled = false; btn.textContent = '上传';

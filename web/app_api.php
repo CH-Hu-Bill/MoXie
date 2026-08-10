@@ -307,7 +307,7 @@ if ($action === 'unbind_class') {
     appJson(['success' => true]);
 }
 
-$classActions = ['verify_class_password', 'get_words', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'delete_gallery', 'set_consent', 'get_consent'];
+$classActions = ['verify_class_password', 'get_words', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent'];
 $classId = null;
 if (in_array($action, $classActions, true)) {
     $classId = appStrictId($_POST['class_id'] ?? '', 'class_id');

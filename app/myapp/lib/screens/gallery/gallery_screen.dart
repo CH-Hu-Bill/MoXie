@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -439,24 +440,7 @@ class _GalleryViewerScreen extends StatelessWidget {
                     child: ClipRRect(
                       borderRadius: AppTheme.wobblyRadius,
                       child: item.isGif
-                          ? Image.network(
-                              item.imageUrl,
-                              fit: BoxFit.contain,
-                              gaplessPlayback: true,
-                              frameBuilder: (context, child, frame,
-                                      wasSynchronouslyLoaded) =>
-                                  frame == null
-                                      ? const Center(
-                                          child: CircularProgressIndicator(
-                                              color: Colors.white),
-                                        )
-                                      : child,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.broken_image,
-                                size: 64,
-                                color: AppColors.muted,
-                              ),
-                            )
+                          ? _GifViewer(imageUrl: item.imageUrl)
                           : CachedNetworkImage(
                               imageUrl: item.imageUrl,
                               fit: BoxFit.contain,
@@ -501,7 +485,8 @@ class _GalleryViewerScreen extends StatelessWidget {
   }
 }
 
-/// GIF 网格缩略图：进入视口才加载并播放动图，离开视口释放资源（省流量+性能）。
+/// GIF 网格缩略图：进入视口才加载并播放动图，离开视口释放内存（省流量+性能）。
+/// 用 flutter_cache_manager 磁盘缓存 GIF 文件，避免反复进出视口重复下载。
 class _GifThumbnail extends StatefulWidget {
   final String imageUrl;
   const _GifThumbnail({required this.imageUrl});
@@ -512,6 +497,27 @@ class _GifThumbnail extends StatefulWidget {
 
 class _GifThumbnailState extends State<_GifThumbnail> {
   bool _visible = false;
+  File? _cachedFile;
+
+  @override
+  void didUpdateWidget(covariant _GifThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _cachedFile = null;
+      _visible = false;
+    }
+  }
+
+  Future<void> _ensureCache() async {
+    try {
+      final file = await DefaultCacheManager().getSingleFile(widget.imageUrl);
+      if (mounted && file.existsSync()) {
+        setState(() => _cachedFile = file);
+      }
+    } catch (_) {
+      // 下载失败，交给 errorBuilder 兜底
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -521,29 +527,84 @@ class _GifThumbnailState extends State<_GifThumbnail> {
         final visible = info.visibleFraction > 0.1;
         if (visible != _visible) {
           setState(() => _visible = visible);
+          if (visible && _cachedFile == null) _ensureCache();
         }
       },
       child: _visible
-          ? Image.network(
-              widget.imageUrl,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
-                  frame == null
-                      ? Container(
-                          color: AppColors.oldPaper,
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.red, strokeWidth: 2),
-                          ),
-                        )
-                      : child,
-              errorBuilder: (_, __, ___) => Container(
-                color: AppColors.muted,
-                child: const Center(child: Icon(Icons.broken_image, size: 40)),
-              ),
-            )
+          ? _cachedFile != null
+              ? Image.file(
+                  _cachedFile!,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: AppColors.muted,
+                    child:
+                        const Center(child: Icon(Icons.broken_image, size: 40)),
+                  ),
+                )
+              : Container(
+                  color: AppColors.oldPaper,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.red, strokeWidth: 2),
+                  ),
+                )
           : Container(color: AppColors.oldPaper),
+    );
+  }
+}
+
+/// 大图查看 GIF：磁盘缓存后播放动图，支持 InteractiveViewer 缩放。
+class _GifViewer extends StatefulWidget {
+  final String imageUrl;
+  const _GifViewer({required this.imageUrl});
+
+  @override
+  State<_GifViewer> createState() => _GifViewerState();
+}
+
+class _GifViewerState extends State<_GifViewer> {
+  File? _cachedFile;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final file = await DefaultCacheManager().getSingleFile(widget.imageUrl);
+      if (mounted && file.existsSync()) {
+        setState(() => _cachedFile = file);
+      } else {
+        setState(() => _failed = true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) {
+      return const Icon(Icons.broken_image, size: 64, color: AppColors.muted);
+    }
+    if (_cachedFile == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+    return Image.file(
+      _cachedFile!,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) => const Icon(
+        Icons.broken_image,
+        size: 64,
+        color: AppColors.muted,
+      ),
     );
   }
 }
