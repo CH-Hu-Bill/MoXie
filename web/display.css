@@ -354,11 +354,17 @@ body {
 }
 .d-gallery-loading {
   position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--pencil);
   font-size: 16px;
   font-family: var(--font-body);
   opacity: 0.7;
   text-align: center;
+  z-index: 2;
+  pointer-events: none;
 }
 .d-gallery-img img.swapping { opacity: 0; }
 .d-gallery-desc {

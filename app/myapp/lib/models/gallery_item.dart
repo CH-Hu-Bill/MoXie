@@ -1,6 +1,7 @@
 class GalleryItem {
   final String id;
   final String imageUrl;
+  final String thumbUrl;
   final String description;
   final String uploadedAt;
   final bool isGif;
@@ -9,6 +10,7 @@ class GalleryItem {
   GalleryItem({
     required this.id,
     required this.imageUrl,
+    this.thumbUrl = '',
     this.description = '',
     this.uploadedAt = '',
     this.isGif = false,
@@ -21,6 +23,7 @@ class GalleryItem {
     return GalleryItem(
       id: json['id'] ?? '',
       imageUrl: imageUrl,
+      thumbUrl: json['thumb_url'] ?? '',
       description: json['description'] ?? '',
       uploadedAt: json['uploaded_at'] ?? '',
       isGif:
@@ -33,6 +36,7 @@ class GalleryItem {
   Map<String, dynamic> toCacheJson() => {
         'id': id,
         'image_url': imageUrl,
+        'thumb_url': thumbUrl,
         'type': isVideo ? 'mp4' : (isGif ? 'gif' : 'static'),
         'description': description,
         'uploaded_at': uploadedAt,

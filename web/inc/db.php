@@ -738,6 +738,88 @@ class Database {
         return @unlink($path);
     }
 
+    // ==================== 视频首帧缩略图 (ffmpeg) ====================
+    /**
+     * 获取班级缩略图目录绝对路径。
+     * @param string $classId 班级ID
+     * @return string 目录绝对路径
+     */
+    public static function getThumbsDirectory($classId) {
+        return self::getClassDir($classId) . '/thumbs';
+    }
+
+    /**
+     * 获取 MP4 首帧缩略图文件路径 (带文件名校验)。
+     * @param string $classId 班级ID
+     * @param string $filename MP4 文件名 (32位hex.mp4)
+     * @return string|null 缩略图存在返回绝对路径，否则返回 null
+     */
+    public static function getVideoThumbPath($classId, $filename) {
+        if (!preg_match('/\A([a-f0-9]{32})\.mp4\z/D', $filename, $m)) return null;
+        $path = self::getThumbsDirectory($classId) . DIRECTORY_SEPARATOR . $m[1] . '.jpg';
+        return is_file($path) ? $path : null;
+    }
+
+    /**
+     * 用 ffmpeg (php-ffmpeg) 生成 MP4 首帧缩略图（best-effort，失败返回 false 不影响视频本身）。
+     * 依赖: 系统 ffmpeg 4.x (/usr/bin/ffmpeg) + composer 的 php-ffmpeg (vendor/autoload.php)。
+     * 首帧取 0.1s（部分手机视频第 0 帧为黑场），缩放至最长边 480px。
+     *
+     * @param string $classId 班级ID
+     * @param string $filename MP4 文件名 (32位hex.mp4)
+     * @return bool 是否生成成功
+     */
+    public static function generateVideoThumb($classId, $filename) {
+        $videoPath = self::getUploadedImagePath($classId, $filename);
+        if ($videoPath === null || strtolower(pathinfo($filename, PATHINFO_EXTENSION)) !== 'mp4') return false;
+        $dir = self::getThumbsDirectory($classId);
+        if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) return false;
+        // 0755：目录可能由 root 的 CLI 计划任务创建，需保证 Web 进程 (www) 可遍历读取
+        @chmod($dir, 0755);
+        $stem = substr($filename, 0, -4);
+        $out = $dir . DIRECTORY_SEPARATOR . $stem . '.jpg';
+        if (is_file($out)) return true; // 已生成过
+        $autoload = __DIR__ . '/../vendor/autoload.php';
+        if (!file_exists($autoload)) return false;
+        $tmp = $dir . DIRECTORY_SEPARATOR . $stem . '.tmp.jpg';
+        try {
+            require_once $autoload;
+            // 用项目内 bin/ 包装脚本作为二进制路径：php-ffmpeg 的 BinaryDriver 会用
+            // file_exists() 探测二进制，直接指 /usr/bin/ffmpeg 会被 open_basedir 拦截
+            // （user.ini 仅放行项目目录与 /tmp）。包装脚本经 exec 代理到系统 ffmpeg，
+            // exec 不受 open_basedir 限制。
+            $ffmpeg = FFMpeg\FFMpeg::create([
+                'ffmpeg.binaries'  => __DIR__ . '/../bin/ffmpeg',
+                'ffprobe.binaries' => __DIR__ . '/../bin/ffprobe',
+                'timeout'          => 20,
+                'ffmpeg.threads'   => 1,
+            ]);
+            $frame = $ffmpeg->open($videoPath)->frame(FFMpeg\Coordinate\TimeCode::fromSeconds(0.1));
+            $frame->addFilter(new FFMpeg\Filters\Frame\CustomFrameFilter('scale=480:-2'));
+            $frame->save($tmp);
+            if (!is_file($tmp) || filesize($tmp) === 0) { @unlink($tmp); return false; }
+            if (!@rename($tmp, $out)) { @unlink($tmp); return false; }
+            // 0644：缩略图可能由 root 的 CLI 计划任务生成，需让 Web 进程 (www) 可读
+            @chmod($out, 0644);
+            return true;
+        } catch (Throwable $e) {
+            @unlink($tmp);
+            return false;
+        }
+    }
+
+    /**
+     * 删除 MP4 首帧缩略图。
+     * @param string $classId 班级ID
+     * @param string $filename MP4 文件名
+     * @return bool
+     */
+    public static function deleteVideoThumb($classId, $filename) {
+        $path = self::getVideoThumbPath($classId, $filename);
+        if ($path === null) return true;
+        return @unlink($path);
+    }
+
     // ==================== 工具方法 ====================
     /**
      * 自动取消过期任务

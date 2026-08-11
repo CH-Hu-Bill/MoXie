@@ -604,7 +604,21 @@ PROMPT;
             if (!card) return;
             var content = document.getElementById('contentWrap');
             var scroller = content && content.scrollHeight > content.clientHeight ? content : document.scrollingElement;
-            var target = card.getBoundingClientRect().top + scroller.scrollTop - scroller.clientHeight / 2 + card.getBoundingClientRect().height / 2;
+            // content-visibility:auto 下视口外卡片用占位高度(236px)布局，getBoundingClientRect
+            // 的 top 会有累计误差 → 定位靠后的单词会滑过头。定位前临时强制真实布局。
+            var cards = document.querySelectorAll('.word-card');
+            var disabled = [];
+            for (var k = 0; k < cards.length; k++) {
+                if (getComputedStyle(cards[k]).contentVisibility === 'auto') {
+                    cards[k].style.contentVisibility = 'visible';
+                    disabled.push(cards[k]);
+                }
+            }
+            // 用 scroller 自身的坐标系计算居中目标（此前直接拿 card 的视口 top 计算，
+            // 未减去 scroller 的顶部偏移(header/工具栏)，导致始终多滚一段 → 滑过头）
+            var rect = card.getBoundingClientRect();
+            var sRect = scroller.getBoundingClientRect();
+            var target = scroller.scrollTop + (rect.top - sRect.top) - scroller.clientHeight / 2 + rect.height / 2;
             target = Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
             // 程序滚动会触发 scroll 事件，短暂屏蔽"用户操作清除高亮"（覆盖 smooth 滚动时长）
             _interactionGuard = Date.now() + 2000;
@@ -613,6 +627,10 @@ PROMPT;
             } catch (e) {
                 scroller.scrollTop = target;
             }
+            // 滚动动画结束后恢复 content-visibility（保留滚动性能优化）
+            setTimeout(function() {
+                for (var j = 0; j < disabled.length; j++) disabled[j].style.contentVisibility = '';
+            }, 1200);
             if (persistent) {
                 clearLocateHighlight();
                 card.classList.add('locate-highlight');

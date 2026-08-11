@@ -785,12 +785,15 @@ switch ($action) {
         foreach ($items as $item) {
             $imgFile = (string)($item['image'] ?? '');
             $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
+            $isMp4 = $ext === 'mp4';
             $result[] = [
                 'id' => $item['id'] ?? '',
                 'image_url' => $base . '/upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
-                'type' => $ext === 'gif' ? 'gif' : ($ext === 'mp4' ? 'mp4' : 'static'),
+                'type' => $ext === 'gif' ? 'gif' : ($isMp4 ? 'mp4' : 'static'),
                 'description' => (string)($item['description'] ?? ''),
                 'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
+                // MP4 首帧缩略图：APP 端视频卡片直接显示该图（缓存命中秒开），点进去才加载真视频
+                'thumb_url' => $isMp4 ? ($base . '/video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile)) : null,
             ];
         }
         appJson(['success' => true, 'data' => ['items' => $result, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
@@ -822,6 +825,10 @@ switch ($action) {
             appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '秒')) ? 413 : 500);
         }
         $id = bin2hex(random_bytes(16));
+        // MP4：同步生成首帧缩略图（best-effort，失败不影响上传）
+        if ($isMp4) {
+            try { Database::generateVideoThumb($classId, $fname); } catch (Throwable $e) {}
+        }
         Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
             if (!is_array($latest)) $latest = [];
             array_unshift($latest, ['id' => $id, 'image' => $fname, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
@@ -835,6 +842,7 @@ switch ($action) {
             if (!is_array($latest)) return null;
             foreach ($latest as $i => $item) if (($item['id'] ?? '') === $gid) {
                 Database::deleteUploadedImage($classId, $item['image'] ?? '');
+                Database::deleteVideoThumb($classId, $item['image'] ?? '');
                 array_splice($latest, $i, 1);
                 return $latest;
             }

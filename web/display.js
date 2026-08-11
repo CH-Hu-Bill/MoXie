@@ -102,24 +102,36 @@ function updateMarquee(ann) {
    ========================================================= */
 var gallerySizeCache = {}; // url -> {w,h} 避免重复解码探针
 
+/* 预加载辅助：把隐藏 <video> 挂到 DOM，浏览器才会真正开始下载视频数据。
+   未挂载到 DOM 的 <video> 即使 preload=auto 也只取头部（metadata），
+   轮播到视频时仍要现场拉流 → 黑屏。这是此前"预加载没发力"的根因。 */
+function attachHiddenVideo(url, onMeta) {
+    var pv = document.createElement('video');
+    pv.preload = 'auto';
+    pv.muted = true;
+    pv.setAttribute('muted', '');
+    pv.playsInline = true;
+    pv.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:2px;height:2px;visibility:hidden;';
+    if (onMeta) pv.onloadedmetadata = onMeta;
+    pv.src = url;
+    pv.load();
+    if (document.body) document.body.appendChild(pv);
+    // 加载完成后移除隐藏元素（HTTP 缓存已接管，轮播到它时秒开）
+    var done = function() { try { if (pv && pv.parentNode) pv.parentNode.removeChild(pv); } catch (e) {} };
+    pv.addEventListener('loadeddata', done, { once: true });
+    pv.addEventListener('error', done, { once: true });
+    return pv;
+}
+
 function preloadImage(item) {
     var url = typeof item === 'string' ? item : item.url;
     var type = typeof item === 'object' ? (item.type || 'static') : 'static';
     if (gallerySizeCache[url]) return; // 已探知尺寸，跳过重复预载
     if (type === 'mp4') {
-        // 视频预加载：preload=auto + muted 让浏览器真正缓冲数据（metadata 只取头部，
-        // 切换时仍要重新拉流导致黑屏）。muted 才能绕过自动播放限制静默预载。
-        var pv = document.createElement('video');
-        pv.preload = 'auto';
-        pv.muted = true;
-        pv.setAttribute('muted', '');
-        pv.playsInline = true;
-        pv.onloadedmetadata = function() {
+        var pv = attachHiddenVideo(url, function() {
             var w = pv.videoWidth, h = pv.videoHeight;
             if (w && h) gallerySizeCache[url] = { w: w, h: h };
-        };
-        pv.src = url;
-        try { pv.load(); } catch (e) {}
+        });
         return;
     }
     var img = new Image();
@@ -130,6 +142,14 @@ function preloadImage(item) {
         } catch (e) {}
     };
     img.src = url;
+}
+
+/* 预载当前之后两张（不跨首尾即可，循环轮播） */
+function preloadUpcoming() {
+    for (var i = 1; i <= 2; i++) {
+        var next = gallery[(galleryIdx + i) % gallery.length];
+        if (next) preloadImage(next);
+    }
 }
 
 /* 按图片自然尺寸设置容器适配比例：
@@ -160,16 +180,14 @@ function renderGalleryItem(item, fade) {
     if (cached) {
         fitGalleryContainer(wrap, cached.w, cached.h);
     } else if (isMp4) {
-        var probeV = document.createElement('video');
-        probeV.preload = 'metadata';
-        probeV.onloadedmetadata = function() {
-            var w = probeV.videoWidth, h = probeV.videoHeight;
+        // 探测用隐藏 video 挂载到 DOM（不挂载则可能取不到尺寸），同时顺带完成数据预载
+        attachHiddenVideo(item.url, function() {
+            var w = this.videoWidth, h = this.videoHeight;
             if (w && h) {
                 gallerySizeCache[item.url] = { w: w, h: h };
                 fitGalleryContainer(wrap, w, h);
             }
-        };
-        probeV.src = item.url;
+        });
     } else {
         var probe = new Image();
         probe.onload = function() {
@@ -183,6 +201,7 @@ function renderGalleryItem(item, fade) {
         // 视频：静音循环自动播放（大屏场景无声音开关）
         if (existing && existing.tagName === 'VIDEO') {
             existing.src = item.url;
+            existing.poster = item.thumb_url || '';
             // 复用元素时也补加载占位
             var ldOld = document.createElement('div');
             ldOld.className = 'd-gallery-loading';
@@ -205,6 +224,7 @@ function renderGalleryItem(item, fade) {
             v.autoplay = true;
             v.playsInline = true;
             v.preload = 'auto';
+            v.poster = item.thumb_url || '';
             v.src = item.url;
             // 显示加载提示，避免视频缓冲时一片黑
             var ld = document.createElement('div');
@@ -268,21 +288,34 @@ function renderGalleryItem(item, fade) {
     desc.setAttribute('data-empty', item.description ? '0' : '1');
 }
 
+/* 图集轮播：固定 15s 节奏（锚定刻度，与加载耗时无关）。
+   用 setTimeout 自调度对齐 ROTATE_MS 刻度：即使某张图加载慢，轮播也不会被拉长
+   （不会出现"15 秒从图片加载完成才开始算"的观感）。加载中的间隙由预加载 + 占位承担。 */
+var _galleryLastAt = 0;
+
 function nextGallery() {
     if (gallery.length === 0) return;
     galleryIdx = (galleryIdx + 1) % gallery.length;
     renderGalleryItem(gallery[galleryIdx], !reducedMotion);
     saveGalleryState();
-    // 预加载后两张（视频只预取 metadata 头，图片用 Image）——提前起拉，切换零等待
-    for (var i = 1; i <= 2; i++) {
-        var next = gallery[(galleryIdx + i) % gallery.length];
-        if (next) preloadImage(next);
-    }
+    // 预加载后两张（图片用 Image 预热缓存；视频用挂载到 DOM 的隐藏 <video> 真正缓冲）
+    preloadUpcoming();
+    _galleryLastAt = Date.now();
+    scheduleGallery();
+}
+
+function scheduleGallery() {
+    if (galleryTimer) { clearTimeout(galleryTimer); galleryTimer = null; }
+    var now = Date.now();
+    var next = _galleryLastAt + ROTATE_MS;
+    while (next <= now) next += ROTATE_MS; // 落后多个刻度时对齐最近的下一个刻度
+    galleryTimer = setTimeout(nextGallery, Math.max(200, next - now));
 }
 
 function startGallery() {
-    if (galleryTimer) clearInterval(galleryTimer);
-    galleryTimer = setInterval(nextGallery, ROTATE_MS);
+    stopGallery();
+    _galleryLastAt = Date.now();
+    scheduleGallery();
 }
 
 /* =========================================================
@@ -293,7 +326,7 @@ function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 function stopGallery() {
-    if (galleryTimer) { clearInterval(galleryTimer); galleryTimer = null; }
+    if (galleryTimer) { clearTimeout(galleryTimer); galleryTimer = null; }
 }
 
 function startPolling() {
@@ -332,7 +365,10 @@ function refresh() {
                     galleryIdx = 0;
                     saveGalleryState();
                     renderGalleryItem(gallery.length ? gallery[0] : null, false);
-                    if (gallery.length > 1) startGallery(); else stopGallery();
+                    if (gallery.length > 1) {
+                        preloadUpcoming(); // 首帧渲染后立即预载后两张（此前只在轮播推进时才预载）
+                        startGallery();
+                    } else stopGallery();
                 }
             } else if (data.code === 'need_auth' || data.code === 'class_not_found') {
                 stopPolling();
@@ -640,7 +676,10 @@ function init() {
         if (galleryIdx !== 0) renderGalleryItem(gallery[galleryIdx], false);
         saveGalleryState();
     }
-    if (gallery.length > 1) startGallery();
+    if (gallery.length > 1) {
+        preloadUpcoming();
+        startGallery();
+    }
     setTimeout(function() { fitWords(); fitWordMarquees(); }, 0);
     marqueeAfterFonts();
     window.addEventListener('load', function() { setTimeout(function() { fitWords(); fitWordMarquees(); }, 60); marqueeAfterFonts(); });

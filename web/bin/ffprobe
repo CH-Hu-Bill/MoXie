@@ -1,0 +1,3 @@
+#!/bin/sh
+# 同 bin/ffmpeg：包装 /usr/bin/ffprobe，绕过 open_basedir 对二进制探测的限制。
+exec /usr/bin/ffprobe "$@"

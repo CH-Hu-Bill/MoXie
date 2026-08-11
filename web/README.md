@@ -31,7 +31,7 @@
 | **默写记录** (`history.php`) | 历史任务列表（按日期倒序）、单词详情、一键重新创建任务 |
 | **周末大礼包** | 周末从本周已默写单词中随机抽 20 个组成加练任务，周一随机决定本周是否开启 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；支持 PDF / HTML / 长图导出 |
-| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB）；支持修改描述；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
+| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB）；**MP4 自动生成首帧缩略图**（ffmpeg，`video_thumb.php` 提供，加载中/列表先显示首帧预览）；支持修改描述；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好 |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数、图集公开 API 密钥保护、展示大屏 token，均按班级隔离存储 |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
@@ -50,8 +50,9 @@
 | 数据库 | 无，使用 JSON 文件存储（`inc/db.php` 封装，原子写入 + 文件锁） |
 | 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；[ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng) 中文字体；富文本编辑器 [Quill 2.x](https://quilljs.com)（CDN 引入） |
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
+| 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |
 
-> 无需 Composer。项目通过 `require_once` 手动加载，无第三方 PHP 依赖包。
+> 核心业务零第三方 PHP 依赖（`require_once` 手动加载）。仅**视频首帧缩略图**一项可选依赖 Composer：服务器已配好 `vendor/` 后，直接 `require __DIR__.'/vendor/autoload.php'` 使用，**不要**在服务器上执行 `composer install/require`（避免升级/改动已装包）。部署时 `composer.json` 一并上传，`vendor/` 不入库。
 
 ---
 
@@ -74,6 +75,7 @@
 ├── admin.php              # 管理后台
 ├── app_api.php            # APP 后端 API（全部接口）
 ├── upload.php             # 图片上传 / 查看（GD 安全处理）
+├── video_thumb.php        # MP4 首帧缩略图（ffmpeg 现场生成 + 长缓存，供图集卡片/APP 用）
 ├── download.php           # 导出文件下载（token + 自动 GC）
 ├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
 ├── common.js              # 公共脚本（TTS / Toast / 跟读 / 页面过渡 / 跑马灯等）
@@ -95,7 +97,8 @@
 ├── data/                  # 运行时数据（被 .htaccess 保护，禁止 Web 直链）
 │   ├── .htaccess          # Deny all
 │   └── uploads/.htaccess  # Deny all（图片经 upload.php 控制访问）
-└── project-features/
+├── composer.json          # Composer 依赖（仅 php-ffmpeg，用于视频首帧缩略图；vendor/ 不入库）
+├── project-features/
     └── project-features.html  # 功能总览文档
 ```
 
@@ -290,6 +293,7 @@ Web 端日历的"今天"以**浏览器本机时钟**计算（与 APP 端手机�
 | `admin.php` | 管理后台（独立 Session，30 分钟有效） | — |
 | `app_api.php` | APP 全部 API（POST `action=...`） | — |
 | `upload.php` | 图片上传(POST) / 查看(GET) | `?class_id=` `?file=` |
+| `video_thumb.php` | MP4 首帧缩略图（无鉴权，文件名随机即凭证；未生成时现场 ffmpeg 生成） | `?class_id=` `?file=` |
 | `download.php` | 导出文件下载（一次性 token） | `?token=` |
 
 ---
@@ -317,7 +321,8 @@ data/
         ├── history.json            # 班级史记
         ├── gallery.json            # 图集元数据
         ├── personal_history_{uid}.json  # 个人列传
-        └── uploads/                # 上传图片
+        ├── uploads/                # 上传图片
+        └── thumbs/                 # MP4 首帧缩略图（ffmpeg 生成，`{32hex}.jpg`）+ .lock
 ```
 
 | 路径 | 内容 | 敏感级别 |
@@ -333,6 +338,7 @@ data/
 | `classes/{classId}/history.json` | 班级史记正文（key=日期，含 content/delta/title/mood/weather/location/tags） | 中 |
 | `classes/{classId}/personal_history_{uid}.json` | 个人列传（隐私，需 consent 授权；`delta` 为 APP 端 Delta JSON 无损格式，Web 忽略。APP 导出时颜色统一为 6 位 `#RRGGBB`） | 高 |
 | `classes/{classId}/gallery.json` | 图集元数据（id / image / description / uploaded_at） | 中 |
+| `classes/{classId}/thumbs/` | MP4 首帧缩略图 JPEG（ffmpeg 生成，文件名=`{32hex}.jpg`；`.lock` 用于生成串行锁） | 低 |
 | `exports.json` + `exports/` | 临时导出文件与下载 token（短时有效，自动 GC） | 高 |
 | `ratelimit.json` | 限流计数（滑动窗口） | 低 |
 | `classes/{classId}/uploads/` | 上传图片（经 GD 重编码，文件名为随机哈希） | 中 |
@@ -410,7 +416,7 @@ data/
 
 - **公告**：仅 `mode=banner`（顶部跑马灯），超级霸屏通告不进壁纸页。跑马灯**复用顶部栏横幅的实现**（双副本 `translateX(-50%)` 无缝循环 + 左右 `mask` 渐隐遮罩），文本不溢出时居中显示
 - **单词**：取今天最早创建的 `status=pending` 任务（按 `created_at` 排序取第一个），展示该任务的全部单词（上限 20）；当天有多个任务时只展示最早那个；无任务显示占位。**字号自适应**：按内容区宽高 + 单词数（75 分位长度）动态算列数与字号（16~64px），个别超长单词单独缩小该卡片并滚动展示，保证后排可读
-- **图集**：仅班级图集 `gallery.json`，15s 轮播 + **预加载后两张**（视频用 `preload=auto` muted 真缓冲数据，图片用 Image），切换时占位"加载中…"避免黑屏
+- **图集**：仅班级图集 `gallery.json`，**固定 15s 节奏轮播**（setTimeout 锚定刻度，与加载耗时无关，不会因某张图加载慢而拉长显示时间）；**预加载后两张**（视频用**挂载到 DOM 的隐藏 `<video preload=auto muted>`** 真正缓冲数据——未挂载的 video 浏览器不会下载，图片用 `Image` 预热缓存）；视频用 ffmpeg 首帧图作 `poster`，加载间隙显示"加载中…"占位而非黑屏
 - **可拖拽竖线**：调整可用区域左边界（存每台设备 `localStorage['display_left_pct']`），默认 33.3%
 - **底部避让**：后台「大屏壁纸设置」配置 `display_bottom_margin`（px），防止被任务栏遮挡
 
@@ -457,6 +463,7 @@ data/
 - **HTML 属性注入防护**：`speak()` 发音按钮等 `onclick` 内联调用均经 `htmlspecialchars(json_encode(..., JSON_HEX_*), ENT_QUOTES)` 双重转义，用户输入含引号无法逃逸属性。
 - **CSV 公式注入防护**：导出 CSV（单词库 / 任务 / 错题本）时，以 `=` `+` `-` `@` 开头的单元格前缀 `'`，防止 Excel 打开时执行公式。
 - **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + 单帧像素×帧数 ≤8000 万 + 单边 ≤8000px + 单文件 ≤16MB），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，时长 ≤30s + 文件 ≤15MB + 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4`，**支持 HTTP HEAD 与 Range（206 Partial Content，含后缀 `bytes=-N`）**，视频 seek/流式播放必需，Cache-Control 用 `immutable` 强缓存（文件名随机不可变）；路径穿越防护沿用 32 位 hex 文件名校验。
+- **视频首帧缩略图**：由 `inc/db.php` 的 `generateVideoThumb()` 调用系统 ffmpeg（php-ffmpeg，`vendor/autoload.php`）提取第 0.1s 帧并缩放至 480px 宽；`video_thumb.php` 首次访问按班 `.lock` 串行生成（防并发打满 CPU），文件名仍为 32 位 hex（同上传文件名校验防穿越），输出 `Cache-Control: immutable` 长缓存；缩略图存放于 `data/classes/{classId}/thumbs/`（受 `data/` 目录保护）。生成失败返回 404，调用方降级为直接播放视频，不影响主流程。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。
 - **数据保护**：`data/` 目录禁止 Web 直链（`.htaccess`）。**生产环境必须额外配置 Web 服务器规则**，拦截 `inc/`、`.json`、隐藏文件等，详见 [部署安全加固](#部署安全加固)。

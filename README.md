@@ -2,7 +2,7 @@
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
-- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.0.5`
+- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.0.8`
 - 历史版本与更新说明见 [app/README.md](app/README.md) 与 Web 端 `data/app_versions.json`
 
 ## 仓库结构
@@ -52,7 +52,7 @@ APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 
 | 模块 | 技术 |
 |------|------|
-| Web 后端 | PHP 7.4+，GD，cURL，JSON 文件存储（无数据库，无 Composer） |
+| Web 后端 | PHP 7.4+，GD，cURL，JSON 文件存储（无数据库）；Composer 仅用于 php-ffmpeg（可选，视频首帧缩略图） |
 | Web 前端 | 原生 HTML/CSS/JS，Quill 2.x 富文本编辑器，DeepSeek API（AI 补全） |
 | APP | Flutter（Dart 3.5+），Provider 状态管理，flutter_quill 富文本编辑器，cached_network_image 图片缓存 |
 | APP 字体 | ZCOOL KuaiLe（标题）+ Ma Shan Zheng（正文），打包到 APK |
@@ -80,7 +80,8 @@ data/
         ├── history.json
         ├── gallery.json
         ├── personal_history_{uid}.json
-        └── uploads/
+        ├── uploads/
+        └── thumbs/               # MP4 首帧缩略图（ffmpeg 生成）
 ```
 
 ## 安全

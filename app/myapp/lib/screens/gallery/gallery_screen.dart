@@ -396,6 +396,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   ? GalleryItem(
                       id: e.id,
                       imageUrl: e.imageUrl,
+                      thumbUrl: e.thumbUrl,
                       description: result,
                       uploadedAt: e.uploadedAt,
                       isGif: e.isGif,
@@ -469,8 +470,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                       topRight: Radius.circular(18),
                                     ),
                                     child: item.isVideo
-                                        ? _VideoThumbnail(
-                                            videoUrl: item.imageUrl)
+                                        ? (item.thumbUrl.isNotEmpty
+                                            ? _VideoThumbView(
+                                                thumbUrl: item.thumbUrl)
+                                            : _VideoThumbnail(
+                                                videoUrl: item.imageUrl))
                                         : item.isGif
                                             ? _GifThumbnail(
                                                 imageUrl: item.imageUrl)
@@ -840,8 +844,70 @@ class _VideoThumbSurface extends StatelessWidget {
   }
 }
 
+/// MP4 视频卡片缩略图：显示 ffmpeg 生成的视频首帧图（cached_network_image 缓存，秒开）。
+/// 与图片卡片无感知差别，但叠加"🎬 视频"角标，明确告诉用户点进去才是真视频。
+/// 网格中不再内嵌播放解码器（这是此前缩略图黑屏/卡顿的主要来源）。
+class _VideoThumbView extends StatelessWidget {
+  final String thumbUrl;
+  const _VideoThumbView({required this.thumbUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CachedNetworkImage(
+          imageUrl: thumbUrl,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(
+            color: AppColors.oldPaper,
+            child: const Center(
+              child: CircularProgressIndicator(
+                  color: AppColors.red, strokeWidth: 2),
+            ),
+          ),
+          errorWidget: (_, __, ___) => Container(
+            color: AppColors.muted,
+            child: const Center(
+              child: Icon(Icons.videocam, size: 40, color: Colors.white70),
+            ),
+          ),
+        ),
+        // 中央播放提示（半透明，明确是视频）
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.black38,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+        ),
+        // 左上角"视频"角标
+        Positioned(
+          left: 8,
+          top: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white24, width: 1),
+            ),
+            child: const Text(
+              '🎬 视频',
+              style: TextStyle(fontSize: 11, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// MP4 网格缩略图：进入视口才初始化视频播放（静音循环），离开视口彻底释放解码器。
 /// 通过全局单例保证同时只有一个视频在解码，避免多实例竞争导致卡顿/失败。
+/// （无 thumb_url 的历史视频才走此降级路径；新视频卡片直接用 _VideoThumbView 首帧图）
 class _VideoThumbnail extends StatefulWidget {
   final String videoUrl;
   const _VideoThumbnail({required this.videoUrl});
@@ -1006,8 +1072,28 @@ class _VideoViewerState extends State<_VideoViewer> {
   }
 
   Future<void> _init() async {
-    // 大图：优先网络流式播放（秒开、边下边播），缓存文件作失败兜底
     if (!mounted) return;
+    // 1) 缓存命中：直接播放本地缓存文件（秒开、省流量、离线可用）
+    try {
+      final hit = await DefaultCacheManager().getFileFromCache(widget.videoUrl);
+      if (hit != null && hit.file.existsSync() && mounted) {
+        final cf = VideoPlayerController.file(hit.file);
+        _controller = cf;
+        await cf.initialize();
+        if (!mounted) {
+          cf.dispose();
+          return;
+        }
+        await cf.setLooping(true);
+        await cf.setVolume(0);
+        await cf.play();
+        setState(() {});
+        return;
+      }
+    } catch (_) {/* 无缓存，走网络流式 */}
+
+    // 2) 未缓存：网络流式播放（秒开、边下边播），同时后台把整文件写入磁盘缓存，
+    //    下次打开同一视频直接从缓存播放。
     VideoPlayerController? c;
     try {
       c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
@@ -1021,40 +1107,18 @@ class _VideoViewerState extends State<_VideoViewer> {
       await c.setVolume(0);
       await c.play();
       setState(() {});
+      DefaultCacheManager()
+          .getSingleFile(widget.videoUrl)
+          .then((_) {})
+          .catchError((_) {});
       return;
     } catch (_) {
       if (c != null) c.dispose();
       if (_controller == c) _controller = null;
     }
 
-    File? cached;
-    try {
-      cached = await DefaultCacheManager().getSingleFile(widget.videoUrl);
-    } catch (_) {
-      cached = null;
-    }
     if (!mounted) return;
-    if (cached == null || !cached.existsSync()) {
-      setState(() {});
-      return;
-    }
-    final cf = VideoPlayerController.file(cached);
-    _controller = cf;
-    try {
-      await cf.initialize();
-      if (!mounted) {
-        cf.dispose();
-        return;
-      }
-      await cf.setLooping(true);
-      await cf.setVolume(0);
-      await cf.play();
-      setState(() {});
-    } catch (_) {
-      cf.dispose();
-      if (_controller == cf) _controller = null;
-      setState(() {});
-    }
+    setState(() {});
   }
 
   @override

@@ -1,0 +1,4 @@
+#!/bin/sh
+# 本目录为 open_basedir 允许路径；php-ffmpeg 的 BinaryDriver 用 file_exists() 探测二进制，
+# 直接指 /usr/bin/ffmpeg 会被 open_basedir 拦截。此包装脚本代理到系统 ffmpeg（exec 不受 open_basedir 限制）。
+exec /usr/bin/ffmpeg "$@"

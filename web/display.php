@@ -91,6 +91,7 @@ function displayGallery($classId) {
                 'url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
                 'type' => $ext === 'gif' ? 'gif' : ($ext === 'mp4' ? 'mp4' : 'static'),
                 'description' => (string)($it['description'] ?? ''),
+                'thumb_url' => $ext === 'mp4' ? 'video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile) : null,
             ];
         }
         return $out;
@@ -204,7 +205,7 @@ $csrfToken = csrfToken();
 $pageTitle = '展示大屏';
 require 'inc/head.php';
 ?>
-<link rel="stylesheet" href="display.css?v=3">
+<link rel="stylesheet" href="display.css?v=4">
 </head>
 <body>
 <script>
@@ -284,7 +285,7 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
         <div class="d-gallery-img" id="dGalleryImg">
           <?php if (!empty($gallery)): ?>
             <?php if ($gallery[0]['type'] === 'mp4'): ?>
-              <video id="dGalleryPic" muted loop autoplay playsinline preload="metadata" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>"></video>
+              <video id="dGalleryPic" muted loop autoplay playsinline preload="auto" poster="<?php echo htmlspecialchars((string)($gallery[0]['thumb_url'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>"></video>
             <?php else: ?>
               <img id="dGalleryPic" alt="" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>">
             <?php endif; ?>
@@ -330,6 +331,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=7"></script>
-<script src="display.js?v=7"></script>
+<script src="display.js?v=9"></script>
 </body>
 </html>

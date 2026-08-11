@@ -145,6 +145,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
     $query = trim(reqPost('query'));
     if (!$query) { echo json_encode(['success' => false, 'error' => '请输入搜索词']); exit; }
     $queryLower = mb_strtolower($query);
+    $wordsOffset = max(0, (int)($_POST['words_offset'] ?? 0));
 
     // 1) 词库匹配 (最多10条)
     $wordResults = [];
@@ -197,7 +198,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
     }
 
     echo json_encode(['success' => true, 'data' => [
-        'words' => ['items' => array_slice($wordResults, 0, 10), 'total' => count($wordResults), 'has_more' => count($wordResults) > 10],
+        // words 支持 words_offset 分页：搜索下拉"查看更多单词"逐批就地加载（不再跳转单词库）
+        'words' => ['items' => array_slice($wordResults, $wordsOffset, 10), 'total' => count($wordResults), 'has_more' => ($wordsOffset + 10) < count($wordResults)],
         'pending_tasks' => ['items' => array_slice($pendingResults, 0, 10), 'total' => count($pendingResults), 'has_more' => count($pendingResults) > 10],
         'history_tasks' => ['items' => array_slice($historyResults, 0, 10), 'total' => count($historyResults), 'has_more' => count($historyResults) > 10],
     ]]); exit;
@@ -375,6 +377,57 @@ require 'inc/header.php';
         });
 
         // ========== 全局搜索 ==========
+        // 单词组就地分页状态：点击"查看更多单词"逐批追加后 10 条（每条可点击定位），
+        // 不再整页跳转单词库（此前 doSearch 的查看更多 → words.php 是用户抱怨的问题）
+        var srQuery = '';
+        var srWordsOffset = 0;
+        var srWordsTotal = 0;
+
+        function srWordItemHtml(w) {
+            return '<div class="sr-item" onclick="showOkOverlayThen(\'words.php?id='+classId+'&highlight='+encodeURIComponent(w.id)+'\')"><span><span class="word">'+escHtml2(w.word)+'</span><span class="meaning">'+escHtml2(w.meaning)+'</span></span><span class="arrow">›</span></div>';
+        }
+
+        function updateSrWordsMore() {
+            const remaining = srWordsTotal - srWordsOffset;
+            const more = document.getElementById('srWordsMore');
+            if (remaining <= 0) { if (more) more.remove(); return; }
+            const group = document.getElementById('srWordsList');
+            if (!group) return;
+            if (more) {
+                more.textContent = '查看更多单词（还有 ' + remaining + ' 条）→';
+            } else {
+                const m = document.createElement('div');
+                m.className = 'sr-more';
+                m.id = 'srWordsMore';
+                m.textContent = '查看更多单词（还有 ' + remaining + ' 条）→';
+                m.onclick = loadMoreWords;
+                group.parentNode.appendChild(m);
+            }
+        }
+
+        async function loadMoreWords() {
+            if (!srQuery) return;
+            const more = document.getElementById('srWordsMore');
+            if (more) { more.style.pointerEvents = 'none'; more.textContent = '加载中…'; }
+            const fd = new FormData();
+            fd.append('action', 'search_all');
+            fd.append('query', srQuery);
+            fd.append('words_offset', String(srWordsOffset));
+            fd.append('csrf_token', CSRF_TOKEN);
+            try {
+                const d = await (await fetch('main.php?id=' + classId, { method: 'POST', body: fd })).json();
+                if (d.success) {
+                    const words = d.data.words;
+                    srWordsOffset += (words.items || []).length;
+                    srWordsTotal = words.total;
+                    const list = document.getElementById('srWordsList');
+                    (words.items || []).forEach(w => { if (list) list.insertAdjacentHTML('beforeend', srWordItemHtml(w)); });
+                    updateSrWordsMore();
+                }
+            } catch (e) { /* 静默失败，按钮恢复可点击 */ }
+            if (more) { more.style.pointerEvents = ''; updateSrWordsMore(); }
+        }
+
         async function doSearch() {
             const q = document.getElementById('searchInput').value.trim();
             const res = document.getElementById('searchResults');
@@ -391,14 +444,14 @@ require 'inc/header.php';
                 const d = await (await fetch('main.php?id=' + classId, { method: 'POST', body: fd })).json();
                 if (!d.success) { res.innerHTML = '<div class="sr-empty">搜索失败</div>'; res.classList.add('active'); return; }
                 const data = d.data;
+                srQuery = q; srWordsOffset = data.words.items.length; srWordsTotal = data.words.total;
                 let html = '';
                 html += '<div class="sr-group"><div class="sr-group-title">📖 单词库 (' + data.words.total + '条)</div>';
                 if (data.words.total === 0) html += '<div class="sr-empty" style="padding:8px;">无匹配结果</div>';
                 else {
-                    data.words.items.forEach(w => {
-                        html += '<div class="sr-item" onclick="showOkOverlayThen(\'words.php?id='+classId+'&highlight='+encodeURIComponent(w.id)+'\')"><span><span class="word">'+escHtml2(w.word)+'</span><span class="meaning">'+escHtml2(w.meaning)+'</span></span><span class="arrow">›</span></div>';
-                    });
-                    if (data.words.has_more) html += '<div class="sr-more" onclick="showOkOverlayThen(\'words.php?id='+classId+'&search='+encodeURIComponent(q)+'\')">查看更多单词 →</div>';
+                    html += '<div id="srWordsList">' + data.words.items.map(srWordItemHtml).join('') + '</div>';
+                    const wRemaining = data.words.total - data.words.items.length;
+                    if (wRemaining > 0) html += '<div class="sr-more" id="srWordsMore" onclick="loadMoreWords()">查看更多单词（还有 ' + wRemaining + ' 条）→</div>';
                 }
                 html += '</div>';
                 html += '<div class="sr-group"><div class="sr-group-title">📝 进行中任务 (' + data.pending_tasks.total + '条)</div>';

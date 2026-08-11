@@ -71,6 +71,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     } catch (RuntimeException $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit;
     }
+    // MP4：同步生成首帧缩略图（best-effort，失败不影响上传）
+    if ($isMp4) {
+        try { Database::generateVideoThumb($classId, $filename); } catch (Throwable $e) {}
+    }
 
     $id = bin2hex(random_bytes(16));
     Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
@@ -116,6 +120,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
         foreach ($latest as $i => $item) {
             if (($item['id'] ?? '') === $id) {
                 Database::deleteUploadedImage($classId, $item['image'] ?? '');
+                Database::deleteVideoThumb($classId, $item['image'] ?? '');
                 array_splice($latest, $i, 1);
                 return $latest;
             }
@@ -193,14 +198,20 @@ function renderGallery() {
         var isGif = /\.gif$/i.test(item.image);
         var isMp4 = /\.mp4$/i.test(item.image);
         var media;
+        // 占位层 z-index:2 位于媒体之上：视频有 background:#eee，若占位在下面会被盖住看不到
+        // （这是此前"视频/gif 加载没有占位效果"的根因）。媒体加载完成后由 hideGalleryPlaceholder 隐藏。
+        var placeholder = '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;pointer-events:none;">📷<span style="font-size:11px;color:#bbb;margin-top:4px;">加载中…</span></div>';
         if (isMp4) {
-            media = '<video src="' + url + '" muted loop autoplay playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;pointer-events:none;background:#eee;position:relative;z-index:1;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;" onplaying="hideGalleryPlaceholder(this)"></video>';
+            // 首帧缩略图作加载占位（ffmpeg 生成）：视频缓冲时先显示预览图，播放后由 video 盖住
+            var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + item.image;
+            media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)">'
+                + '<video src="' + url + '" muted loop autoplay playsinline preload="auto" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:#111;z-index:1;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;" onplaying="hideGalleryPlaceholder(this)" onloadeddata="hideGalleryPlaceholder(this)"></video>';
         } else {
             media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)">';
         }
         return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\', ' + isMp4 + ')" style="overflow:hidden;cursor:pointer;padding:0;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
-            + '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;display:flex;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;">📷</div>'
+            + placeholder
             + media
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
             + (isMp4 ? '<span class="gif-badge mp4-badge">MP4</span>' : '')
