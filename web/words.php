@@ -605,13 +605,13 @@ PROMPT;
             var content = document.getElementById('contentWrap');
             var scroller = content && content.scrollHeight > content.clientHeight ? content : document.scrollingElement;
             // content-visibility:auto 下视口外卡片用占位高度(236px)布局，getBoundingClientRect
-            // 的 top 会有累计误差 → 定位靠后的单词会滑过头。定位前临时强制真实布局。
+            // 的 top 会有累计误差 → 定位靠后的单词会滑过头。定位前强制真实布局。
+            // 注意：强制后【不要恢复】——恢复会在滚动结束后改变 scrollHeight 并钳制 scrollTop，
+            // 导致定位目标被"往上拉"（越靠后越明显、最后一行直接被拉走）。
             var cards = document.querySelectorAll('.word-card');
-            var disabled = [];
             for (var k = 0; k < cards.length; k++) {
                 if (getComputedStyle(cards[k]).contentVisibility === 'auto') {
                     cards[k].style.contentVisibility = 'visible';
-                    disabled.push(cards[k]);
                 }
             }
             // 用 scroller 自身的坐标系计算居中目标（此前直接拿 card 的视口 top 计算，
@@ -620,17 +620,11 @@ PROMPT;
             var sRect = scroller.getBoundingClientRect();
             var target = scroller.scrollTop + (rect.top - sRect.top) - scroller.clientHeight / 2 + rect.height / 2;
             target = Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
-            // 程序滚动会触发 scroll 事件，短暂屏蔽"用户操作清除高亮"（覆盖 smooth 滚动时长）
-            _interactionGuard = Date.now() + 2000;
             try {
                 scroller.scrollTo({ top: target, behavior: 'smooth' });
             } catch (e) {
                 scroller.scrollTop = target;
             }
-            // 滚动动画结束后恢复 content-visibility（保留滚动性能优化）
-            setTimeout(function() {
-                for (var j = 0; j < disabled.length; j++) disabled[j].style.contentVisibility = '';
-            }, 1200);
             if (persistent) {
                 clearLocateHighlight();
                 card.classList.add('locate-highlight');
@@ -645,16 +639,12 @@ PROMPT;
             document.querySelectorAll('.word-card.locate-highlight').forEach(function(c) { c.classList.remove('locate-highlight'); });
         }
         // 用户主动操作（滚动/点击/触摸/按键）→ 清除定位高亮。
-        // 程序滚动（scrollCardToCenter）在 _interactionGuard 保护期内不会误清。
-        var _interactionGuard = 0;
+        // 程序 smooth 滚动不会触发这些手势，因此不会误清（不再用 scroll 兜底，
+        // 否则程序滚动结束后 scroll 事件会清掉高亮，违背"除非用户操作否则保留"）。
         ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function(evt) {
             document.addEventListener(evt, function() { clearLocateHighlight(); }, { passive: true });
         });
         document.addEventListener('click', function() { clearLocateHighlight(); }, { passive: true });
-        // scroll 兜底：用户滚动（鼠标滚轮/触摸拖拽/键盘滚动）触发，程序 smooth 滚动在保护期内被屏蔽
-        document.addEventListener('scroll', function() {
-            if (Date.now() >= _interactionGuard) clearLocateHighlight();
-        }, { passive: true });
 
         function showBatchModal() { document.getElementById('batchTextarea').value = ''; document.getElementById('batchModal').classList.add('active'); }
 
@@ -1104,7 +1094,8 @@ PROMPT;
             const highlightId = params.get('highlight');
             if (highlightId) {
                 const hc = document.querySelector('.word-card[data-id="' + highlightId + '"]');
-                if (hc) setTimeout(() => { scrollCardToCenter(hc, false); }, 400);
+                // 搜索定位：持久高亮，直到用户操作才清除（locate-highlight）
+                if (hc) setTimeout(() => { scrollCardToCenter(hc, true); }, 400);
             } else {
                 const ri = localStorage.getItem('recreate_word_ids');
                 const li = <?php echo $lastWordIndex; ?>;

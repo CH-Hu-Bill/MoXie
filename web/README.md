@@ -52,7 +52,39 @@
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 | 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |
 
-> 核心业务零第三方 PHP 依赖（`require_once` 手动加载）。仅**视频首帧缩略图**一项可选依赖 Composer：服务器已配好 `vendor/` 后，直接 `require __DIR__.'/vendor/autoload.php'` 使用，**不要**在服务器上执行 `composer install/require`（避免升级/改动已装包）。部署时 `composer.json` 一并上传，`vendor/` 不入库。
+> 核心业务零第三方 PHP 依赖（`require_once` 手动加载）。仅**视频首帧缩略图**一项可选依赖 Composer。
+
+### 视频首帧缩略图依赖（Composer + ffmpeg）
+
+新加入的 Composer 依赖仅用于为 MP4 图集生成首帧预览图（`video_thumb.php` 提供，APP 端视频卡片 / Web 图集卡片 / 展示大屏 poster 使用；未安装时优雅降级为直接播放视频）。
+
+| 组件 | 说明 |
+|------|------|
+| 系统 ffmpeg | Ubuntu 包 `ffmpeg` / `ffprobe`，位于 `/usr/bin/`（本项目实测 4.4.2） |
+| Composer 包 | `php-ffmpeg/php-ffmpeg ^1.4`（`web/composer.json`，已锁定） |
+| `vendor/` | **只在服务器上存在，不入库**（`.gitignore` 已忽略）；`composer.json` + `composer.lock` 均已生成于服务器 |
+
+**配置流程（服务器一次性完成，之后不要再动）：**
+
+```bash
+cd /www/wwwroot/你的站点
+# 1) 安装系统 ffmpeg（若未装）
+apt-get install -y ffmpeg
+# 2) 安装 composer 依赖（PHP 7.4+ 需 composer）
+composer require php-ffmpeg/php-ffmpeg:^1.4
+# 完成后不要再 composer install / composer require / composer update（避免升级已装包）
+```
+
+**关键运行约束（务必了解）：**
+
+- **PHP-FPM 禁用了全部进程执行函数**（`proc_open/exec/shell_exec/…`），而 php-ffmpeg 依赖 Symfony Process（`proc_open`）——因此 **FPM 内无法调用 ffmpeg**，缩略图必须由 **CLI 计划任务**生成：
+  ```bash
+  * * * * * /usr/bin/php /www/wwwroot/你的站点/cron_gallery_thumbs.php >> /tmp/gallery_thumbs_cron.log 2>&1
+  ```
+  `cron_gallery_thumbs.php` 每分钟扫描各班级 MP4，缺缩略图即生成（幂等；`/tmp` 锁防重叠；单次 50s 时间预算）。上传新视频后最长 1 分钟内补齐。
+- **`open_basedir` 仅放行项目目录与 `/tmp`**：php-ffmpeg 的 BinaryDriver 会用 `file_exists()` 探测二进制，直接指向 `/usr/bin/ffmpeg` 会被拦截。因此使用 `bin/ffmpeg`、`bin/ffprobe` 两个**项目内包装脚本**（`exec /usr/bin/ffmpeg "$@"`，`exec` 不受 open_basedir 限制），`generateVideoThumb()` 已配置指向它们。
+- **不要**在服务器上执行 `composer install/require`（避免改动已装包）；部署代码时 `composer.json` 一并上传，`vendor/` 保持服务器现状即可。
+- 缩略图存放于 `data/classes/{classId}/thumbs/`（`data/` 受保护），文件名仍为 32 位 hex，`video_thumb.php` 输出 `Cache-Control: immutable` 长缓存。
 
 ---
 
@@ -75,7 +107,9 @@
 ├── admin.php              # 管理后台
 ├── app_api.php            # APP 后端 API（全部接口）
 ├── upload.php             # 图片上传 / 查看（GD 安全处理）
-├── video_thumb.php        # MP4 首帧缩略图（ffmpeg 现场生成 + 长缓存，供图集卡片/APP 用）
+├── video_thumb.php        # MP4 首帧缩略图（ffmpeg 生成 + 长缓存，供图集卡片/APP 用）
+├── cron_gallery_thumbs.php # CLI 计划任务：每分钟为 MP4 图集生成缺失首帧缩略图（FPM 无法 exec）
+├── bin/                   # ffmpeg/ffprobe 包装脚本（绕过 open_basedir 对 /usr/bin 的探测，须 LF）
 ├── download.php           # 导出文件下载（token + 自动 GC）
 ├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
 ├── common.js              # 公共脚本（TTS / Toast / 跟读 / 页面过渡 / 跑马灯等）

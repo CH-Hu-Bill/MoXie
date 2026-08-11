@@ -72,3 +72,5 @@ jobs:
         with:
           name: listenwrite-release
           path: app/myapp/build/app/outputs/flutter-apk/app-release.apk
+          # 旧包自动过期（私有仓库免费额度仅 500MB，APK 约 35MB/个，必须设保留期防打满）
+          retention-days: 14
