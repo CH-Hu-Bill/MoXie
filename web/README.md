@@ -280,6 +280,7 @@ Options -Indexes
 | **Fail2ban** | 监控 PHP 错误日志和 403 响应，自动封禁异常 IP |
 | **文件权限** | `data/` 目录 `chmod 700`，`inc/config.php` `chmod 600`，Web 进程用户只读 |
 | **PHP 配置** | `expose_php = Off`，`display_errors = Off`（生产环境），`open_basedir` 限制到网站目录 |
+| **`.user.ini`** | 站点根目录 `.user.ini` 已配置：`open_basedir=/www/wwwroot/你的站点/:/tmp/` + `display_errors = Off` + `memory_limit = 256M`。`display_errors=Off` 防止 PHP 警告混入 JSON 响应导致 APP/前端"解析错误"（本仓库上传接口曾因此偶发报错）；`memory_limit=256M` 避免大图上传时 GD 内存耗尽（默认 128M 处理 25MP 图会 OOM） |
 | **定期备份** | `data/` 目录定期备份（rsync/cron），这是唯一的数据存储 |
 | **WAF** | 可选 Cloudflare 免费计划，自带 DDoS 防护和恶意爬虫拦截 |
 

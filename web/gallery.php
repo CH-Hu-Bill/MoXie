@@ -71,10 +71,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     } catch (RuntimeException $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit;
     }
-    // MP4：同步生成首帧缩略图（best-effort，失败不影响上传）
-    if ($isMp4) {
-        try { Database::generateVideoThumb($classId, $filename); } catch (Throwable $e) {}
-    }
+    // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 禁用了 exec/proc_open，
+    // 这里不再内联调用，避免在请求路径加载 composer/php-ffmpeg 引发偶发超时或 PHP 警告污染 JSON）
 
     $id = bin2hex(random_bytes(16));
     Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
@@ -198,18 +196,20 @@ function renderGallery() {
         var isGif = /\.gif$/i.test(item.image);
         var isMp4 = /\.mp4$/i.test(item.image);
         var media;
-        // 占位层 z-index:2 位于媒体之上：视频有 background:#eee，若占位在下面会被盖住看不到
-        // （这是此前"视频/gif 加载没有占位效果"的根因）。媒体加载完成后由 hideGalleryPlaceholder 隐藏。
+        // 占位层 z-index:2 位于媒体之上；媒体加载完成后由 hideGalleryPlaceholder 隐藏
         var placeholder = '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;pointer-events:none;">📷<span style="font-size:11px;color:#bbb;margin-top:4px;">加载中…</span></div>';
         if (isMp4) {
-            // 首帧缩略图作加载占位（ffmpeg 生成）：视频缓冲时先显示预览图，播放后由 video 盖住
+            // 视频卡片：首帧缩略图（ffmpeg）+ 原生 poster 双保险。
+            // - 首帧图先加载并显示（onload 隐藏占位）——先加载首帧，用户立刻看到预览；
+            // - 视频缓冲期间由原生 poster 继续显示首帧（video 背景透明，绝不黑屏）；
+            // - 占位只在真正开始播放时才隐藏（onplaying），缓冲慢时仍能看到"加载中…"。
             var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + item.image;
             media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)">'
-                + '<video src="' + url + '" muted loop autoplay playsinline preload="auto" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:#111;z-index:1;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;" onplaying="hideGalleryPlaceholder(this)" onloadeddata="hideGalleryPlaceholder(this)"></video>';
+                + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop autoplay playsinline preload="auto" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;" onplaying="hideGalleryPlaceholder(this)"></video>';
         } else {
             media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)">';
         }
-        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\', ' + isMp4 + ')" style="overflow:hidden;cursor:pointer;padding:0;">'
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\', ' + isMp4 + ', \'' + (isMp4 ? thumbUrl : '') + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
             + placeholder
             + media
@@ -237,7 +237,7 @@ function formatDate(s) {
     return s.length >= 16 ? s.substring(0, 16).replace(' ', ' ') : s.substring(0, 10);
 }
 
-function openLightbox(url, desc, isMp4) {
+function openLightbox(url, desc, isMp4, thumbUrl) {
     document.getElementById('lightbox').classList.add('active');
     var img = document.getElementById('lbImg');
     var video = document.getElementById('lbVideo');
@@ -246,6 +246,8 @@ function openLightbox(url, desc, isMp4) {
     if (isMp4) {
         img.style.display = 'none';
         video.style.display = '';
+        // 首帧图作 poster：缓冲/加载时显示预览，不黑屏
+        video.poster = thumbUrl || '';
         video.src = url;
         video.muted = true;
         video.play();
@@ -378,7 +380,13 @@ async function uploadGallery() {
     var timer = setTimeout(function() { controller.abort(); }, 60000);
     try {
         var resp = await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd, signal: controller.signal });
-        var r = await resp.json();
+        // 先取文本再解析：服务器若混入 PHP 警告/错误会破坏 JSON，给用户明确提示而非晦涩的"网络错误"
+        var txt = await resp.text();
+        var r;
+        try { r = JSON.parse(txt); } catch (e) {
+            showToast('服务器响应异常' + (resp.ok ? '' : '（HTTP ' + resp.status + '）') + '，请重试');
+            return;
+        }
         if (r.success) {
             showToast('上传成功');
             clearUpload();
@@ -388,7 +396,7 @@ async function uploadGallery() {
         } else { showToast(r.error || '上传失败，请重试'); }
     } catch(e) {
         if (e.name === 'AbortError') { showToast('上传超时，请检查文件大小后重试'); }
-        else { showToast('网络错误：' + (e.message || '请重试')); }
+        else { showToast('网络错误，请重试'); }
     } finally { clearTimeout(timer); }
     btn.disabled = false; btn.textContent = '上传';
 }

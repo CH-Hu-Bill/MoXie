@@ -825,10 +825,7 @@ switch ($action) {
             appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '秒')) ? 413 : 500);
         }
         $id = bin2hex(random_bytes(16));
-        // MP4：同步生成首帧缩略图（best-effort，失败不影响上传）
-        if ($isMp4) {
-            try { Database::generateVideoThumb($classId, $fname); } catch (Throwable $e) {}
-        }
+        // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 无法 exec，此处不内联调用）
         Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
             if (!is_array($latest)) $latest = [];
             array_unshift($latest, ['id' => $id, 'image' => $fname, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
