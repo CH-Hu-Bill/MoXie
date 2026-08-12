@@ -380,11 +380,12 @@ body {
   font-size: 20px;
   line-height: 1.5;
   color: var(--pencil);
+  /* 描述溢出：由 display.js 在固定区域内自动滚动（壁纸页纯自动，不设用户打断） */
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  scrollbar-width: none;
   word-break: break-word;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 
 /* =========================================================

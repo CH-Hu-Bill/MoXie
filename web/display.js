@@ -170,6 +170,7 @@ function renderGalleryItem(item, fade) {
         wrap.innerHTML = '<div class="d-placeholder d-placeholder-sm">暂无图集</div>';
         wrap.style.aspectRatio = '';
         desc.textContent = '';
+        stopDescScroll();
         return;
     }
     // 新一轮渲染：复位计时状态；就绪钩子（onload/playing）触发 armGalleryNext()
@@ -299,6 +300,33 @@ function renderGalleryItem(item, fade) {
     }
     desc.textContent = item.description || '';
     desc.setAttribute('data-empty', item.description ? '0' : '1');
+    // 描述溢出自动滚动（壁纸页纯自动，无用户打断）
+    setTimeout(function() { startDescScroll(); }, 0);
+}
+
+/* 描述自动滚动：内容超出 .d-gallery-desc 固定区域时缓慢滚到底 → 停留 → 滚回顶部，循环。
+   用 setTimeout 自调度 + scrollTo smooth；无用户打断（展示大屏壁纸场景）。 */
+var _descScrollTimer = null;
+function stopDescScroll() {
+    if (_descScrollTimer) { clearTimeout(_descScrollTimer); _descScrollTimer = null; }
+    var d = document.getElementById('dGalleryDesc');
+    if (d) d.scrollTop = 0;
+}
+function startDescScroll() {
+    stopDescScroll();
+    var d = document.getElementById('dGalleryDesc');
+    if (!d || d.getAttribute('data-empty') === '1') return;
+    var max = d.scrollHeight - d.clientHeight;
+    if (max <= 4) return; // 内容不溢出，无需滚动
+    var dur = Math.max(2500, Math.min(9000, max * 38));
+    var down = function() {
+        d.scrollTo({ top: max, behavior: 'smooth' });
+        _descScrollTimer = setTimeout(function() {
+            d.scrollTo({ top: 0, behavior: 'smooth' });
+            _descScrollTimer = setTimeout(down, dur + 1000);
+        }, dur + 1200);
+    };
+    _descScrollTimer = setTimeout(down, 1500); // 首屏停留 1.5s 再开始
 }
 
 /* 图集轮播计时：等当前项【加载完成/开始播放】之后，再开始计 15s。

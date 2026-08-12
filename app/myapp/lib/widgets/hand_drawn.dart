@@ -93,7 +93,7 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
     final bgColor = isDisabled
         ? AppColors.oldPaper
         : (widget.backgroundColor ??
-            (widget.isSecondary ? AppColors.oldPaper : AppColors.white));
+              (widget.isSecondary ? AppColors.oldPaper : AppColors.white));
     final fgColor = isDisabled
         ? AppColors.pencil.withValues(alpha: 0.4)
         : (widget.textColor ?? AppColors.pencil);
@@ -107,20 +107,23 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
-        transform:
-            _pressed ? Matrix4.translationValues(3, 3, 0) : Matrix4.identity(),
+        transform: _pressed
+            ? Matrix4.translationValues(3, 3, 0)
+            : Matrix4.identity(),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: AppTheme.wobblyRadius,
             border: Border.all(color: AppColors.pencil, width: 2),
-            boxShadow:
-                _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
+            boxShadow: _pressed
+                ? []
+                : (isDisabled ? null : AppTheme.hardShadowMd),
           ),
           child: Row(
-            mainAxisSize:
-                widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisSize: widget.fullWidth
+                ? MainAxisSize.max
+                : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
@@ -176,8 +179,10 @@ class HandDrawnInput extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null) ...[
-          Text(label!,
-              style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15)),
+          Text(
+            label!,
+            style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15),
+          ),
           const SizedBox(height: 6),
         ],
         TextFormField(
@@ -188,10 +193,7 @@ class HandDrawnInput extends StatelessWidget {
           validator: validator,
           onChanged: onChanged,
           style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 15),
-          decoration: InputDecoration(
-            hintText: hint,
-            suffixIcon: suffix,
-          ),
+          decoration: InputDecoration(hintText: hint, suffixIcon: suffix),
         ),
       ],
     );
@@ -270,9 +272,10 @@ class LoadingOverlay extends StatelessWidget {
               ),
               if (message != null) ...[
                 const SizedBox(height: 16),
-                Text(message!,
-                    style:
-                        TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
+                Text(
+                  message!,
+                  style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16),
+                ),
               ],
             ],
           ),
@@ -349,8 +352,10 @@ class WobblyTabBar extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 margin: const EdgeInsets.all(2),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 4,
+                ),
                 decoration: BoxDecoration(
                   color: selected ? AppColors.white : Colors.transparent,
                   borderRadius: AppTheme.wobblyRadius,
@@ -423,22 +428,28 @@ class _MarqueeTextState extends State<MarqueeText>
     setState(() => _scrolling = true);
     final maxScroll = _controller.position.maxScrollExtent;
     _controller
-        .animateTo(maxScroll,
-            duration: Duration(
-                milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
-            curve: Curves.easeInOut)
+        .animateTo(
+          maxScroll,
+          duration: Duration(
+            milliseconds: (maxScroll * 35).round().clamp(2000, 8000),
+          ),
+          curve: Curves.easeInOut,
+        )
         .then((_) {
-      if (!_userInteracting && mounted) {
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (!_userInteracting && _controller.hasClients && mounted) {
-            _controller.animateTo(0,
-                duration: Duration(
-                    milliseconds: (maxScroll * 35).round().clamp(2000, 8000)),
-                curve: Curves.easeInOut);
+          if (!_userInteracting && mounted) {
+            Future.delayed(const Duration(milliseconds: 800), () {
+              if (!_userInteracting && _controller.hasClients && mounted) {
+                _controller.animateTo(
+                  0,
+                  duration: Duration(
+                    milliseconds: (maxScroll * 35).round().clamp(2000, 8000),
+                  ),
+                  curve: Curves.easeInOut,
+                );
+              }
+            });
           }
         });
-      }
-    });
   }
 
   @override
@@ -465,7 +476,8 @@ class _MarqueeTextState extends State<MarqueeText>
     // 仅在文本溢出时启用跑马灯（ShaderMask 开销大，短词用普通文本即可）
     return LayoutBuilder(
       builder: (context, constraints) {
-        final style = widget.style ??
+        final style =
+            widget.style ??
             TextStyle(
               fontFamily: AppTheme.fontHeading,
               fontSize: widget.fontSize,
@@ -518,6 +530,183 @@ class _MarqueeTextState extends State<MarqueeText>
           ),
         );
       },
+    );
+  }
+}
+
+/// 纵向自动滚动文本（图集描述等）。
+///
+/// 内容超出 [height] 时：缓慢滚动到底 → 停留 → 滚回顶部，循环。
+/// [userInterruptible] 为 true 时，用户按住/拖动可暂停，松手 2 秒后自动恢复
+/// （与单词跑马灯 MarqueeText 一致）；为 false 则纯自动（展示大屏壁纸场景）。
+/// 溢出时上下边缘渐隐到 [fadeColor]。
+class AutoScrollText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final double height;
+  final EdgeInsets padding;
+  final bool userInterruptible;
+  final Color fadeColor;
+
+  const AutoScrollText({
+    super.key,
+    required this.text,
+    required this.style,
+    this.height = 68,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    this.userInterruptible = true,
+    this.fadeColor = Colors.black,
+  });
+
+  @override
+  State<AutoScrollText> createState() => _AutoScrollTextState();
+}
+
+class _AutoScrollTextState extends State<AutoScrollText> {
+  final ScrollController _controller = ScrollController();
+  bool _scrolling = false;
+  bool _userInteracting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+  }
+
+  @override
+  void didUpdateWidget(AutoScrollText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _scrolling = false;
+      _userInteracting = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_controller.hasClients) _controller.jumpTo(0);
+        _checkOverflow();
+      });
+    }
+  }
+
+  void _checkOverflow() {
+    if (!_controller.hasClients) return;
+    final max = _controller.position.maxScrollExtent;
+    if (max > 4 && !_scrolling && !_userInteracting) _startScrolling();
+  }
+
+  Future<void> _startScrolling() async {
+    if (!_controller.hasClients) return;
+    setState(() => _scrolling = true);
+    final max = _controller.position.maxScrollExtent;
+    final dur = Duration(milliseconds: (max * 35).round().clamp(2000, 9000));
+    await _controller.animateTo(max, duration: dur, curve: Curves.easeInOut);
+    if (!mounted || _userInteracting) return;
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted || _userInteracting || !_controller.hasClients) return;
+    await _controller.animateTo(0, duration: dur, curve: Curves.easeInOut);
+    if (!mounted || _userInteracting) return;
+    setState(() => _scrolling = false);
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted && !_userInteracting) _checkOverflow();
+    });
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _userInteracting = true;
+    if (_scrolling) setState(() => _scrolling = false);
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    _userInteracting = false;
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted && !_userInteracting) _checkOverflow();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+        )..layout(maxWidth: maxW);
+        final overflowH =
+            painter.height + widget.padding.vertical > widget.height;
+        painter.dispose();
+        if (!overflowH) {
+          return Container(
+            height: widget.height,
+            alignment: Alignment.center,
+            padding: widget.padding,
+            child: Text(
+              widget.text,
+              textAlign: TextAlign.center,
+              style: widget.style,
+            ),
+          );
+        }
+        Widget scroll = SingleChildScrollView(
+          controller: _controller,
+          padding: widget.padding,
+          child: Text(
+            widget.text,
+            textAlign: TextAlign.center,
+            style: widget.style,
+          ),
+        );
+        if (widget.userInterruptible) {
+          scroll = GestureDetector(
+            onVerticalDragStart: _onDragStart,
+            onVerticalDragEnd: _onDragEnd,
+            child: scroll,
+          );
+        }
+        return SizedBox(
+          height: widget.height,
+          child: ClipRect(
+            child: Stack(
+              children: [
+                Positioned.fill(child: scroll),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 14,
+                  child: _fade(true),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 14,
+                  child: _fade(false),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _fade(bool fromTop) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+            end: fromTop ? Alignment.bottomCenter : Alignment.topCenter,
+            colors: [widget.fadeColor, widget.fadeColor.withValues(alpha: 0)],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -580,16 +769,15 @@ class WordCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: MarqueeText(
-                  text: word,
-                  fontSize: _wordFontSize(word),
-                ),
+                child: MarqueeText(text: word, fontSize: _wordFontSize(word)),
               ),
               if (pos.isNotEmpty) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.blue.withValues(alpha: 0.1),
                     borderRadius: AppTheme.wobblyRadius,
@@ -627,10 +815,7 @@ class WordCard extends StatelessWidget {
       ),
     );
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: card,
-      );
+      return GestureDetector(onTap: onTap, child: card);
     }
     return card;
   }

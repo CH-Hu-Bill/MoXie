@@ -175,7 +175,7 @@ require 'inc/header.php';
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;width:44px;height:44px;border-radius:50%;font-size:20px;">✕</button>
     <img id="lbImg" src="" alt="" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
     <video id="lbVideo" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline></video>
-    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
+    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;width:min(600px,86vw);max-height:18vh;overflow:hidden;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
         <span id="lbDescText"></span>
     </div>
 </div>
@@ -184,6 +184,8 @@ require 'inc/header.php';
 <script>
 var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+// 描述不内嵌到 HTML onclick 属性（含换行/过长会破坏 JS 导致卡片打不开），统一存映射表按 id 取
+var galleryDescMap = {};
 
 function renderGallery() {
     var grid = document.getElementById('galleryGrid');
@@ -191,6 +193,7 @@ function renderGallery() {
     if (!galleryData.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
     empty.style.display = 'none';
     grid.innerHTML = galleryData.map(function(item, idx) {
+        galleryDescMap[item.id] = item.description;
         var url = 'upload.php?class_id=' + classId + '&file=' + item.image;
         var dateText = formatDate(item.uploaded_at);
         var isGif = /\.gif$/i.test(item.image);
@@ -209,7 +212,7 @@ function renderGallery() {
         } else {
             media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)">';
         }
-        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\', ' + isMp4 + ', \'' + (isMp4 ? thumbUrl : '') + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + item.id + '\', ' + isMp4 + ', \'' + (isMp4 ? thumbUrl : '') + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
             + placeholder
             + media
@@ -219,7 +222,7 @@ function renderGallery() {
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'
             + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date">📅 ' + dateText + '</span>'
-            + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\', \'' + escapeHtml(item.description).replace(/'/g, "\\'") + '\')" style="padding:2px 10px;">✏️</button>'
+            + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\')" style="padding:2px 10px;">✏️</button>'
             + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button></span>'
             + '</div></div></div>';
     }).join('');
@@ -237,12 +240,14 @@ function formatDate(s) {
     return s.length >= 16 ? s.substring(0, 16).replace(' ', ' ') : s.substring(0, 10);
 }
 
-function openLightbox(url, desc, isMp4, thumbUrl) {
+function openLightbox(url, id, isMp4, thumbUrl) {
     document.getElementById('lightbox').classList.add('active');
     var img = document.getElementById('lbImg');
     var video = document.getElementById('lbVideo');
     var descText = document.getElementById('lbDescText');
-    descText.textContent = desc;
+    descText.textContent = galleryDescMap[id] || '';
+    // 描述过长：固定区域内自动滚动；用户鼠标悬停/触摸可暂停，离开 2 秒后恢复
+    setTimeout(function() { lbDescScroll(); }, 0);
     if (isMp4) {
         img.style.display = 'none';
         video.style.display = '';
@@ -259,11 +264,43 @@ function openLightbox(url, desc, isMp4, thumbUrl) {
     }
 }
 function closeLightbox() {
+    lbDescStop();
     document.getElementById('lightbox').classList.remove('active');
     var video = document.getElementById('lbVideo');
     video.pause();
 }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+
+/* 灯箱描述自动滚动：超出 #lbDesc 固定区域时滚到底 → 停留 → 滚回顶部，循环。
+   用户悬停/触摸暂停，离开 2 秒后自动恢复。 */
+var _lbDescTimer = null;
+function lbDescStop() {
+    if (_lbDescTimer) { clearTimeout(_lbDescTimer); _lbDescTimer = null; }
+}
+function lbDescScroll() {
+    lbDescStop();
+    var d = document.getElementById('lbDesc');
+    if (!d) return;
+    var max = d.scrollHeight - d.clientHeight;
+    if (max <= 4) { d.scrollTop = 0; return; }
+    var dur = Math.max(2000, Math.min(7000, max * 35));
+    var down = function() {
+        d.scrollTo({ top: max, behavior: 'smooth' });
+        _lbDescTimer = setTimeout(function() {
+            d.scrollTo({ top: 0, behavior: 'smooth' });
+            _lbDescTimer = setTimeout(down, dur + 800);
+        }, dur + 1000);
+    };
+    _lbDescTimer = setTimeout(down, 1200);
+}
+(function() {
+    var d = document.getElementById('lbDesc');
+    if (!d) return;
+    d.addEventListener('mouseenter', lbDescStop);
+    d.addEventListener('mouseleave', function() { setTimeout(lbDescScroll, 2000); });
+    d.addEventListener('touchstart', lbDescStop, { passive: true });
+    d.addEventListener('touchend', function() { setTimeout(lbDescScroll, 2000); });
+})();
 
 function previewUpload() {
     var input = document.getElementById('galleryImage');
@@ -418,7 +455,8 @@ async function deleteGallery(id) {
 
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function editGallery(id, currentDesc) {
+function editGallery(id) {
+    var currentDesc = galleryDescMap[id] || '';
     var newDesc = prompt('修改图片描述：', currentDesc);
     if (newDesc === null) return;
     newDesc = newDesc.trim();

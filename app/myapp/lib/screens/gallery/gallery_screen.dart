@@ -29,7 +29,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     'image/jpeg',
     'image/png',
     'image/webp',
-    'image/gif'
+    'image/gif',
   ];
   static const _allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
   final _api = ApiService();
@@ -94,13 +94,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
       });
       _storage.cacheGallery(
-          classId, _items.map((e) => e.toCacheJson()).toList());
+        classId,
+        _items.map((e) => e.toCacheJson()).toList(),
+      );
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
       }
     }
   }
@@ -132,7 +134,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
       });
       _storage.cacheGallery(
-          classId, _items.map((e) => e.toCacheJson()).toList());
+        classId,
+        _items.map((e) => e.toCacheJson()).toList(),
+      );
     } catch (_) {
       // 静默刷新失败忽略，保留缓存数据
     }
@@ -181,9 +185,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Future<void> _pickAndUploadImage() async {
     final picker = ImagePicker();
     // 不限制 maxWidth/maxHeight：避免 image_picker 重新采样导致 GIF 动图丢失动画
-    final image = await picker.pickImage(
-      source: ImageSource.gallery,
-    );
+    final image = await picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
 
     final ext = image.name.split('.').last.toLowerCase();
@@ -194,7 +196,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(isGif ? 'GIF 动图大小不能超过 16MB' : '图片大小不能超过 12MB')),
+            content: Text(isGif ? 'GIF 动图大小不能超过 16MB' : '图片大小不能超过 12MB'),
+          ),
         );
       }
       return;
@@ -255,18 +258,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final ext = video.name.split('.').last.toLowerCase();
     if (ext != 'mp4' && ext != 'mov') {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('仅支持 MP4 / MOV 视频格式')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('仅支持 MP4 / MOV 视频格式')));
       }
       return;
     }
     final fileSize = await video.length();
     if (fileSize > _mp4MaxBytes) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('视频大小不能超过 15MB')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('视频大小不能超过 15MB')));
       }
       return;
     }
@@ -317,24 +320,25 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) Navigator.pop(context);
       _loadGallery();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('上传成功')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('上传成功')));
       }
     } on ApiException catch (e) {
       if (mounted) Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(e.message.isNotEmpty ? e.message : '上传失败，请重试')),
+            content: Text(e.message.isNotEmpty ? e.message : '上传失败，请重试'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('网络错误，请检查网络后重试')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('网络错误，请检查网络后重试')));
       }
     }
   }
@@ -392,30 +396,34 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) {
         setState(() {
           _items = _items
-              .map((e) => e.id == item.id
-                  ? GalleryItem(
-                      id: e.id,
-                      imageUrl: e.imageUrl,
-                      thumbUrl: e.thumbUrl,
-                      description: result,
-                      uploadedAt: e.uploadedAt,
-                      isGif: e.isGif,
-                      isVideo: e.isVideo,
-                    )
-                  : e)
+              .map(
+                (e) => e.id == item.id
+                    ? GalleryItem(
+                        id: e.id,
+                        imageUrl: e.imageUrl,
+                        thumbUrl: e.thumbUrl,
+                        description: result,
+                        uploadedAt: e.uploadedAt,
+                        isGif: e.isGif,
+                        isVideo: e.isVideo,
+                      )
+                    : e,
+              )
               .toList();
         });
         _storage.cacheGallery(
-            classId, _items.map((e) => e.toCacheJson()).toList());
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('描述已更新')),
+          classId,
+          _items.map((e) => e.toCacheJson()).toList(),
         );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('描述已更新')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('更新失败: $e')));
       }
     }
   }
@@ -427,100 +435,97 @@ class _GalleryScreenState extends State<GalleryScreen> {
         child: _items.isEmpty && _loading
             ? const Center(child: CircularProgressIndicator())
             : _items.isEmpty
-                ? const EmptyState(
-                    message: '画廊还是空的，上传第一张图片吧',
-                    icon: Icons.photo,
-                  )
-                : RefreshIndicator(
-                    onRefresh: () => _loadGallery(reset: true),
-                    color: AppColors.red,
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (notif) {
-                        if (notif is ScrollEndNotification &&
-                            notif.metrics.pixels >=
-                                notif.metrics.maxScrollExtent - 100 &&
-                            _hasMore &&
-                            !_loading) {
-                          _loadGallery(reset: false);
-                        }
-                        return false;
-                      },
-                      child: GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
+            ? const EmptyState(message: '画廊还是空的，上传第一张图片吧', icon: Icons.photo)
+            : RefreshIndicator(
+                onRefresh: () => _loadGallery(reset: true),
+                color: AppColors.red,
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notif) {
+                    if (notif is ScrollEndNotification &&
+                        notif.metrics.pixels >=
+                            notif.metrics.maxScrollExtent - 100 &&
+                        _hasMore &&
+                        !_loading) {
+                      _loadGallery(reset: false);
+                    }
+                    return false;
+                  },
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                           childAspectRatio: 0.75,
                         ),
-                        itemCount: _items.length,
-                        itemBuilder: (ctx, i) {
-                          final item = _items[i];
-                          return HandDrawnCard(
-                            padding: EdgeInsets.zero,
-                            onTap: () => _viewImage(item),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(18),
-                                      topRight: Radius.circular(18),
-                                    ),
-                                    child: item.isVideo
-                                        ? (item.thumbUrl.isNotEmpty
-                                            ? _VideoThumbView(
-                                                thumbUrl: item.thumbUrl)
-                                            : _VideoThumbnail(
-                                                videoUrl: item.imageUrl))
-                                        : item.isGif
-                                            ? _GifThumbnail(
-                                                imageUrl: item.imageUrl)
-                                            : CachedNetworkImage(
-                                                imageUrl: item.imageUrl,
-                                                fit: BoxFit.cover,
-                                                placeholder: (_, __) =>
-                                                    Container(
-                                                  color: AppColors.oldPaper,
-                                                  child: const Center(
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                            color:
-                                                                AppColors.red,
-                                                            strokeWidth: 2),
-                                                  ),
-                                                ),
-                                                errorWidget: (_, __, ___) =>
-                                                    Container(
-                                                  color: AppColors.muted,
-                                                  child: const Center(
-                                                    child: Icon(
-                                                        Icons.broken_image,
-                                                        size: 40),
-                                                  ),
-                                                ),
-                                              ),
-                                  ),
+                    itemCount: _items.length,
+                    itemBuilder: (ctx, i) {
+                      final item = _items[i];
+                      return HandDrawnCard(
+                        padding: EdgeInsets.zero,
+                        onTap: () => _viewImage(item),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(18),
+                                  topRight: Radius.circular(18),
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Text(
-                                    item.description,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.bodyStyle
-                                        .copyWith(fontSize: 14),
-                                  ),
-                                ),
-                              ],
+                                child: item.isVideo
+                                    ? (item.thumbUrl.isNotEmpty
+                                          ? _VideoThumbView(
+                                              thumbUrl: item.thumbUrl,
+                                            )
+                                          : _VideoThumbnail(
+                                              videoUrl: item.imageUrl,
+                                            ))
+                                    : item.isGif
+                                    ? _GifThumbnail(imageUrl: item.imageUrl)
+                                    : CachedNetworkImage(
+                                        imageUrl: item.imageUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(
+                                          color: AppColors.oldPaper,
+                                          child: const Center(
+                                            child: CircularProgressIndicator(
+                                              color: AppColors.red,
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        ),
+                                        errorWidget: (_, __, ___) => Container(
+                                          color: AppColors.muted,
+                                          child: const Center(
+                                            child: Icon(
+                                              Icons.broken_image,
+                                              size: 40,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                              ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
+                            Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Text(
+                                item.description,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTheme.bodyStyle.copyWith(
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
+                ),
+              ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showUploadMenu,
@@ -535,8 +540,10 @@ class _GalleryViewerScreen extends StatelessWidget {
   final GalleryItem item;
   final void Function(GalleryItem item) onEditDescription;
 
-  const _GalleryViewerScreen(
-      {required this.item, required this.onEditDescription});
+  const _GalleryViewerScreen({
+    required this.item,
+    required this.onEditDescription,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -567,8 +574,10 @@ class _GalleryViewerScreen extends StatelessWidget {
                     : InteractiveViewer(
                         child: Container(
                           decoration: BoxDecoration(
-                            border:
-                                Border.all(color: AppColors.border, width: 3),
+                            border: Border.all(
+                              color: AppColors.border,
+                              width: 3,
+                            ),
                             borderRadius: AppTheme.wobblyRadius,
                           ),
                           child: ClipRRect(
@@ -580,7 +589,8 @@ class _GalleryViewerScreen extends StatelessWidget {
                                     fit: BoxFit.contain,
                                     placeholder: (_, __) => const Center(
                                       child: CircularProgressIndicator(
-                                          color: Colors.white),
+                                        color: Colors.white,
+                                      ),
                                     ),
                                     errorWidget: (_, __, ___) => const Icon(
                                       Icons.broken_image,
@@ -596,20 +606,24 @@ class _GalleryViewerScreen extends StatelessWidget {
             if (item.description.isNotEmpty)
               Container(
                 margin: const EdgeInsets.all(16),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: AppTheme.wobblyRadius,
                   border: Border.all(color: AppColors.border, width: 2),
                 ),
-                child: Text(
-                  item.description,
-                  textAlign: TextAlign.center,
+                // 描述过长时在固定区域内自动滚动；用户可拖动打断，2 秒后恢复
+                child: AutoScrollText(
+                  text: item.description,
                   style: AppTheme.bodyStyle.copyWith(
                     fontSize: 16,
                     color: Colors.white,
                   ),
+                  height: 70,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 13,
+                  ),
+                  fadeColor: Colors.black,
                 ),
               ),
           ],
@@ -666,23 +680,26 @@ class _GifThumbnailState extends State<_GifThumbnail> {
       },
       child: _visible
           ? _cachedFile != null
-              ? Image.file(
-                  _cachedFile!,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: AppColors.muted,
-                    child:
-                        const Center(child: Icon(Icons.broken_image, size: 40)),
-                  ),
-                )
-              : Container(
-                  color: AppColors.oldPaper,
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.red, strokeWidth: 2),
-                  ),
-                )
+                ? Image.file(
+                    _cachedFile!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: AppColors.muted,
+                      child: const Center(
+                        child: Icon(Icons.broken_image, size: 40),
+                      ),
+                    ),
+                  )
+                : Container(
+                    color: AppColors.oldPaper,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.red,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  )
           : Container(color: AppColors.oldPaper),
     );
   }
@@ -734,11 +751,8 @@ class _GifViewerState extends State<_GifViewer> {
       _cachedFile!,
       fit: BoxFit.contain,
       gaplessPlayback: true,
-      errorBuilder: (_, __, ___) => const Icon(
-        Icons.broken_image,
-        size: 64,
-        color: AppColors.muted,
-      ),
+      errorBuilder: (_, __, ___) =>
+          const Icon(Icons.broken_image, size: 64, color: AppColors.muted),
     );
   }
 }
@@ -767,7 +781,7 @@ class _UploadMenuTile extends StatelessWidget {
           border: Border.all(color: AppColors.border, width: 2),
           borderRadius: AppTheme.wobblyRadius,
           boxShadow: const [
-            BoxShadow(color: AppColors.border, offset: Offset(3, 3))
+            BoxShadow(color: AppColors.border, offset: Offset(3, 3)),
           ],
         ),
         child: Row(
@@ -775,8 +789,10 @@ class _UploadMenuTile extends StatelessWidget {
             Icon(icon, color: AppColors.pencil, size: 24),
             const SizedBox(width: 12),
             Expanded(
-              child:
-                  Text(label, style: AppTheme.bodyStyle.copyWith(fontSize: 15)),
+              child: Text(
+                label,
+                style: AppTheme.bodyStyle.copyWith(fontSize: 15),
+              ),
             ),
             const Icon(Icons.chevron_right, color: AppColors.muted),
           ],
@@ -863,7 +879,9 @@ class _VideoThumbView extends StatelessWidget {
             color: AppColors.oldPaper,
             child: const Center(
               child: CircularProgressIndicator(
-                  color: AppColors.red, strokeWidth: 2),
+                color: AppColors.red,
+                strokeWidth: 2,
+              ),
             ),
           ),
           errorWidget: (_, __, ___) => Container(
@@ -873,30 +891,42 @@ class _VideoThumbView extends StatelessWidget {
             ),
           ),
         ),
-        // 中央播放提示（半透明，明确是视频）
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: Colors.black38,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
-        ),
-        // 左上角"视频"角标
-        Positioned(
-          left: 8,
-          top: 8,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white24, width: 1),
-            ),
-            child: const Text(
-              '🎬 视频',
-              style: TextStyle(fontSize: 11, color: Colors.white),
+        // 手绘风格"视频"贴纸：白纸卡片 + 抖动圆角 + 硬偏移阴影 + 红色播放三角 + 手写标题
+        Positioned.fill(
+          child: Center(
+            child: Transform.rotate(
+              angle: -0.04,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: AppTheme.wobblySm,
+                  border: Border.all(color: AppColors.pencil, width: 2.5),
+                  boxShadow: AppTheme.hardShadowSm,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.play_arrow_rounded,
+                      color: AppColors.red,
+                      size: 26,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '视频',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontHeading,
+                        fontSize: 16,
+                        color: AppColors.pencil,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -1022,8 +1052,11 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
               children: [
                 _VideoThumbSurface(controller: _controller!),
                 const Center(
-                  child: Icon(Icons.play_circle_outline,
-                      color: Colors.white70, size: 40),
+                  child: Icon(
+                    Icons.play_circle_outline,
+                    color: Colors.white70,
+                    size: 40,
+                  ),
                 ),
               ],
             )
@@ -1037,11 +1070,15 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                          color: AppColors.red, strokeWidth: 2),
+                        color: AppColors.red,
+                        strokeWidth: 2,
+                      ),
                     ),
                     SizedBox(height: 6),
-                    Text('加载中…',
-                        style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                    Text(
+                      '加载中…',
+                      style: TextStyle(fontSize: 11, color: AppColors.muted),
+                    ),
                   ],
                 ),
               ),
@@ -1090,7 +1127,9 @@ class _VideoViewerState extends State<_VideoViewer> {
         setState(() {});
         return;
       }
-    } catch (_) {/* 无缓存，走网络流式 */}
+    } catch (_) {
+      /* 无缓存，走网络流式 */
+    }
 
     // 2) 未缓存：网络流式播放（秒开、边下边播），同时后台把整文件写入磁盘缓存，
     //    下次打开同一视频直接从缓存播放。
@@ -1161,8 +1200,10 @@ class _VideoViewerState extends State<_VideoViewer> {
                   bottom: 0,
                   child: Container(
                     color: Colors.black45,
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 8,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1205,8 +1246,10 @@ class _VideoViewerState extends State<_VideoViewer> {
                   children: [
                     CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 10),
-                    Text('视频加载中…',
-                        style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    Text(
+                      '视频加载中…',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
                   ],
                 ),
               ),

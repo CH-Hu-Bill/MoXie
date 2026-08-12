@@ -1,8 +1,8 @@
 name: myapp
-description: "ListenWrite 班级默写 + 班级史记 APP"
+description: "ListenWrite 鐝骇榛樺啓 + 鐝骇鍙茶 APP"
 publish_to: 'none'
 
-version: 1.0.8+1
+version: 1.0.9+1
 
 environment:
   sdk: ^3.5.0
