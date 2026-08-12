@@ -165,12 +165,11 @@ function fitGalleryContainer(wrap, width, height) {
 function renderGalleryItem(item, fade) {
     var wrap = document.getElementById('dGalleryImg');
     var desc = document.getElementById('dGalleryDesc');
-    var descScroll = document.getElementById('dGalleryDescScroll');
-    if (!wrap || !desc || !descScroll) return;
+    if (!wrap || !desc) return;
     if (!item) {
         wrap.innerHTML = '<div class="d-placeholder d-placeholder-sm">暂无图集</div>';
         wrap.style.aspectRatio = '';
-        descScroll.textContent = '';
+        desc.textContent = '';
         desc.setAttribute('data-empty', '1');
         stopDescScroll();
         return;
@@ -300,7 +299,7 @@ function renderGalleryItem(item, fade) {
         img2.onload = function() { if (ld2 && ld2.parentNode) ld2.parentNode.removeChild(ld2); armGalleryNext(); };
         wrap.appendChild(img2);
     }
-    descScroll.textContent = item.description || '';
+    desc.textContent = item.description || '';
     desc.setAttribute('data-empty', item.description ? '0' : '1');
     // 描述溢出自动滚动（壁纸页纯自动，无用户打断）
     setTimeout(function() { startDescScroll(); }, 0);
@@ -312,16 +311,16 @@ function renderGalleryItem(item, fade) {
 var _descScrollHandle = null;
 function stopDescScroll() {
     if (_descScrollHandle) { cancelAnimationFrame(_descScrollHandle.raf); _descScrollHandle = null; }
-    var d = document.getElementById('dGalleryDescScroll');
-    if (d) d.scrollTop = 0;
+    var d = document.getElementById('dGalleryDesc');
+    if (d) { d.scrollTop = 0; d.classList.remove('is-overflow'); }
 }
 function startDescScroll() {
     stopDescScroll();
-    var d = document.getElementById('dGalleryDescScroll');
-    var box = document.getElementById('dGalleryDesc');
-    if (!d || !box || box.getAttribute('data-empty') === '1') return;
+    var d = document.getElementById('dGalleryDesc');
+    if (!d || d.getAttribute('data-empty') === '1') return;
     var max = d.scrollHeight - d.clientHeight;
-    if (max <= 4) return; // 内容不溢出，无需滚动
+    if (max <= 4) return; // 内容不溢出，无需滚动（也不加蒙版）
+    d.classList.add('is-overflow'); // 溢出才叠上下渐变蒙版
     var speed = 22;           // px/s，缓慢
     var pos = 0, dir = 1;
     var last = performance.now(), pauseUntil = 0;

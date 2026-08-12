@@ -170,8 +170,8 @@ require 'inc/header.php';
     <div class="empty-state" id="emptyState" style="display:none"><p>还没有图片，上传第一张吧 📷</p></div>
 </div>
 
-<!-- Lightbox：左侧媒体 + 右侧描述整列（描述过长在该列内来回自动滚动，边缘渐变蒙版） -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:5000;display:flex;align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
+<!-- Lightbox：左侧媒体 + 右侧描述整列。display 由 .lightbox/.lightbox.active 控制（不要内联 display:flex，否则常显关不掉） -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;">✕</button>
     <div id="lbMedia" onclick="event.stopPropagation()" style="flex:1 1 58%;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;">
         <img id="lbImg" src="" alt="" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);object-fit:contain;">
@@ -179,9 +179,7 @@ require 'inc/header.php';
     </div>
     <div id="lbDesc" onclick="event.stopPropagation()" style="flex:0 0 34%;max-width:34%;align-self:stretch;box-sizing:border-box;display:flex;flex-direction:column;min-width:0;padding:14px 18px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);color:var(--white);font-size:15px;text-align:center;line-height:1.7;">
         <div style="font-size:12px;opacity:.65;padding-bottom:10px;">📝 描述</div>
-        <div id="lbDescScroll" style="flex:1;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%);mask-image:linear-gradient(180deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%);">
-            <span id="lbDescText"></span>
-        </div>
+        <div id="lbDescScroll" style="flex:1;min-height:0;overflow:hidden;"><span id="lbDescText"></span></div>
     </div>
 </div>
 
@@ -251,11 +249,27 @@ function openLightbox(url, id, isMp4, thumbUrl) {
     var video = document.getElementById('lbVideo');
     var descText = document.getElementById('lbDescText');
     descText.textContent = galleryDescMap[id] || '';
-    // 描述过长：固定区域内自动滚动；用户鼠标悬停/触摸可暂停，离开 2 秒后恢复
+    // 描述过长：右列内来回自动滚动；用户鼠标悬停/触摸可暂停，离开 2 秒后恢复
     setTimeout(function() { lbDescScroll(); }, 0);
+    // 描述框宽度按媒体宽高比自适应：竖图给描述更宽、横图更窄
+    var sizeDescForMedia = function(w, h) {
+        var d = document.getElementById('lbDesc');
+        if (!d || !w || !h) return;
+        var ratio = w / Math.max(1, h);
+        var basis = 34;
+        if (ratio < 0.75) basis = 42;      // 竖图/接近 9:16
+        else if (ratio < 1.1) basis = 38;  // 接近方形
+        else if (ratio > 1.8) basis = 30;  // 超宽横幅
+        d.style.flex = '0 0 ' + basis + '%';
+        d.style.maxWidth = basis + '%';
+    };
     if (isMp4) {
         img.style.display = 'none';
         video.style.display = '';
+        video.onloadedmetadata = function() {
+            sizeDescForMedia(video.videoWidth, video.videoHeight);
+            setTimeout(lbDescScroll, 0); // 布局变化后重测溢出
+        };
         // 首帧图作 poster：缓冲/加载时显示预览，不黑屏
         video.poster = thumbUrl || '';
         video.src = url;
@@ -265,6 +279,10 @@ function openLightbox(url, id, isMp4, thumbUrl) {
         video.pause(); video.src = '';
         video.style.display = 'none';
         img.style.display = '';
+        img.onload = function() {
+            sizeDescForMedia(img.naturalWidth, img.naturalHeight);
+            setTimeout(lbDescScroll, 0);
+        };
         img.src = url;
     }
 }
@@ -288,7 +306,15 @@ function lbDescScroll() {
     var d = document.getElementById('lbDescScroll');
     if (!d) return;
     var max = d.scrollHeight - d.clientHeight;
-    if (max <= 4) { d.scrollTop = 0; return; }
+    if (max <= 4) {
+        d.scrollTop = 0;
+        d.style.webkitMaskImage = '';
+        d.style.maskImage = '';
+        return;
+    }
+    // 溢出才加渐变蒙版（防硬截断；不溢出时保持清晰可读）
+    d.style.webkitMaskImage = 'linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%)';
+    d.style.maskImage = 'linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%)';
     var speed = 22;           // px/s，缓慢
     var pos = 0, dir = 1;
     var last = performance.now(), pauseUntil = 0;
