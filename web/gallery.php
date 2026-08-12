@@ -245,6 +245,9 @@ function formatDate(s) {
 
 function openLightbox(url, id, isMp4, thumbUrl) {
     document.getElementById('lightbox').classList.add('active');
+    // 打开详情：暂停网格里所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后恢复
+    document.body.classList.add('lb-open');
+    document.querySelectorAll('.gallery-card video').forEach(function(v) { try { v.pause(); } catch (e) {} });
     var img = document.getElementById('lbImg');
     var video = document.getElementById('lbVideo');
     var descText = document.getElementById('lbDescText');
@@ -289,6 +292,9 @@ function openLightbox(url, id, isMp4, thumbUrl) {
 function closeLightbox() {
     lbDescStop();
     document.getElementById('lightbox').classList.remove('active');
+    // 关闭详情：恢复网格预览视频/GIF 播放
+    document.body.classList.remove('lb-open');
+    document.querySelectorAll('.gallery-card video').forEach(function(v) { try { v.play(); } catch (e) {} });
     var video = document.getElementById('lbVideo');
     video.pause();
 }

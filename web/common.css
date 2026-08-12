@@ -723,6 +723,11 @@ body {
 /* ======== 图集灯箱 (gallery.php) ======== */
 .lightbox { display: none; }
 .lightbox.active { display: flex; }
+/* 打开灯箱时暂停网格预览：视频已 JS pause、GIF 隐藏停止渲染（多解码器并发是卡顿根源），关闭后恢复 */
+body.lb-open .gallery-card video,
+body.lb-open .gallery-card img[src$=".gif"] {
+  visibility: hidden;
+}
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
 .upload-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 @media(max-width:600px) {
