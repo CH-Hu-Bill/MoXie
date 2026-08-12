@@ -170,8 +170,8 @@ require 'inc/header.php';
     <div class="empty-state" id="emptyState" style="display:none"><p>还没有图片，上传第一张吧 📷</p></div>
 </div>
 
-<!-- Lightbox：左侧媒体 + 右侧描述整列。display 由 .lightbox/.lightbox.active 控制（不要内联 display:flex，否则常显关不掉） -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
+<!-- Lightbox：左侧媒体 + 右侧描述整列。display 由 .lightbox/.lightbox.active 控制（勿内联 display:flex，否则常显关不掉）；固定定位/背景/层级必须内联补齐 -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;">✕</button>
     <div id="lbMedia" onclick="event.stopPropagation()" style="flex:1 1 58%;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;">
         <img id="lbImg" src="" alt="" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);object-fit:contain;">

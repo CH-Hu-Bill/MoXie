@@ -194,5 +194,5 @@ flutter build apk --release
 4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
 5. **画廊上传**：已实现本地校验（JPEG/PNG/WebP + 12MB 上限）+ 服务器端二次校验
 6. **同步刷新**：三屏均已实现 30s 自动刷新 + 手动下拉刷新，编辑/滚动中不打断
-7. **媒体缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 flutter_cache_manager 磁盘缓存 + visibility_detector 视口检测（进入视口才播放、离开释放资源）；**MP4 视频卡片显示后端 ffmpeg 首帧图（`thumb_url`，cached_network_image 缓存）+ 手绘风「视频」贴纸**——网格不再内嵌视频解码器（消除缩略图黑屏/多实例卡顿）；大图播放器**缓存命中直接读本地文件，未缓存则网络流式播放（服务器 HEAD/Range 秒开）并后台下载整文件写缓存，二次打开秒开**；**大图查看描述用 AutoScrollText：内容超出固定高度时自动纵向滚动（滚到底→停留→滚回顶部循环），用户拖动可打断、2s 后恢复，上下边缘渐隐**；无 `thumb_url` 的历史视频走旧版视口缩略图降级路径；单词/史记数据使用 SharedPreferences TTL 缓存（30s）
+7. **媒体缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 flutter_cache_manager 磁盘缓存 + visibility_detector 视口检测（进入视口才播放、离开释放资源）；**MP4 视频卡片显示后端 ffmpeg 首帧图（`thumb_url`，cached_network_image 缓存）+ 手绘风「视频」贴纸**——网格不再内嵌视频解码器（消除缩略图黑屏/多实例卡顿）；大图播放器**缓存命中直接读本地文件，未缓存则网络流式播放（服务器 HEAD/Range 秒开）并后台下载整文件写缓存，二次打开秒开**；**大图查看描述用 AutoScrollText：内容超出固定高度时自动纵向滚动（滚到底→停留→滚回顶部循环），用户拖动可打断、2s 后恢复，上下边缘渐变蒙版仅在确有溢出时显示（不遮挡短文本末行）、内容底部留缓冲**；无 `thumb_url` 的历史视频走旧版视口缩略图降级路径；单词/史记数据使用 SharedPreferences TTL 缓存（30s）
 8. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`

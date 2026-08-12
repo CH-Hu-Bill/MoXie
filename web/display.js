@@ -165,11 +165,15 @@ function fitGalleryContainer(wrap, width, height) {
 function renderGalleryItem(item, fade) {
     var wrap = document.getElementById('dGalleryImg');
     var desc = document.getElementById('dGalleryDesc');
-    if (!wrap || !desc) return;
+    var descScroll = document.getElementById('dGalleryDescScroll');
+    if (!wrap || !desc || !descScroll) return;
+    // 新一项：描述"是否已完整滚完"复位
+    _descDone = false;
+    _descWaitStart = 0;
     if (!item) {
         wrap.innerHTML = '<div class="d-placeholder d-placeholder-sm">暂无图集</div>';
         wrap.style.aspectRatio = '';
-        desc.textContent = '';
+        descScroll.textContent = '';
         desc.setAttribute('data-empty', '1');
         stopDescScroll();
         return;
@@ -299,30 +303,34 @@ function renderGalleryItem(item, fade) {
         img2.onload = function() { if (ld2 && ld2.parentNode) ld2.parentNode.removeChild(ld2); armGalleryNext(); };
         wrap.appendChild(img2);
     }
-    desc.textContent = item.description || '';
+    descScroll.textContent = item.description || '';
     desc.setAttribute('data-empty', item.description ? '0' : '1');
     // 描述溢出自动滚动（壁纸页纯自动，无用户打断）
     setTimeout(function() { startDescScroll(); }, 0);
 }
 
 /* 描述自动滚动（来回往返式，参考单词跑马灯）：缓慢滚到底 → 停留 → 缓慢滚回顶部 → 停留，循环。
-   用 requestAnimationFrame 逐帧驱动，平滑无跳变；边缘渐变蒙版（CSS mask）隐藏截断。
-   壁纸页纯自动、无用户打断。 */
+   用 requestAnimationFrame 逐帧驱动，平滑无跳变；溢出时在内层滚动容器上叠加渐变蒙版
+   （mask 固定在容器视口，不随文字滚动）。壁纸页纯自动、无用户打断。
+   _descDone：描述是否已至少完整读过一遍（滚到底一次）——轮播 15s 到时若还没读完，
+   则等读完后再等 1s 才切换，避免文字被切走。 */
 var _descScrollHandle = null;
+var _descDone = false;
 function stopDescScroll() {
     if (_descScrollHandle) { cancelAnimationFrame(_descScrollHandle.raf); _descScrollHandle = null; }
-    var d = document.getElementById('dGalleryDesc');
+    var d = document.getElementById('dGalleryDescScroll');
     if (d) { d.scrollTop = 0; d.classList.remove('is-overflow'); }
 }
 function startDescScroll() {
     stopDescScroll();
-    var d = document.getElementById('dGalleryDesc');
-    if (!d || d.getAttribute('data-empty') === '1') return;
+    var d = document.getElementById('dGalleryDescScroll');
+    var box = document.getElementById('dGalleryDesc');
+    if (!d || !box || box.getAttribute('data-empty') === '1') { _descDone = true; return; }
     var max = d.scrollHeight - d.clientHeight;
-    if (max <= 4) return; // 内容不溢出，无需滚动（也不加蒙版）
+    if (max <= 4) { _descDone = true; return; } // 内容不溢出，视为已读完（不加蒙版）
     d.classList.add('is-overflow'); // 溢出才叠上下渐变蒙版
     var speed = 22;           // px/s，缓慢
-    var pos = 0, dir = 1;
+    var pos = 0, dir = 1, reachedBottom = false;
     var last = performance.now(), pauseUntil = 0;
     var st = {};
     var tick = function(now) {
@@ -330,7 +338,10 @@ function startDescScroll() {
         var dt = (now - last) / 1000; last = now;
         if (now < pauseUntil) { _descScrollHandle.raf = requestAnimationFrame(tick); return; }
         pos += dir * speed * dt;
-        if (pos >= max) { pos = max; dir = -1; pauseUntil = now + 1200; }
+        if (pos >= max) {
+            pos = max; dir = -1; pauseUntil = now + 1200;
+            if (!reachedBottom) { reachedBottom = true; _descDone = true; } // 完整读过一遍
+        }
         else if (pos <= 0) { pos = 0; dir = 1; pauseUntil = now + 1200; }
         d.scrollTop = pos;
         _descScrollHandle.raf = requestAnimationFrame(tick);
@@ -345,13 +356,28 @@ function startDescScroll() {
    - 预加载保证轮到时基本秒开，所以"等加载完再计时"不会让用户觉得卡。 */
 var _itemReady = false;  // 当前项是否已加载/开始播放（准备开始计时）
 var _stallTimer = null;  // 加载卡死兜底定时器
+var _descWaitStart = 0;  // 15s 到点但描述未读完的时间戳（用于超时兜底）
 
 function armGalleryNext() {
     if (_itemReady) return;
     _itemReady = true;
     if (galleryTimer) { clearTimeout(galleryTimer); galleryTimer = null; }
-    // 当前项已显示满 ROTATE_MS 后再切下一张
-    galleryTimer = setTimeout(nextGallery, ROTATE_MS);
+    // 当前项已显示满 ROTATE_MS 后尝试切换（描述若没读完则等它读完再切）
+    galleryTimer = setTimeout(galleryTick, ROTATE_MS);
+}
+
+/* 轮播到点：描述已读完 → 立即切；没读完 → 等读完后再停 1s 切（防文字被切走）；
+   描述滚动异常导致永远读不完时，最多再等 ROTATE_MS*2 后强制切。 */
+function galleryTick() {
+    if (gallery.length === 0) { stopGallery(); return; }
+    if (!_descDone) {
+        if (!_descWaitStart) _descWaitStart = Date.now();
+        if (Date.now() - _descWaitStart > ROTATE_MS * 2) { _descDone = true; }
+        else { galleryTimer = setTimeout(galleryTick, 250); return; }
+        galleryTimer = setTimeout(nextGallery, 1000); // 读完/超时后停 1s 再切
+        return;
+    }
+    nextGallery(); // 15s 时已读完：立即切
 }
 
 function nextGallery() {
@@ -381,6 +407,8 @@ function stopGallery() {
     if (galleryTimer) { clearTimeout(galleryTimer); galleryTimer = null; }
     if (_stallTimer) { clearTimeout(_stallTimer); _stallTimer = null; }
     _itemReady = false;
+    _descDone = true;
+    _descWaitStart = 0;
 }
 
 function startPolling() {

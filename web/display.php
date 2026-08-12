@@ -294,9 +294,11 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
           <?php endif; ?>
         </div>
         <div class="d-gallery-desc" id="dGalleryDesc">
+          <div class="d-gallery-desc-scroll" id="dGalleryDescScroll">
           <?php if (!empty($gallery) && $gallery[0]['description'] !== ''): ?>
             <?php echo htmlspecialchars($gallery[0]['description']); ?>
           <?php endif; ?>
+          </div>
         </div>
       </div>
     </div>

@@ -93,7 +93,7 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
     final bgColor = isDisabled
         ? AppColors.oldPaper
         : (widget.backgroundColor ??
-              (widget.isSecondary ? AppColors.oldPaper : AppColors.white));
+            (widget.isSecondary ? AppColors.oldPaper : AppColors.white));
     final fgColor = isDisabled
         ? AppColors.pencil.withValues(alpha: 0.4)
         : (widget.textColor ?? AppColors.pencil);
@@ -107,23 +107,20 @@ class _HandDrawnButtonState extends State<HandDrawnButton> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
-        transform: _pressed
-            ? Matrix4.translationValues(3, 3, 0)
-            : Matrix4.identity(),
+        transform:
+            _pressed ? Matrix4.translationValues(3, 3, 0) : Matrix4.identity(),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: AppTheme.wobblyRadius,
             border: Border.all(color: AppColors.pencil, width: 2),
-            boxShadow: _pressed
-                ? []
-                : (isDisabled ? null : AppTheme.hardShadowMd),
+            boxShadow:
+                _pressed ? [] : (isDisabled ? null : AppTheme.hardShadowMd),
           ),
           child: Row(
-            mainAxisSize: widget.fullWidth
-                ? MainAxisSize.max
-                : MainAxisSize.min,
+            mainAxisSize:
+                widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
@@ -429,27 +426,27 @@ class _MarqueeTextState extends State<MarqueeText>
     final maxScroll = _controller.position.maxScrollExtent;
     _controller
         .animateTo(
-          maxScroll,
-          duration: Duration(
-            milliseconds: (maxScroll * 35).round().clamp(2000, 8000),
-          ),
-          curve: Curves.easeInOut,
-        )
+      maxScroll,
+      duration: Duration(
+        milliseconds: (maxScroll * 35).round().clamp(2000, 8000),
+      ),
+      curve: Curves.easeInOut,
+    )
         .then((_) {
-          if (!_userInteracting && mounted) {
-            Future.delayed(const Duration(milliseconds: 800), () {
-              if (!_userInteracting && _controller.hasClients && mounted) {
-                _controller.animateTo(
-                  0,
-                  duration: Duration(
-                    milliseconds: (maxScroll * 35).round().clamp(2000, 8000),
-                  ),
-                  curve: Curves.easeInOut,
-                );
-              }
-            });
+      if (!_userInteracting && mounted) {
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (!_userInteracting && _controller.hasClients && mounted) {
+            _controller.animateTo(
+              0,
+              duration: Duration(
+                milliseconds: (maxScroll * 35).round().clamp(2000, 8000),
+              ),
+              curve: Curves.easeInOut,
+            );
           }
         });
+      }
+    });
   }
 
   @override
@@ -476,8 +473,7 @@ class _MarqueeTextState extends State<MarqueeText>
     // 仅在文本溢出时启用跑马灯（ShaderMask 开销大，短词用普通文本即可）
     return LayoutBuilder(
       builder: (context, constraints) {
-        final style =
-            widget.style ??
+        final style = widget.style ??
             TextStyle(
               fontFamily: AppTheme.fontHeading,
               fontSize: widget.fontSize,
@@ -566,6 +562,7 @@ class _AutoScrollTextState extends State<AutoScrollText> {
   final ScrollController _controller = ScrollController();
   bool _scrolling = false;
   bool _userInteracting = false;
+  bool _hasOverflow = false;
 
   @override
   void initState() {
@@ -579,6 +576,7 @@ class _AutoScrollTextState extends State<AutoScrollText> {
     if (oldWidget.text != widget.text) {
       _scrolling = false;
       _userInteracting = false;
+      _hasOverflow = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_controller.hasClients) _controller.jumpTo(0);
         _checkOverflow();
@@ -589,7 +587,10 @@ class _AutoScrollTextState extends State<AutoScrollText> {
   void _checkOverflow() {
     if (!_controller.hasClients) return;
     final max = _controller.position.maxScrollExtent;
-    if (max > 4 && !_scrolling && !_userInteracting) _startScrolling();
+    if (max > 0.5 && !_scrolling && !_userInteracting) {
+      if (!_hasOverflow) setState(() => _hasOverflow = true);
+      _startScrolling();
+    }
   }
 
   Future<void> _startScrolling() async {
@@ -655,10 +656,17 @@ class _AutoScrollTextState extends State<AutoScrollText> {
         Widget scroll = SingleChildScrollView(
           controller: _controller,
           padding: widget.padding,
-          child: Text(
-            widget.text,
-            textAlign: TextAlign.center,
-            style: widget.style,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.text,
+                textAlign: TextAlign.center,
+                style: widget.style,
+              ),
+              // 底部缓冲：即使溢出很小时末行也能完整显示，不被裁切
+              const SizedBox(height: 8),
+            ],
           ),
         );
         if (widget.userInterruptible) {
@@ -674,20 +682,23 @@ class _AutoScrollTextState extends State<AutoScrollText> {
             child: Stack(
               children: [
                 Positioned.fill(child: scroll),
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 14,
-                  child: _fade(true),
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: 14,
-                  child: _fade(false),
-                ),
+                // 蒙版仅在确实有溢出时显示（避免短文本末行被渐变挡到）
+                if (_hasOverflow) ...[
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 14,
+                    child: _fade(true),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 14,
+                    child: _fade(false),
+                  ),
+                ],
               ],
             ),
           ),

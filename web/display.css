@@ -371,7 +371,8 @@ body {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  position: relative; /* 供 is-overflow 渐变蒙版伪元素定位 */
+  display: flex;
+  flex-direction: column;
   background: var(--post-it);
   border: 2px solid var(--pencil);
   border-radius: var(--wobbly);
@@ -386,19 +387,16 @@ body {
   scrollbar-width: none;
   word-break: break-word;
 }
-/* 仅溢出时叠加上下渐变蒙版（颜色取自底板，文字边缘融入底板，不硬截断） */
-.d-gallery-desc.is-overflow::before,
-.d-gallery-desc.is-overflow::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 26px;
-  pointer-events: none;
-  z-index: 1;
+.d-gallery-desc-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
-.d-gallery-desc.is-overflow::before { top: 0; background: linear-gradient(180deg, var(--post-it), transparent); }
-.d-gallery-desc.is-overflow::after { bottom: 0; background: linear-gradient(0deg, var(--post-it), transparent); }
+/* 仅溢出时加渐变蒙版：mask 挂在滚动容器上，随容器视口固定（不随文字滚动），文字融入底板 */
+.d-gallery-desc-scroll.is-overflow {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+}
 
 /* =========================================================
    口令弹窗（复用 .modal 视觉风格，独立层）
