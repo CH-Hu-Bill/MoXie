@@ -380,12 +380,17 @@ body {
   font-size: 20px;
   line-height: 1.5;
   color: var(--pencil);
-  /* 描述溢出：由 display.js 在固定区域内自动滚动（壁纸页纯自动，不设用户打断） */
+  /* 描述溢出：由 display.js 在固定区域内来回自动滚动（壁纸页纯自动，不设用户打断） */
   overflow: hidden;
   scrollbar-width: none;
   word-break: break-word;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+}
+.d-gallery-desc-scroll {
+  height: 100%;
+  overflow: hidden;
+  /* 文字上下边缘渐变蒙版，避免硬截断 */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
 }
 
 /* =========================================================

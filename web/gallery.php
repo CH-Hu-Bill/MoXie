@@ -170,13 +170,18 @@ require 'inc/header.php';
     <div class="empty-state" id="emptyState" style="display:none"><p>还没有图片，上传第一张吧 📷</p></div>
 </div>
 
-<!-- Lightbox -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;">
-    <button class="btn" onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;width:44px;height:44px;border-radius:50%;font-size:20px;">✕</button>
-    <img id="lbImg" src="" alt="" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);">
-    <video id="lbVideo" style="display:none;max-width:92vw;max-height:80vh;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline></video>
-    <div class="lb-desc" id="lbDesc" style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);color:var(--white);font-size:15px;text-align:center;max-width:600px;width:min(600px,86vw);max-height:18vh;overflow:hidden;padding:12px 24px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
-        <span id="lbDescText"></span>
+<!-- Lightbox：左侧媒体 + 右侧描述整列（描述过长在该列内来回自动滚动，边缘渐变蒙版） -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:5000;display:flex;align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
+    <button class="btn" onclick="closeLightbox()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;">✕</button>
+    <div id="lbMedia" onclick="event.stopPropagation()" style="flex:1 1 58%;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;">
+        <img id="lbImg" src="" alt="" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);object-fit:contain;">
+        <video id="lbVideo" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline></video>
+    </div>
+    <div id="lbDesc" onclick="event.stopPropagation()" style="flex:0 0 34%;max-width:34%;align-self:stretch;box-sizing:border-box;display:flex;flex-direction:column;min-width:0;padding:14px 18px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);color:var(--white);font-size:15px;text-align:center;line-height:1.7;">
+        <div style="font-size:12px;opacity:.65;padding-bottom:10px;">📝 描述</div>
+        <div id="lbDescScroll" style="flex:1;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%);mask-image:linear-gradient(180deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%);">
+            <span id="lbDescText"></span>
+        </div>
     </div>
 </div>
 
@@ -271,35 +276,43 @@ function closeLightbox() {
 }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 
-/* 灯箱描述自动滚动：超出 #lbDesc 固定区域时滚到底 → 停留 → 滚回顶部，循环。
-   用户悬停/触摸暂停，离开 2 秒后自动恢复。 */
-var _lbDescTimer = null;
+/* 灯箱描述自动滚动（来回往返式，参考单词跑马灯）：缓慢滚到底 → 停留 → 缓慢滚回顶部 → 停留，循环。
+   用 requestAnimationFrame 逐帧驱动，平滑无跳变；边缘渐变蒙版（CSS mask）隐藏截断。
+   用户鼠标悬停/触摸暂停，离开 2 秒后恢复。 */
+var _lbDescHandle = null;
 function lbDescStop() {
-    if (_lbDescTimer) { clearTimeout(_lbDescTimer); _lbDescTimer = null; }
+    if (_lbDescHandle) { cancelAnimationFrame(_lbDescHandle.raf); _lbDescHandle = null; }
 }
 function lbDescScroll() {
     lbDescStop();
-    var d = document.getElementById('lbDesc');
+    var d = document.getElementById('lbDescScroll');
     if (!d) return;
     var max = d.scrollHeight - d.clientHeight;
     if (max <= 4) { d.scrollTop = 0; return; }
-    var dur = Math.max(2000, Math.min(7000, max * 35));
-    var down = function() {
-        d.scrollTo({ top: max, behavior: 'smooth' });
-        _lbDescTimer = setTimeout(function() {
-            d.scrollTo({ top: 0, behavior: 'smooth' });
-            _lbDescTimer = setTimeout(down, dur + 800);
-        }, dur + 1000);
+    var speed = 22;           // px/s，缓慢
+    var pos = 0, dir = 1;
+    var last = performance.now(), pauseUntil = 0;
+    var st = {};
+    var tick = function(now) {
+        if (_lbDescHandle !== st) return; // 已被 stop 或重新滚动
+        var dt = (now - last) / 1000; last = now;
+        if (now < pauseUntil) { _lbDescHandle.raf = requestAnimationFrame(tick); return; }
+        pos += dir * speed * dt;
+        if (pos >= max) { pos = max; dir = -1; pauseUntil = now + 1000; }
+        else if (pos <= 0) { pos = 0; dir = 1; pauseUntil = now + 1000; }
+        d.scrollTop = pos;
+        _lbDescHandle.raf = requestAnimationFrame(tick);
     };
-    _lbDescTimer = setTimeout(down, 1200);
+    _lbDescHandle = st;
+    _lbDescHandle.raf = requestAnimationFrame(tick);
 }
 (function() {
-    var d = document.getElementById('lbDesc');
-    if (!d) return;
-    d.addEventListener('mouseenter', lbDescStop);
-    d.addEventListener('mouseleave', function() { setTimeout(lbDescScroll, 2000); });
-    d.addEventListener('touchstart', lbDescStop, { passive: true });
-    d.addEventListener('touchend', function() { setTimeout(lbDescScroll, 2000); });
+    var box = document.getElementById('lbDesc');
+    if (!box) return;
+    box.addEventListener('mouseenter', lbDescStop);
+    box.addEventListener('mouseleave', function() { setTimeout(lbDescScroll, 2000); });
+    box.addEventListener('touchstart', lbDescStop, { passive: true });
+    box.addEventListener('touchend', function() { setTimeout(lbDescScroll, 2000); });
 })();
 
 function previewUpload() {

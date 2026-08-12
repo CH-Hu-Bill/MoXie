@@ -165,11 +165,13 @@ function fitGalleryContainer(wrap, width, height) {
 function renderGalleryItem(item, fade) {
     var wrap = document.getElementById('dGalleryImg');
     var desc = document.getElementById('dGalleryDesc');
-    if (!wrap || !desc) return;
+    var descScroll = document.getElementById('dGalleryDescScroll');
+    if (!wrap || !desc || !descScroll) return;
     if (!item) {
         wrap.innerHTML = '<div class="d-placeholder d-placeholder-sm">暂无图集</div>';
         wrap.style.aspectRatio = '';
-        desc.textContent = '';
+        descScroll.textContent = '';
+        desc.setAttribute('data-empty', '1');
         stopDescScroll();
         return;
     }
@@ -298,35 +300,44 @@ function renderGalleryItem(item, fade) {
         img2.onload = function() { if (ld2 && ld2.parentNode) ld2.parentNode.removeChild(ld2); armGalleryNext(); };
         wrap.appendChild(img2);
     }
-    desc.textContent = item.description || '';
+    descScroll.textContent = item.description || '';
     desc.setAttribute('data-empty', item.description ? '0' : '1');
     // 描述溢出自动滚动（壁纸页纯自动，无用户打断）
     setTimeout(function() { startDescScroll(); }, 0);
 }
 
-/* 描述自动滚动：内容超出 .d-gallery-desc 固定区域时缓慢滚到底 → 停留 → 滚回顶部，循环。
-   用 setTimeout 自调度 + scrollTo smooth；无用户打断（展示大屏壁纸场景）。 */
-var _descScrollTimer = null;
+/* 描述自动滚动（来回往返式，参考单词跑马灯）：缓慢滚到底 → 停留 → 缓慢滚回顶部 → 停留，循环。
+   用 requestAnimationFrame 逐帧驱动，平滑无跳变；边缘渐变蒙版（CSS mask）隐藏截断。
+   壁纸页纯自动、无用户打断。 */
+var _descScrollHandle = null;
 function stopDescScroll() {
-    if (_descScrollTimer) { clearTimeout(_descScrollTimer); _descScrollTimer = null; }
-    var d = document.getElementById('dGalleryDesc');
+    if (_descScrollHandle) { cancelAnimationFrame(_descScrollHandle.raf); _descScrollHandle = null; }
+    var d = document.getElementById('dGalleryDescScroll');
     if (d) d.scrollTop = 0;
 }
 function startDescScroll() {
     stopDescScroll();
-    var d = document.getElementById('dGalleryDesc');
-    if (!d || d.getAttribute('data-empty') === '1') return;
+    var d = document.getElementById('dGalleryDescScroll');
+    var box = document.getElementById('dGalleryDesc');
+    if (!d || !box || box.getAttribute('data-empty') === '1') return;
     var max = d.scrollHeight - d.clientHeight;
     if (max <= 4) return; // 内容不溢出，无需滚动
-    var dur = Math.max(2500, Math.min(9000, max * 38));
-    var down = function() {
-        d.scrollTo({ top: max, behavior: 'smooth' });
-        _descScrollTimer = setTimeout(function() {
-            d.scrollTo({ top: 0, behavior: 'smooth' });
-            _descScrollTimer = setTimeout(down, dur + 1000);
-        }, dur + 1200);
+    var speed = 22;           // px/s，缓慢
+    var pos = 0, dir = 1;
+    var last = performance.now(), pauseUntil = 0;
+    var st = {};
+    var tick = function(now) {
+        if (_descScrollHandle !== st) return; // 已被 stop 或重新开始
+        var dt = (now - last) / 1000; last = now;
+        if (now < pauseUntil) { _descScrollHandle.raf = requestAnimationFrame(tick); return; }
+        pos += dir * speed * dt;
+        if (pos >= max) { pos = max; dir = -1; pauseUntil = now + 1200; }
+        else if (pos <= 0) { pos = 0; dir = 1; pauseUntil = now + 1200; }
+        d.scrollTop = pos;
+        _descScrollHandle.raf = requestAnimationFrame(tick);
     };
-    _descScrollTimer = setTimeout(down, 1500); // 首屏停留 1.5s 再开始
+    _descScrollHandle = st;
+    _descScrollHandle.raf = requestAnimationFrame(tick);
 }
 
 /* 图集轮播计时：等当前项【加载完成/开始播放】之后，再开始计 15s。
