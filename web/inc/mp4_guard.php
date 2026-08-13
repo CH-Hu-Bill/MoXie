@@ -25,6 +25,8 @@ class Mp4Guard {
 
     /** 最大 box 大小容错（单个 box 声明超过此值视为畸形） */
     const MAX_BOX_BYTES = 200 * 1024 * 1024;
+    /** 最大视频分辨率单边（像素，防超大分辨率视频拖垮 ffmpeg 首帧解码内存） */
+    const MAX_DIMENSION = 4096;
 
     /**
      * 校验 MP4 文件并返回元数据。
@@ -100,6 +102,16 @@ class Mp4Guard {
                 throw new RuntimeException('视频时长不能超过 ' . $maxSeconds . ' 秒（当前 ' . round($duration, 1) . ' 秒）');
             }
 
+            // 分辨率上限：缩略图 cron 会调用 ffmpeg 解码首帧，超大分辨率会耗尽服务器内存
+            $width = (int)$info['width'];
+            $height = (int)$info['height'];
+            if ($width < 1 || $height < 1) {
+                throw new RuntimeException('MP4 文件损坏（缺少有效的画面尺寸信息）');
+            }
+            if ($width > self::MAX_DIMENSION || $height > self::MAX_DIMENSION) {
+                throw new RuntimeException('视频分辨率过大（' . $width . '×' . $height . '），最大 ' . self::MAX_DIMENSION . '×' . self::MAX_DIMENSION);
+            }
+
             return [
                 'width' => $info['width'],
                 'height' => $info['height'],
@@ -151,7 +163,8 @@ class Mp4Guard {
             elseif ($boxSize === 0) $boxSize = $moovEnd - $offset;
             if ($boxSize < 8 || $boxSize > self::MAX_BOX_BYTES) return null;
 
-            if ($boxType === 'mvhd') {
+            if ($boxType === 'mvhd' && !$mvhdFound) {
+                // 只取第一个 mvhd：播放器/ffmpeg 均取首个，伪造的第二个"1s mvhd"不能绕过时长校验
                 $d = self::parseMvhd($fp, $offset + 8, $boxSize);
                 if ($d !== null) {
                     $result['duration'] = $d['duration'];
@@ -253,6 +266,8 @@ class Mp4Guard {
         $head = fread($fp, 4);
         if (strlen($head) !== 4) return null;
         $version = ord($head[0]);
+        // 仅支持 version 0/1；未知版本不解析（避免读出垃圾宽高，由调用方按 0 尺寸拒绝）
+        if ($version !== 0 && $version !== 1) return null;
         // tkhd 结构: version(1) flags(3) creation(4/8) mod(4/8) trackId(4) reserved(4) duration(4/8)
         //           reserved(8) layer(2) altGroup(2) volume(2) reserved(2) matrix(36) width(4) height(4)
         if ($version === 0) {

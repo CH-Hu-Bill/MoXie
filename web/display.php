@@ -284,6 +284,7 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
       <div class="d-gallery" id="dGallery">
         <div class="d-gallery-img" id="dGalleryImg">
           <?php if (!empty($gallery)): ?>
+            <div class="d-gallery-loading"><?php echo $gallery[0]['type'] === 'mp4' ? '视频加载中…' : '加载中…'; ?></div>
             <?php if ($gallery[0]['type'] === 'mp4'): ?>
               <video id="dGalleryPic" muted loop autoplay playsinline preload="auto" poster="<?php echo htmlspecialchars((string)($gallery[0]['thumb_url'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>"></video>
             <?php else: ?>
@@ -333,6 +334,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=8"></script>
-<script src="display.js?v=12"></script>
+<script src="display.js?v=13"></script>
 </body>
 </html>

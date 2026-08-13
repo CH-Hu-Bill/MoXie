@@ -51,9 +51,26 @@ try { window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('ch
 function onVisible() {
     if (document.hidden) return;
     if (isContentView && !polling) startPolling();
-    if (isContentView && gallery.length > 1 && !galleryTimer) startGallery();
+    if (!isContentView || gallery.length < 2) return;
+    var v = document.getElementById('dGalleryPic');
+    if (v && v.tagName === 'VIDEO') { try { if (v.paused) v.play().catch(function() {}); } catch (e) {} }
+    if (_itemReady && !galleryTimer) {
+        // 已就绪项：后台暂停后回来直接重 arm 15s 计时
+        galleryTimer = setTimeout(galleryTick, ROTATE_MS);
+    } else if (!_itemReady && !galleryTimer) {
+        startGallery();
+    }
 }
-document.addEventListener('visibilitychange', onVisible);
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        // 后台暂停：停视频解码 + 清轮播计时器（前台恢复时重 arm）
+        var v = document.getElementById('dGalleryPic');
+        if (v && v.tagName === 'VIDEO') { try { v.pause(); } catch (e) {} }
+        if (galleryTimer) { clearTimeout(galleryTimer); galleryTimer = null; }
+    } else {
+        onVisible();
+    }
+});
 
 /* =========================================================
    顶部跑马灯（参考 status-bar 横幅：测量后无缝滚动）
@@ -123,15 +140,20 @@ function attachHiddenVideo(url, onMeta) {
     return pv;
 }
 
+var galleryPreloading = {}; // url -> true，防同 URL 并发重复预载（两轮轮播重叠时只下载一份）
+
 function preloadImage(item) {
     var url = typeof item === 'string' ? item : item.url;
     var type = typeof item === 'object' ? (item.type || 'static') : 'static';
-    if (gallerySizeCache[url]) return; // 已探知尺寸，跳过重复预载
+    if (gallerySizeCache[url] || galleryPreloading[url]) return;
+    galleryPreloading[url] = true;
     if (type === 'mp4') {
         var pv = attachHiddenVideo(url, function() {
-            var w = pv.videoWidth, h = pv.videoHeight;
+            var w = this.videoWidth, h = this.videoHeight;
             if (w && h) gallerySizeCache[url] = { w: w, h: h };
+            delete galleryPreloading[url];
         });
+        pv.addEventListener('error', function() { delete galleryPreloading[url]; }, { once: true });
         return;
     }
     var img = new Image();
@@ -140,13 +162,16 @@ function preloadImage(item) {
         try {
             gallerySizeCache[url] = { w: img.naturalWidth, h: img.naturalHeight };
         } catch (e) {}
+        delete galleryPreloading[url];
     };
+    img.onerror = function() { delete galleryPreloading[url]; };
     img.src = url;
 }
 
 /* 预载当前之后两张（不跨首尾即可，循环轮播） */
 function preloadUpcoming() {
-    for (var i = 1; i <= 2; i++) {
+    if (gallery.length < 2) return; // 单图集无需预载（且会重复下载自己）
+    for (var i = 1; i < gallery.length && i <= 2; i++) {
         var next = gallery[(galleryIdx + i) % gallery.length];
         if (next) preloadImage(next);
     }
@@ -190,14 +215,20 @@ function renderGalleryItem(item, fade) {
     if (cached) {
         fitGalleryContainer(wrap, cached.w, cached.h);
     } else if (isMp4) {
-        // 探测用隐藏 video 挂载到 DOM（不挂载则可能取不到尺寸），同时顺带完成数据预载
-        attachHiddenVideo(item.url, function() {
-            var w = this.videoWidth, h = this.videoHeight;
-            if (w && h) {
-                gallerySizeCache[item.url] = { w: w, h: h };
-                fitGalleryContainer(wrap, w, h);
-            }
-        });
+        // 主播放器已在播同一视频且尺寸就绪：直接取尺寸，避免再起隐藏探针重复完整下载
+        if (existing && existing.tagName === 'VIDEO' && existing.videoWidth && existing.currentSrc.indexOf(item.url) !== -1) {
+            gallerySizeCache[item.url] = { w: existing.videoWidth, h: existing.videoHeight };
+            fitGalleryContainer(wrap, existing.videoWidth, existing.videoHeight);
+        } else {
+            // 探测用隐藏 video 挂载到 DOM（不挂载则可能取不到尺寸），同时顺带完成数据预载
+            attachHiddenVideo(item.url, function() {
+                var w = this.videoWidth, h = this.videoHeight;
+                if (w && h) {
+                    gallerySizeCache[item.url] = { w: w, h: h };
+                    fitGalleryContainer(wrap, w, h);
+                }
+            });
+        }
     } else {
         var probe = new Image();
         probe.onload = function() {
@@ -212,14 +243,25 @@ function renderGalleryItem(item, fade) {
         if (existing && existing.tagName === 'VIDEO') {
             existing.src = item.url;
             existing.poster = item.thumb_url || '';
-            // 复用元素时也补加载占位
+            // 复用元素时也补加载占位（先清掉上一项残留的占位，防多轮累积叠加）
+            wrap.querySelectorAll('.d-gallery-loading').forEach(function(el) { if (el.parentNode) el.parentNode.removeChild(el); });
             var ldOld = document.createElement('div');
             ldOld.className = 'd-gallery-loading';
             ldOld.textContent = '视频加载中…';
             wrap.appendChild(ldOld);
             var remOld = function() { if (ldOld && ldOld.parentNode) ldOld.parentNode.removeChild(ldOld); };
+            var failOld = function() {
+                // 加载失败：移除占位、显示「视频不可用」并推进轮播（防占位永久残留/黑屏）
+                remOld();
+                var fb = document.createElement('div');
+                fb.className = 'd-gallery-loading';
+                fb.textContent = '视频不可用';
+                wrap.appendChild(fb);
+                armGalleryNext();
+            };
             existing.addEventListener('playing', remOld, { once: true });
             existing.addEventListener('loadeddata', remOld, { once: true });
+            existing.addEventListener('error', failOld, { once: true });
             existing.addEventListener('playing', armGalleryNext, { once: true });
             existing.addEventListener('loadeddata', armGalleryNext, { once: true });
             try { existing.play(); } catch (e) {}
@@ -253,6 +295,15 @@ function renderGalleryItem(item, fade) {
             // 开始播放/数据就绪后开始 15s 计时
             v.addEventListener('playing', armGalleryNext, { once: true });
             v.addEventListener('loadeddata', armGalleryNext, { once: true });
+            // 加载失败：占位改「视频不可用」并推进轮播（防黑屏/占位累积）
+            v.addEventListener('error', function() {
+                if (ld && ld.parentNode) ld.parentNode.removeChild(ld);
+                var fb = document.createElement('div');
+                fb.className = 'd-gallery-loading';
+                fb.textContent = '视频不可用';
+                wrap.appendChild(fb);
+                armGalleryNext();
+            }, { once: true });
         }
     } else if (item.type === 'gif') {
         // GIF：直接更新 src，浏览器无缝继续/重播动画
@@ -286,6 +337,7 @@ function renderGalleryItem(item, fade) {
             ld.textContent = '加载中…';
             wrap.appendChild(ld);
             img.onload = function() { if (ld && ld.parentNode) ld.parentNode.removeChild(ld); armGalleryNext(); };
+            img.onerror = function() { if (ld && ld.parentNode) ld.parentNode.removeChild(ld); armGalleryNext(); };
             wrap.appendChild(img);
             void img.offsetWidth;
             img.classList.remove('swapping');
@@ -301,6 +353,7 @@ function renderGalleryItem(item, fade) {
         ld2.textContent = '加载中…';
         wrap.appendChild(ld2);
         img2.onload = function() { if (ld2 && ld2.parentNode) ld2.parentNode.removeChild(ld2); armGalleryNext(); };
+        img2.onerror = function() { if (ld2 && ld2.parentNode) ld2.parentNode.removeChild(ld2); armGalleryNext(); };
         wrap.appendChild(img2);
     }
     descScroll.textContent = item.description || '';
@@ -360,7 +413,9 @@ var _descWaitStart = 0;  // 15s 到点但描述未读完的时间戳（用于超
 
 function armGalleryNext() {
     if (_itemReady) return;
+    if (gallery.length < 2) return; // 单图集无需轮播（否则每 15s 重渲染同一项）
     _itemReady = true;
+    if (_stallTimer) { clearTimeout(_stallTimer); _stallTimer = null; } // 就绪后清兜底定时器
     if (galleryTimer) { clearTimeout(galleryTimer); galleryTimer = null; }
     // 当前项已显示满 ROTATE_MS 后尝试切换（描述若没读完则等它读完再切）
     galleryTimer = setTimeout(galleryTick, ROTATE_MS);
@@ -381,7 +436,7 @@ function galleryTick() {
 }
 
 function nextGallery() {
-    if (gallery.length === 0) return;
+    if (gallery.length < 2) return; // 单图集不轮播（避免每 15s 重渲染同一项）
     galleryIdx = (galleryIdx + 1) % gallery.length;
     // render 内部会在该项就绪后自动 armGalleryNext() 开始计时
     renderGalleryItem(gallery[galleryIdx], !reducedMotion);
@@ -665,6 +720,9 @@ function openSelect() {
     root.dataset.view = 'selection';
     stopPolling();
     stopGallery();
+    stopDescScroll(); // 隐藏视图里不继续跑描述滚动 rAF
+    var v = document.getElementById('dGalleryPic');
+    if (v && v.tagName === 'VIDEO') { try { v.pause(); } catch (e) {} }
 }
 
 function selectClass(id) {

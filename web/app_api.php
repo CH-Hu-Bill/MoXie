@@ -601,12 +601,26 @@ switch ($action) {
         }
         if (($file['size'] ?? 0) <= 0) appError('上传文件无效');
         if (!is_uploaded_file($file['tmp_name'])) appError('上传文件无效');
+        // 按类型分段限值（与 save_gallery / gallery.php / upload.php 一致）：GIF 16MB / MP4 15MB / 图片 12MB
+        $isGifUp = false;
+        $isMp4Up = false;
+        if (is_file($file['tmp_name'])) {
+            $infoUp = @getimagesize($file['tmp_name']);
+            $isGifUp = is_array($infoUp) && ($infoUp[2] ?? 0) === IMAGETYPE_GIF;
+            if (!$isGifUp) $isMp4Up = Database::isMp4File($file['tmp_name']);
+        }
+        if ($isMp4Up) {
+            if (($file['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 15MB', null, 413);
+        } else {
+            $maxBytesUp = $isGifUp ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
+            if (($file['size'] ?? 0) > $maxBytesUp) appError($isGifUp ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
+        }
 
         try {
             $filename = Database::saveUploadedImage($classId, $file['tmp_name']);
         } catch (RuntimeException $e) {
             $msg = $e->getMessage();
-            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB')) ? 413 : 500;
+            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500;
             appError($msg, null, $code);
         }
 
@@ -775,7 +789,20 @@ switch ($action) {
                 $valid[] = $item;
             } else { $cleaned = true; }
         }
-        if ($cleaned) { Database::saveClassData($classId, 'gallery', $valid); $gallery = $valid; }
+        if ($cleaned) {
+            // 清理在文件锁内进行，避免与 save_gallery 并发时用旧数组覆盖丢条目
+            Database::updateClassData($classId, 'gallery', function($latest) use ($classId) {
+                if (!is_array($latest)) return null;
+                $valid = [];
+                foreach ($latest as $item) {
+                    if (($item['image'] ?? '') !== '' && Database::getUploadedImagePath($classId, $item['image']) !== null) {
+                        $valid[] = $item;
+                    }
+                }
+                return $valid;
+            });
+            $gallery = $valid;
+        }
         $page = max(1, (int)($_POST['page'] ?? 1));
         $perPage = min(50, max(1, (int)($_POST['per_page'] ?? 10)));
         $total = count($gallery);
@@ -822,15 +849,23 @@ switch ($action) {
             $fname = Database::saveUploadedImage($classId, $img['tmp_name']);
         } catch (RuntimeException $e) {
             $msg = $e->getMessage();
-            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '秒')) ? 413 : 500);
+            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500);
         }
         $id = bin2hex(random_bytes(16));
         // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 无法 exec，此处不内联调用）
-        Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
-            if (!is_array($latest)) $latest = [];
-            array_unshift($latest, ['id' => $id, 'image' => $fname, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
-            return $latest;
-        });
+        try {
+            $res = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
+                if (!is_array($latest)) $latest = [];
+                array_unshift($latest, ['id' => $id, 'image' => $fname, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
+                return $latest;
+            });
+            if ($res === false) throw new RuntimeException('数据保存失败');
+        } catch (Throwable $e) {
+            // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
+            Database::deleteUploadedImage($classId, $fname);
+            Database::deleteVideoThumb($classId, $fname);
+            appError('保存失败，请重试');
+        }
         appJson(['success' => true, 'data' => ['id' => $id]]);
 
     case 'delete_gallery':

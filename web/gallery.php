@@ -17,6 +17,7 @@ $gallery = Database::getClassData($classId, 'gallery');
 if (!is_array($gallery)) $gallery = [];
 
 // 自愈：过滤掉图片文件已丢失的条目，并清理 gallery.json
+// 清理在文件锁内进行（updateClassData），避免与 save_gallery 并发时用旧数组覆盖丢条目
 $validGallery = [];
 $cleaned = false;
 foreach ($gallery as $item) {
@@ -28,7 +29,17 @@ foreach ($gallery as $item) {
     }
 }
 if ($cleaned) {
-    Database::saveClassData($classId, 'gallery', $validGallery);
+    Database::updateClassData($classId, 'gallery', function($latest) use ($classId) {
+        if (!is_array($latest)) return null;
+        $valid = [];
+        foreach ($latest as $item) {
+            $imgFile = $item['image'] ?? '';
+            if ($imgFile !== '' && Database::getUploadedImagePath($classId, $imgFile) !== null) {
+                $valid[] = $item;
+            }
+        }
+        return $valid;
+    });
     $gallery = $validGallery;
 }
 $csrfToken = csrfToken();
@@ -49,7 +60,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     if (!$image || ($image['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         echo json_encode(['success' => false, 'error' => '请选择图片']); exit;
     }
-    $desc = trim(reqPost('description'));
+    $desc = trim(sanitizePlainText(reqPost('description')));
     if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
     $isGif = false;
@@ -75,11 +86,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     // 这里不再内联调用，避免在请求路径加载 composer/php-ffmpeg 引发偶发超时或 PHP 警告污染 JSON）
 
     $id = bin2hex(random_bytes(16));
-    Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
-        if (!is_array($latest)) $latest = [];
-        array_unshift($latest, ['id' => $id, 'image' => $filename, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
-        return $latest;
-    });
+    try {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
+            if (!is_array($latest)) $latest = [];
+            array_unshift($latest, ['id' => $id, 'image' => $filename, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
+            return $latest;
+        });
+        if ($result === false) throw new RuntimeException('数据保存失败');
+    } catch (Throwable $e) {
+        // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
+        Database::deleteUploadedImage($classId, $filename);
+        Database::deleteVideoThumb($classId, $filename);
+        echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
+    }
     echo json_encode(['success' => true, 'id' => $id]); exit;
 }
 
@@ -208,12 +227,14 @@ function renderGallery() {
             // 视频卡片：首帧缩略图（ffmpeg）+ 原生 poster 双保险。
             // - 首帧图先加载并显示（onload 隐藏占位）——先加载首帧，用户立刻看到预览；
             // - 视频缓冲期间由原生 poster 继续显示首帧（video 背景透明，绝不黑屏）；
-            // - 占位只在真正开始播放时才隐藏（onplaying），缓冲慢时仍能看到"加载中…"。
+            // - 占位只在真正开始播放时才隐藏（onplaying），缓冲慢时仍能看到"加载中…"；
+            // - preload=metadata + IntersectionObserver 视口调度：进视口才 play() 下载/解码，
+            //   不再首屏全量并发下载所有视频（多解码器并发是点开视频卡顿的根源）。
             var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + item.image;
-            media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)">'
-                + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop autoplay playsinline preload="auto" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onmouseover="this.muted=false;this.play();" onmouseleave="this.muted=true;" onplaying="hideGalleryPlaceholder(this)"></video>';
+            media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)">'
+                + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop playsinline preload="metadata" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onplaying="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)"></video>';
         } else {
-            media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)">';
+            media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.style.opacity=0;markGalleryError(this)">';
         }
         return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + item.id + '\', ' + isMp4 + ', \'' + (isMp4 ? thumbUrl : '') + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
@@ -229,6 +250,7 @@ function renderGallery() {
             + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button></span>'
             + '</div></div></div>';
     }).join('');
+    initGridVideos(); // 重渲染后重新挂视口调度（新 video 元素需要重新 observe）
 }
 function hideGalleryPlaceholder(el) {
     if (!el) return;
@@ -237,17 +259,52 @@ function hideGalleryPlaceholder(el) {
     var ph = p.querySelector('.gallery-placeholder');
     if (ph) ph.style.display = 'none';
 }
+function markGalleryError(el) {
+    // 媒体加载失败：占位从「加载中…」改为「媒体已失效」，避免占位永久显示
+    if (!el) return;
+    var p = el.parentNode;
+    if (!p) return;
+    var ph = p.querySelector('.gallery-placeholder');
+    if (ph) {
+        ph.innerHTML = '⚠️<span style="font-size:11px;color:#bbb;margin-top:4px;">媒体已失效</span>';
+        ph.style.display = 'flex';
+    }
+}
+
+// 网格视频视口调度：进入视口的视频才 play()（触发下载/解码），离开视口 pause()。
+// 配合 preload=metadata，首屏不再同时全量下载所有视频（多解码器并发是卡顿根源）。
+var gridVideoObserver = ('IntersectionObserver' in window) ? new IntersectionObserver(function(entries) {
+    entries.forEach(function(en) {
+        var v = en.target;
+        if (en.isIntersecting) {
+            try { var p = v.play(); if (p && p.catch) p.catch(function() {}); } catch (e) {}
+        } else {
+            try { v.pause(); } catch (e) {}
+        }
+    });
+}, { rootMargin: '150px' }) : null;
+function initGridVideos() {
+    if (!gridVideoObserver) return;
+    document.querySelectorAll('.gallery-card video').forEach(function(v) { gridVideoObserver.observe(v); });
+}
 
 function formatDate(s) {
     if (!s) return '';
     return s.length >= 16 ? s.substring(0, 16).replace(' ', ' ') : s.substring(0, 10);
 }
 
+var lbResumeVideos = [];  // 打开灯箱前正在播放的网格视频（关闭时只恢复这些）
+var lbToken = 0;          // 世代号：快速切换灯箱内容时，旧媒体的回调不再生效
 function openLightbox(url, id, isMp4, thumbUrl) {
     document.getElementById('lightbox').classList.add('active');
     // 打开详情：暂停网格里所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后恢复
     document.body.classList.add('lb-open');
-    document.querySelectorAll('.gallery-card video').forEach(function(v) { try { v.pause(); } catch (e) {} });
+    lbResumeVideos = [];
+    document.querySelectorAll('.gallery-card video').forEach(function(v) {
+        if (!v.paused) lbResumeVideos.push(v);
+        try { v.pause(); } catch (e) {}
+    });
+    var myToken = ++lbToken;
     var img = document.getElementById('lbImg');
     var video = document.getElementById('lbVideo');
     var descText = document.getElementById('lbDescText');
@@ -270,33 +327,44 @@ function openLightbox(url, id, isMp4, thumbUrl) {
         img.style.display = 'none';
         video.style.display = '';
         video.onloadedmetadata = function() {
+            if (myToken !== lbToken) return; // 已切到其他项，忽略过期回调
             sizeDescForMedia(video.videoWidth, video.videoHeight);
             setTimeout(lbDescScroll, 0); // 布局变化后重测溢出
         };
+        video.onerror = function() { if (myToken === lbToken) showToast('媒体已失效', 'error'); };
         // 首帧图作 poster：缓冲/加载时显示预览，不黑屏
         video.poster = thumbUrl || '';
         video.src = url;
         video.muted = true;
-        video.play();
+        try { var pv = video.play(); if (pv && pv.catch) pv.catch(function() {}); } catch (e) {}
     } else {
         video.pause(); video.src = '';
+        video.onerror = null; // 图片项不保留视频的 error 回调
         video.style.display = 'none';
         img.style.display = '';
         img.onload = function() {
+            if (myToken !== lbToken) return;
             sizeDescForMedia(img.naturalWidth, img.naturalHeight);
             setTimeout(lbDescScroll, 0);
         };
+        img.onerror = function() { if (myToken === lbToken) showToast('媒体已失效', 'error'); };
         img.src = url;
     }
 }
 function closeLightbox() {
     lbDescStop();
     document.getElementById('lightbox').classList.remove('active');
-    // 关闭详情：恢复网格预览视频/GIF 播放
+    // 关闭详情：只恢复打开前正在播放的网格视频（不再无条件全量 play()）
     document.body.classList.remove('lb-open');
-    document.querySelectorAll('.gallery-card video').forEach(function(v) { try { v.play(); } catch (e) {} });
+    lbResumeVideos.forEach(function(v) {
+        try { var p = v.play(); if (p && p.catch) p.catch(function() {}); } catch (e) {}
+    });
+    lbResumeVideos = [];
+    // 释放灯箱视频解码资源（不释放则解码帧/缓冲常驻内存）
     var video = document.getElementById('lbVideo');
     video.pause();
+    video.removeAttribute('src');
+    video.load();
 }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 

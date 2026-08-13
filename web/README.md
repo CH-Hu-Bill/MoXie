@@ -31,7 +31,7 @@
 | **默写记录** (`history.php`) | 历史任务列表（按日期倒序）、单词详情、一键重新创建任务 |
 | **周末大礼包** | 周末从本周已默写单词中随机抽 20 个组成加练任务，周一随机决定本周是否开启 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；支持 PDF / HTML / 长图导出 |
-| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB）；**MP4 自动生成首帧缩略图**（ffmpeg，`video_thumb.php` 提供，加载中/列表先显示首帧预览）；支持修改描述；**灯箱布局为「左媒体 + 右描述整列」**，描述框宽度按媒体宽高比自适应（竖图更宽、横图更窄），描述过长在右列内**来回自动滚动**（缓慢、requestAnimationFrame 逐帧平滑、溢出时加边缘渐变蒙版防硬截断，鼠标悬停/触摸暂停、离开 2s 后恢复；描述存 JS 映射表按 id 取，不内嵌到 onclick，杜绝长描述/换行导致卡片打不开）；**打开详情时暂停网格所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后自动恢复**；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
+| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB/4096×4096）；**MP4 自动生成首帧缩略图**（ffmpeg，`video_thumb.php` 提供，加载中/列表先显示首帧预览）；**网格视频进视口才播放**（preload=metadata + IntersectionObserver，首屏不并发全量下载）；支持修改描述；**灯箱布局为「左媒体 + 右描述整列」**，描述框宽度按媒体宽高比自适应（竖图更宽、横图更窄），描述过长在右列内**来回自动滚动**（缓慢、requestAnimationFrame 逐帧平滑、溢出时加边缘渐变蒙版防硬截断，鼠标悬停/触摸暂停、离开 2s 后恢复；描述存 JS 映射表按 id 取，不内嵌到 onclick，杜绝长描述/换行导致卡片打不开）；**打开详情时暂停网格所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后只恢复之前正在播放的**；媒体失效显示「媒体已失效」占位；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好；**图集描述过长在固定区域内来回自动滚动**（壁纸页纯自动、无手动打断，requestAnimationFrame 平滑 + 边缘渐变蒙版） |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数（跟读停顿 = 单词音频实际时长 + 缓冲时间，长词停得久、短词停得短）、图集公开 API 密钥保护、展示大屏 token，均按班级隔离存储 |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭） |
@@ -81,7 +81,7 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
   ```bash
   * * * * * /usr/bin/php /www/wwwroot/你的站点/cron_gallery_thumbs.php >> /tmp/gallery_thumbs_cron.log 2>&1
   ```
-  `cron_gallery_thumbs.php` 每分钟扫描各班级 MP4，缺缩略图即生成（幂等；`/tmp` 锁防重叠；单次 50s 时间预算）。上传新视频后最长 1 分钟内补齐。
+  `cron_gallery_thumbs.php` 每分钟扫描各班级 MP4，缺缩略图即生成（幂等；`/tmp` 锁防重叠；单次 50s 时间预算，内层循环同样检查）。上传新视频后最长 1 分钟内补齐。**仅允许 CLI 运行**（Web 请求一律 404，防止匿名触发全量扫描/生成）；生成失败写 `thumbs/{stem}.failed` 标记，**1 小时内不再重试**（防损坏/超大文件每轮拖满 ffmpeg 超时）。
 - **`open_basedir` 仅放行项目目录与 `/tmp`**：php-ffmpeg 的 BinaryDriver 会用 `file_exists()` 探测二进制，直接指向 `/usr/bin/ffmpeg` 会被拦截。因此使用 `bin/ffmpeg`、`bin/ffprobe` 两个**项目内包装脚本**（`exec /usr/bin/ffmpeg "$@"`，`exec` 不受 open_basedir 限制），`generateVideoThumb()` 已配置指向它们。
 - **不要**在服务器上执行 `composer install/require`（避免改动已装包）；部署代码时 `composer.json` 一并上传，`vendor/` 保持服务器现状即可。
 - 缩略图存放于 `data/classes/{classId}/thumbs/`（`data/` 受保护），文件名仍为 32 位 hex，`video_thumb.php` 输出 `Cache-Control: immutable` 长缓存。
@@ -108,7 +108,7 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 ├── app_api.php            # APP 后端 API（全部接口）
 ├── upload.php             # 图片上传 / 查看（GD 安全处理）
 ├── video_thumb.php        # MP4 首帧缩略图（ffmpeg 生成 + 长缓存，供图集卡片/APP 用）
-├── cron_gallery_thumbs.php # CLI 计划任务：每分钟为 MP4 图集生成缺失首帧缩略图（FPM 无法 exec）
+├── cron_gallery_thumbs.php # CLI 计划任务：每分钟为 MP4 图集生成缺失首帧缩略图（FPM 无法 exec；仅 CLI 可运行，Web 请求 404）
 ├── bin/                   # ffmpeg/ffprobe 包装脚本（绕过 open_basedir 对 /usr/bin 的探测，须 LF）
 ├── download.php           # 导出文件下载（token + 自动 GC）
 ├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
@@ -497,8 +497,8 @@ data/
 - **内联 JSON XSS 防护**：所有输出到 `<script>` 内联块的数据（班级名 / 单词 / 释义 / 图集描述 / 公告）统一用 `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)`，杜绝 `</script>` 逃逸注入。
 - **HTML 属性注入防护**：`speak()` 发音按钮等 `onclick` 内联调用均经 `htmlspecialchars(json_encode(..., JSON_HEX_*), ENT_QUOTES)` 双重转义，用户输入含引号无法逃逸属性。
 - **CSV 公式注入防护**：导出 CSV（单词库 / 任务 / 错题本）时，以 `=` `+` `-` `@` 开头的单元格前缀 `'`，防止 Excel 打开时执行公式。
-- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + 单帧像素×帧数 ≤8000 万 + 单边 ≤8000px + 单文件 ≤16MB），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，时长 ≤30s + 文件 ≤15MB + 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4`，**支持 HTTP HEAD 与 Range（206 Partial Content，含后缀 `bytes=-N`）**，视频 seek/流式播放必需，Cache-Control 用 `immutable` 强缓存（文件名随机不可变）；路径穿越防护沿用 32 位 hex 文件名校验。
-- **视频首帧缩略图**：由 `inc/db.php` 的 `generateVideoThumb()` 调用系统 ffmpeg（php-ffmpeg，`vendor/autoload.php`）提取第 0.1s 帧并缩放至 480px 宽；`video_thumb.php` 首次访问按班 `.lock` 串行生成（防并发打满 CPU），文件名仍为 32 位 hex（同上传文件名校验防穿越），输出 `Cache-Control: immutable` 长缓存；缩略图存放于 `data/classes/{classId}/thumbs/`（受 `data/` 目录保护）。生成失败返回 404，调用方降级为直接播放视频，不影响主流程。
+- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + **逐帧累加像素 ≤8000 万 + 单帧 ≤2500 万像素** + 单边 ≤8000px + 单文件 ≤16MB；块解析严格按 GIF 规范，截断文件直接拒绝），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，时长 ≤30s + 文件 ≤15MB + **分辨率 ≤4096×4096**（只认首个 mvhd，防双 mvhd 伪造时长）+ 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4`，**支持 HTTP HEAD 与 Range（206 Partial Content，含后缀 `bytes=-N`）**，视频 seek/流式播放必需，Cache-Control 用 `immutable` 强缓存（文件名随机不可变）；路径穿越防护沿用 32 位 hex 文件名校验。
+- **视频首帧缩略图**：由 `inc/db.php` 的 `generateVideoThumb()` 调用系统 ffmpeg（php-ffmpeg，`vendor/autoload.php`）提取第 0.1s 帧并缩放至 480px 宽；`video_thumb.php` **只读输出**——缩略图缺失时返回 404，调用方降级为直接播放视频；缩略图由 CLI 计划任务 `cron_gallery_thumbs.php` 预生成（FPM 禁 exec 无法现场生成，上传后最长 1 分钟补齐）；文件名仍为 32 位 hex（同上传文件名校验防穿越），输出 `Cache-Control: immutable` 长缓存；缩略图存放于 `data/classes/{classId}/thumbs/`（受 `data/` 目录保护）。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。
 - **数据保护**：`data/` 目录禁止 Web 直链（`.htaccess`）。**生产环境必须额外配置 Web 服务器规则**，拦截 `inc/`、`.json`、隐藏文件等，详见 [部署安全加固](#部署安全加固)。

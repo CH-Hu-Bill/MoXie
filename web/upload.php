@@ -94,14 +94,29 @@ if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
     $message = ($file['error'] ?? 0) === UPLOAD_ERR_INI_SIZE ? '图片超过服务器上传限制' : '图片上传失败';
     uploadJsonError($message, 400);
 }
-if (($file['size'] ?? 0) <= 0 || ($file['size'] ?? 0) > Database::UPLOAD_MAX_BYTES) uploadJsonError('图片最大允许 12MB', 413);
+if (($file['size'] ?? 0) <= 0) uploadJsonError('上传文件无效');
 if (!is_uploaded_file($file['tmp_name'])) uploadJsonError('上传文件无效');
+// 按类型分段限值（与 gallery.php / app_api.php 一致）：GIF 16MB / MP4 15MB / 图片 12MB
+$isGif = false;
+$isMp4 = false;
+if (is_file($file['tmp_name'])) {
+    $info = @getimagesize($file['tmp_name']);
+    $isGif = is_array($info) && ($info[2] ?? 0) === IMAGETYPE_GIF;
+    if (!$isGif) $isMp4 = Database::isMp4File($file['tmp_name']);
+}
+if ($isMp4) {
+    if (($file['size'] ?? 0) > Database::MP4_MAX_BYTES) uploadJsonError('视频最大 15MB', 413);
+} else {
+    $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
+    if (($file['size'] ?? 0) > $maxBytes) uploadJsonError($isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB', 413);
+}
 
 try {
     $filename = Database::saveUploadedImage($classId, $file['tmp_name']);
 } catch (RuntimeException $e) {
-    $code = str_contains($e->getMessage(), '像素') || str_contains($e->getMessage(), '12MB') ? 413 : 500;
-    uploadJsonError($e->getMessage(), $code);
+    $msg = $e->getMessage();
+    $code = (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500;
+    uploadJsonError($msg, $code);
 }
 
 header('Content-Type: application/json; charset=UTF-8');

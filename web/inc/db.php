@@ -523,8 +523,10 @@ class Database {
     const GIF_MAX_BYTES = 16777216;
     /** @var int GIF 最大帧数 */
     const GIF_MAX_FRAMES = 300;
-    /** @var int GIF 单帧像素 × 帧数 上限 (8000 万) */
+    /** @var int GIF 累计单帧像素 × 帧数 上限 (8000 万，逐帧累加) */
     const GIF_MAX_PIXEL_FRAMES = 80000000;
+    /** @var int GIF 单帧像素上限 (2500 万，与静态图片一致) */
+    const GIF_MAX_FRAME_PIXELS = 25000000;
     /** @var int GIF 单边最大像素（逻辑屏/帧，防超大单帧） */
     const GIF_MAX_EDGE = 8000;
     /** @var int MP4 单文件最大字节数 (15MB) */
@@ -639,9 +641,9 @@ class Database {
         if ($size === false || $size <= 0) throw new RuntimeException('无法读取上传文件');
         if ($size > self::GIF_MAX_BYTES) throw new RuntimeException('GIF 动图最大 16MB');
 
-        // GIF 炸弹校验（帧数 / 像素×帧 / 结构合法性）
+        // GIF 炸弹校验（帧数 / 单帧像素 / 逐帧累计像素 / 结构合法性）
         require_once __DIR__ . '/gif_guard.php';
-        $guard = GifGuard::validate($tmpPath, self::GIF_MAX_FRAMES, self::GIF_MAX_PIXEL_FRAMES);
+        $guard = GifGuard::validate($tmpPath, self::GIF_MAX_FRAMES, self::GIF_MAX_PIXEL_FRAMES, self::GIF_MAX_FRAME_PIXELS);
 
         $dir = self::getUploadsDirectory($classId);
         if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {

@@ -67,16 +67,21 @@
 
 ## 6. 最近工作状态（截至 2026-08-13）
 
-- **已推送大号**：`main` = `d008809`，与 `origin/main` 同步（待推本轮跟读改造）。
-- **已部署线上**：`web/display.css`、`web/display.js`、`web/display.php`、`web/gallery.php`、`web/common.css`（diff 全 MATCH）；本轮跟读改造 10 个文件（common.js / words.php / task.php / settings.php / README.md + display/history/gallery/main/history_book 的 common.js?v=8）**MD5 全 MATCH**。
+- **已推送大号**：`main` = `5220f20`（跟读重构），与 `origin/main` 同步（本轮审计修复待推）。
+- **已部署线上**：本轮**安全审计修复 10 文件**（README.md / app_api.php / cron_gallery_thumbs.php / display.js / display.php / gallery.php / inc/db.php / inc/gif_guard.php / inc/mp4_guard.php / upload.php）**MD5 全 MATCH**；线上冒烟：cron 404 守卫生效、display/index/gallery 正常。
 - **已完成**：
-  - 图集描述溢出处理：APP 大图查看器（AutoScrollText 来回滚动+蒙版）、展示大屏（rAF 来回滚动、蒙版挂滚动容器随视口固定）、web 灯箱（左媒体+右描述整列、描述框宽度按图片宽高比自适应、rAF 来回滚动、悬停暂停）。
-  - display 轮播：**15s 到时描述没读完则读完 +1s 再切**（`galleryTick`/`_descDone`）；放完自动从头循环。
-  - web 灯箱：恢复全屏遮罩/层级；**打开详情时暂停网格预览视频/GIF、关闭后恢复**（`body.lb-open` + JS pause，性能优化）。
-  - APP 视频卡片手绘贴纸；AutoScrollText 蒙版仅溢出时显示、末行不被挡；APP 版本 **1.0.10**。
-  - **跟读逻辑重构**（web 端，APP 无跟读）：节奏改为**每遍读完停顿 = 音频实际播放时长 + 缓冲时间**（`playing`→`ended` 实测，长词停得久）；修 0 值被吞（缓冲 0/音量 0 生效）、重启叠音、跟读中点喇叭叠音（speak 与跟读互斥）、暂停/继续丢进度（保留 audio 元素断点续播 + 停顿保留剩余秒数）、大写单词高亮失效（改 Map 查找）、关弹窗误停跟读、听写 onerror+play() 双重推进竞态；弹窗加**随机乱序**（只打乱播放顺序）；跟读参数改按班级存储（兼容旧全局键回退）；完成显示 N/N。
-- **APK**：1.0.10 已由**小号**构建并保存 `D:\Downloads\ListenWrite-1.0.10.apk`（签名与 moxie.jks 一致）。
-- **待办**：`admin.php` 发布 1.0.10（写 `data/app_versions.json`）。
+  - 图集描述溢出处理（APP/大屏/web 三端）、display 轮播 15s+读完才切、灯箱暂停网格视频、APP 视频贴纸（1.0.10 已发布）。
+  - **跟读逻辑重构**：停顿 = 音频实际时长 + 缓冲；修 9 处 bug；弹窗乱序；参数按班级存储。
+  - **安全审计与修复（A+C+D 批）**：
+    - GIF 炸弹防护重做（逐帧累加预算 + 单帧 ≤2500 万 + GCE 按规范解析 + 截断文件拒绝）
+    - MP4 分辨率 ≤4096×4096 + 只认首个 mvhd（防双 mvhd 伪造时长）+ tkhd 版本严格
+    - cron_gallery_thumbs.php：仅 CLI 可运行（Web 404）+ 失败写 .failed 标记 1h 退避 + 内层 50s 预算
+    - display.js：单图集不再 15s 无限重渲染；视频复用占位不再累积；预加载防重复下载（在途标记 + 主播放器尺寸直取）；视频/图片 error 兜底（「不可用」占位 + 推进轮播）；后台 visibilitychange 暂停/恢复；openSelect 清描述滚动 + pause 视频
+    - gallery.php：网格视频改 preload=metadata + IntersectionObserver 进视口才播放（不再首屏全量并发下载）；删除 pointer-events:none 下永不触发的 hover 声音死代码；网格媒体 onerror「媒体已失效」占位；灯箱只恢复之前正在播放的网格视频 + 关闭释放 src/解码器 + 世代 token 防快速切图竞态 + onerror toast；save_gallery 写库失败回滚孤儿文件；description 消毒；自愈清理改锁内 updateClassData
+    - upload.php/app_api.php：上传限值按类型统一（GIF 16MB/MP4 15MB/图片 12MB）；upload_image 补字节上限
+    - README 修正：video_thumb.php 真实行为（只读+404、CLI 预生成）
+  - **未做（B 批，按用户选择暂缓）**：gallery_api 默认拒绝无 key、班级 id 隐藏、上传限流/配额、HTTPS 部署（站点当前仅 HTTP 80）。
+- **APK**：1.0.10 已发布（`data/app_versions.json`）；签名与 moxie.jks 一致。
 
 ## 7. 本地校验命令
 
