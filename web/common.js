@@ -27,6 +27,8 @@ function showToast(msg, type) {
 let _currentAudio = null;
 let _speakSeq = 0;
 function speak(word, times) {
+    // 与跟读互斥：跟读进行中点单词发音，先停掉跟读会话（页面回调自动收尾 UI）
+    if (_followState && _followState.playing) stopFollowAlong();
     _speakSeq++;
     const mySeq = _speakSeq;
     if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
@@ -274,6 +276,15 @@ document.querySelectorAll('.modal').forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
 });
 
+// ---------- 数组乱序 (Fisher-Yates，原地打乱) ----------
+function shuffleArray(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+}
+
 // =========================================================
 // 跟读播放器 (Read-along Audio Player) — 基于音频自然时长
 // =========================================================
@@ -281,24 +292,39 @@ var _followState = null;
 
 /**
  * 开始跟读播放 (基于音频自然结束时间)
- * @param {string[]} words - 单词列表
- * @param {object} opts - { repeat(次), buffer(秒, 单词间缓冲时间), volume(0-100) }
+ * 节奏：每遍朗读后自动停顿 = 音频实际播放时长 + buffer（长词停得久、短词停得短）
+ * @param {string[]} words - 单词列表（播放顺序，可预先乱序）
+ * @param {object} opts - { repeat(每词朗读次数), buffer(秒, 额外缓冲), volume(0-100) }
  * @param {function} onUpdate - 回调 { word, index, total, done, stopped }
  * @returns {object} { stop, pause, resume }
  */
 function startFollowAlong(words, opts, onUpdate) {
     stopFollowAlong();
+    // 数字解析用 isNaN 判空，允许合法 0 值（缓冲 0 / 音量 0 均有效）
+    var repeat = parseInt(opts.repeat, 10);
+    if (isNaN(repeat) || repeat < 1) repeat = 1;
+    var buffer = parseFloat(opts.buffer);
+    if (isNaN(buffer) || buffer < 0) buffer = 0.5;
+    var volume = parseFloat(opts.volume);
+    if (isNaN(volume)) volume = 80;
+    volume = Math.max(0, Math.min(100, volume));
+
     var st = {
         playing: true,
         paused: false,
         words: words,
         index: 0,
-        repeat: opts.repeat || 1,
-        buffer: (opts.buffer || 0.5) * 1000,
-        volume: (opts.volume || 80) / 100,
-        timer: null,
-        currentAudio: null,
-        currentRepeat: 0
+        repeat: repeat,
+        buffer: buffer * 1000,      // 缓冲毫秒（叠加在音频时长上）
+        volume: volume / 100,
+        timer: null,                // 停顿倒计时
+        timerDeadline: 0,           // 停顿截止时间戳（暂停时保留剩余秒数）
+        currentAudio: null,         // 保留元素，暂停后可断点续播
+        currentRepeat: 0,
+        playStartAt: 0,             // 本次播放 'playing' 时刻（ms）
+        playedMs: 0,                // 当前遍已累计播放时长（ms）
+        failed: false,              // 当前遍失败：跳过剩余重复直接下一词
+        onUpdate: onUpdate
     };
     _followState = st;
 
@@ -309,10 +335,23 @@ function startFollowAlong(words, opts, onUpdate) {
             if (onUpdate) onUpdate({ done: true });
             return;
         }
-        var word = st.words[st.index];
         st.currentRepeat = 0;
-        if (onUpdate) onUpdate({ word: word, index: st.index + 1, total: st.words.length });
+        st.playedMs = 0;
+        st.failed = false;
+        if (onUpdate) onUpdate({ word: st.words[st.index], index: st.index + 1, total: st.words.length });
         playWordRepeat();
+    }
+
+    // 每遍结束后的停顿：音频实际时长 + 缓冲，然后进下一遍/下一词
+    function afterPause() {
+        if (!st.playing || st.paused) return;
+        var pauseMs = st.playedMs + st.buffer;
+        st.timerDeadline = performance.now() + pauseMs;
+        st.timer = setTimeout(function() {
+            st.timer = null;
+            st.timerDeadline = 0;
+            playWordRepeat();
+        }, pauseMs);
     }
 
     function playWordRepeat() {
@@ -324,70 +363,43 @@ function startFollowAlong(words, opts, onUpdate) {
                 if (onUpdate) onUpdate({ done: true });
                 return;
             }
-            st.timer = setTimeout(playNext, st.buffer);
+            playNext();
             return;
         }
-        // 如果上一次还在播放，先停掉
-        if (st.currentAudio) { st.currentAudio.pause(); st.currentAudio = null; }
         var word = st.words[st.index];
         var audio = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(word) + '&type=1');
         audio.volume = st.volume;
         st.currentAudio = audio;
-        var played = false;
+        st.failed = false;
+        st.playedMs = 0;
+        st.playStartAt = 0;
+        var done = false; // 本遍已收尾（成功或失败），防 onerror + play() 双重推进
+
+        audio.onplaying = function() { st.playStartAt = performance.now(); };
         audio.onended = function() {
             if (st.currentAudio !== audio) return;
             st.currentAudio = null;
+            if (done) return;
+            done = true;
+            // 实测播放时长；无 playing 事件时回退 audio.duration
+            st.playedMs += st.playStartAt
+                ? (performance.now() - st.playStartAt)
+                : (isFinite(audio.duration) && audio.duration > 0 ? audio.duration * 1000 : 0);
             if (!st.playing || st.paused) return;
             st.currentRepeat++;
-            played = true;
-            if (st.currentRepeat >= st.repeat) {
-                st.index++;
-                if (st.index >= st.words.length) {
-                    st.playing = false;
-                    if (onUpdate) onUpdate({ done: true });
-                    return;
-                }
-                st.timer = setTimeout(playNext, st.buffer);
-            } else {
-                playWordRepeat();
-            }
+            afterPause();
         };
-        audio.onerror = function() {
-            st.currentAudio = null;
+        var fail = function() {
+            if (st.currentAudio === audio) st.currentAudio = null;
+            if (done) return;
+            done = true;
+            st.failed = true;
             if (!st.playing || st.paused) return;
-            if (!played) {
-                st.currentRepeat++;
-                if (st.currentRepeat >= st.repeat) {
-                    st.index++;
-                    if (st.index >= st.words.length) {
-                        st.playing = false;
-                        if (onUpdate) onUpdate({ done: true });
-                        return;
-                    }
-                    st.timer = setTimeout(playNext, st.buffer);
-                } else {
-                    playWordRepeat();
-                }
-            }
+            st.currentRepeat = st.repeat; // 失败：跳过剩余重复，直接下一词（无停顿）
+            playWordRepeat();
         };
-        audio.play().catch(function() {
-            st.currentAudio = null;
-            if (!st.playing || st.paused) return;
-            if (!played) {
-                st.currentRepeat++;
-                if (st.currentRepeat >= st.repeat) {
-                    st.index++;
-                    if (st.index >= st.words.length) {
-                        st.playing = false;
-                        if (onUpdate) onUpdate({ done: true });
-                        return;
-                    }
-                    st.timer = setTimeout(playNext, st.buffer);
-                } else {
-                    playWordRepeat();
-                }
-            }
-        });
+        audio.onerror = fail;
+        audio.play().catch(fail);
     }
 
     playNext();
@@ -395,16 +407,27 @@ function startFollowAlong(words, opts, onUpdate) {
     return {
         stop: function() {
             st.playing = false;
+            st.paused = false;
             if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+            st.timerDeadline = 0;
             if (st.currentAudio) { st.currentAudio.pause(); st.currentAudio = null; }
             _speakSeq++;
             if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+            if (_followState === st) _followState = null;
             if (onUpdate) onUpdate({ done: true, stopped: true });
         },
         pause: function() {
+            if (!st.playing) return;
             st.paused = true;
             if (st.timer) { clearTimeout(st.timer); st.timer = null; }
-            if (st.currentAudio) { st.currentAudio.pause(); st.currentAudio = null; }
+            if (st.currentAudio) {
+                // 累计已播时长并保留元素，继续时从暂停处续播（不重读）
+                if (st.playStartAt) {
+                    st.playedMs += performance.now() - st.playStartAt;
+                    st.playStartAt = 0;
+                }
+                st.currentAudio.pause();
+            }
             _speakSeq++;
             if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
         },
@@ -412,9 +435,28 @@ function startFollowAlong(words, opts, onUpdate) {
             if (!st.playing || !st.paused) return;
             st.paused = false;
             if (st.currentAudio) {
-                st.currentAudio = null;
+                // 从暂停处续播当前遍
+                st.currentAudio.play().catch(function() {
+                    st.currentAudio = null;
+                    if (!st.playing || st.paused) return;
+                    st.failed = true;
+                    st.currentRepeat = st.repeat;
+                    playWordRepeat();
+                });
+                return;
             }
-            playNext();
+            if (st.timerDeadline) {
+                // 停顿中途暂停过：按剩余时间继续倒计时
+                var remaining = Math.max(0, st.timerDeadline - performance.now());
+                st.timerDeadline = performance.now() + remaining;
+                st.timer = setTimeout(function() {
+                    st.timer = null;
+                    st.timerDeadline = 0;
+                    playWordRepeat();
+                }, remaining);
+                return;
+            }
+            playWordRepeat();
         }
     };
 }
@@ -423,10 +465,15 @@ function stopFollowAlong() {
     if (_followState) {
         if (_followState.timer) { clearTimeout(_followState.timer); _followState.timer = null; }
         _followState.playing = false;
+        // 停掉旧会话正在播放的音频（防止新会话开始时叠音）
+        if (_followState.currentAudio) { _followState.currentAudio.pause(); _followState.currentAudio = null; }
         // 停止 speak() 的播放队列
         _speakSeq++;
         if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+        var cb = _followState.onUpdate;
         _followState = null;
+        // 通知页面收尾 UI（关闭播放条/气泡、清除高亮）
+        if (cb) cb({ done: true, stopped: true });
     }
 }
 

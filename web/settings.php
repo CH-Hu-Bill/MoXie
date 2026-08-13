@@ -8,6 +8,8 @@
  *   default_volume   — 默认音量 0-100 (听写模式初始值)
  *   default_interval — 默认单词间隔 (秒, 1-20) (听写模式初始值)
  *   default_repeat   — 单词朗读次数 1-10 (发音按钮重复次数)
+ *   follow_repeat    — 跟读每词朗读次数 1-5 (按班级)
+ *   follow_buffer    — 跟读缓冲时间 0-5 秒 (按班级; 每遍读完停顿 = 音频时长 + 此值)
  *
  * 同步机制:
  *   听写准备环节修改音量/间隔后，开始听写时自动回写 settings.json
@@ -37,8 +39,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     if (isset($_POST['default_interval'])) $settings['interval_' . $classId] = max(1, min(20, floatval($_POST['default_interval'])));
     if (isset($_POST['default_repeat'])) $settings['repeat_' . $classId] = max(1, min(10, intval($_POST['default_repeat'])));
     if (isset($_POST['default_repeat_interval'])) $settings['repeat_interval_' . $classId] = max(0.5, min(5, floatval($_POST['default_repeat_interval'])));
-    if (isset($_POST['follow_repeat'])) $settings['follow_repeat'] = max(1, min(5, intval($_POST['follow_repeat'])));
-    if (isset($_POST['follow_buffer'])) $settings['follow_buffer'] = max(0, min(5, floatval($_POST['follow_buffer'])));
+    // 跟读参数同样按班级隔离存储（与听写/朗读一致）
+    if (isset($_POST['follow_repeat'])) $settings['follow_repeat_' . $classId] = max(1, min(5, intval($_POST['follow_repeat'])));
+    if (isset($_POST['follow_buffer'])) $settings['follow_buffer_' . $classId] = max(0, min(5, floatval($_POST['follow_buffer'])));
     // 图集公开 API 密钥保护（按班级存储）
     $galleryKeyEnabled = reqPost('gallery_api_enabled') === '1';
     $galleryApiKey = trim(reqPost('gallery_api_key'));
@@ -69,8 +72,9 @@ $defaultVolume = $settings['volume_' . $classId] ?? $settings['default_volume'] 
 $defaultInterval = $settings['interval_' . $classId] ?? $settings['default_interval'] ?? 5;
 $defaultRepeat = $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1;
 $defaultRepeatInterval = $settings['repeat_interval_' . $classId] ?? $settings['default_repeat_interval'] ?? 1;
-$followRepeat = $settings['follow_repeat'] ?? 1;
-$followBuffer = $settings['follow_buffer'] ?? 0.5;
+// 跟读参数按班级读取（兼容旧版全局键作回退）
+$followRepeat = $settings['follow_repeat_' . $classId] ?? $settings['follow_repeat'] ?? 1;
+$followBuffer = $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5;
 $galleryApiKey = (string)($settings['gallery_api_key_' . $classId] ?? '');
 $galleryApiEnabled = $galleryApiKey !== '';
 $displayToken = (string)($settings['display_token_' . $classId] ?? '');
@@ -137,7 +141,7 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
             </div>
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:14px;color:var(--pencil);">缓冲时间（朗读完单词后的额外等待）</span>
+                    <span style="font-size:14px;color:var(--pencil);">缓冲时间（每遍读完停顿 = 音频时长 + 此值，秒）</span>
                     <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="followBufValue"><?php echo $followBuffer; ?> 秒</span>
                 </div>
                 <input type="number" class="input" id="followBufInput" value="<?php echo $followBuffer; ?>" min="0" max="5" step="0.5" oninput="document.getElementById('followBufValue').textContent = this.value + ' 秒'">
@@ -185,7 +189,7 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=7"></script>
+    <script src="common.js?v=8"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {

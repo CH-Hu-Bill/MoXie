@@ -527,11 +527,17 @@ PROMPT;
             </div>
             <div class="form-group">
                 <label>每个单词朗读次数</label>
-                <input type="number" id="followRepeat" value="<?php echo $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" class="input">
+                <input type="number" id="followRepeat" value="<?php echo $settings['follow_repeat_' . $classId] ?? $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" class="input">
             </div>
             <div class="form-group">
-                <label>缓冲时间（朗读完单词后的额外等待，秒）</label>
-                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" class="input">
+                <label>缓冲时间（秒）：每遍读完自动停顿 = 音频时长 + 此值</label>
+                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" class="input">
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="followShuffle" style="width:18px;height:18px;accent-color:var(--red);cursor:pointer;">
+                    <span>随机乱序（只打乱跟读顺序，不改单词库位置）</span>
+                </label>
             </div>
             <div class="modal-btns">
                 <button type="button" class="cancel" onclick="closeFollowModal()">取消</button>
@@ -573,7 +579,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=7"></script>
+    <script src="common.js?v=8"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
@@ -949,6 +955,7 @@ PROMPT;
         let followPaused = false;
         let followCollapsed = false;
         let followCollapseTimer = null;
+        let followSessionSeq = 0;   // 会话序号：收尾延时只对本会话生效
         function showFollowModal() {
             const selCount = selectedIds.size;
             const opt = document.getElementById('followSelectedOpt');
@@ -963,8 +970,8 @@ PROMPT;
             document.getElementById('followModal').classList.add('active');
         }
         function closeFollowModal() {
+            // 只关弹窗，不停止正在进行的跟读
             closeModal('followModal');
-            stopFollow();
         }
         function expandFollowBubble() {
             followCollapsed = false;
@@ -982,8 +989,12 @@ PROMPT;
         }
         function startFollow() {
             const scope = document.getElementById('followScope').value;
-            const repeat = parseInt(document.getElementById('followRepeat').value) || 1;
-            const buffer = parseFloat(document.getElementById('followBuffer').value) || 0.5;
+            // isNaN 判空，允许合法 0 值（缓冲 0 有效）
+            const repeatRaw = parseInt(document.getElementById('followRepeat').value, 10);
+            const repeat = isNaN(repeatRaw) || repeatRaw < 1 ? 1 : Math.min(5, repeatRaw);
+            const bufferRaw = parseFloat(document.getElementById('followBuffer').value);
+            const buffer = isNaN(bufferRaw) || bufferRaw < 0 ? 0.5 : Math.min(5, bufferRaw);
+            const shuffle = document.getElementById('followShuffle').checked;
             closeModal('followModal');
 
             let words;
@@ -993,10 +1004,20 @@ PROMPT;
                 words = wordsArray.map(w => w.word);
             }
             if (words.length === 0) { showToast('没有可跟读的单词', 'error'); return; }
+            if (shuffle) shuffleArray(words);   // 只打乱播放顺序，单词库卡片位置不动
+
+            // 高亮定位：小写单词 -> 卡片元素 映射（大小写安全、无选择器注入风险）
+            const cardMap = new Map();
+            document.querySelectorAll('.word-card[data-word-db]').forEach(function(c) {
+                const k = (c.getAttribute('data-word-db') || '').toLowerCase();
+                if (k && !cardMap.has(k)) cardMap.set(k, c);
+            });
 
             // Save follow settings
             fetch('settings.php?id=' + classId, { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: 'action=save_settings&follow_repeat=' + repeat + '&follow_buffer=' + buffer + '&csrf_token=' + encodeURIComponent(CSRF_TOKEN) }).catch(function(){});
 
+            followSessionSeq++;
+            const mySeq = followSessionSeq;
             document.getElementById('followPlayer').style.display = 'block';
             document.getElementById('followBubble').style.display = 'none';
             followCollapsed = false;
@@ -1008,20 +1029,32 @@ PROMPT;
 
             followController = startFollowAlong(words, { repeat: repeat, buffer: buffer, volume: <?php echo $settings['volume_' . $classId] ?? $settings['default_volume'] ?? 80; ?> }, function(info) {
                 if (info.done) {
-                    document.getElementById('followPlayer').style.display = 'none';
-                    document.getElementById('followBubble').style.display = 'none';
                     clearTimeout(followCollapseTimer);
                     followController = null;
                     followCollapsed = false;
                     document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
-                    if (!info.stopped) showToast('跟读完成', 'success');
+                    if (info.stopped) {
+                        document.getElementById('followPlayer').style.display = 'none';
+                        document.getElementById('followBubble').style.display = 'none';
+                    } else {
+                        // 显示完成态 N/N 片刻后再收尾
+                        document.getElementById('followProgress').textContent = words.length + '/' + words.length;
+                        document.getElementById('followWordDisplay').textContent = '完成';
+                        showToast('跟读完成', 'success');
+                        setTimeout(function() {
+                            if (mySeq === followSessionSeq) {
+                                document.getElementById('followPlayer').style.display = 'none';
+                                document.getElementById('followBubble').style.display = 'none';
+                            }
+                        }, 800);
+                    }
                 } else {
                     // Always update display text
                     document.getElementById('followWordDisplay').textContent = info.word;
                     document.getElementById('followProgress').textContent = info.index + '/' + info.total;
                     // Highlight and scroll to current word card
                     document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
-                    var card = document.querySelector('.word-card[data-word-db="' + info.word.toLowerCase() + '"]');
+                    var card = cardMap.get(info.word.toLowerCase());
                     if (card) {
                         card.classList.add('follow-highlight');
                         scrollCardToCenter(card, false);

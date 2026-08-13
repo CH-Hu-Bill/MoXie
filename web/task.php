@@ -234,11 +234,17 @@ require 'inc/header.php';
         <div class="modal-title">跟读设置</div>
         <div class="form-group">
             <label>每个单词朗读次数</label>
-            <input type="number" id="taskFollowRepeat" value="<?php echo $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" style="width:100%;">
+            <input type="number" id="taskFollowRepeat" value="<?php echo $settings['follow_repeat_' . $classId] ?? $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" style="width:100%;">
         </div>
         <div class="form-group">
-            <label>缓冲时间（朗读完单词后的额外等待，秒）</label>
-            <input type="number" id="taskFollowBuffer" value="<?php echo $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" style="width:100%;">
+            <label>缓冲时间（秒）：每遍读完自动停顿 = 音频时长 + 此值</label>
+            <input type="number" id="taskFollowBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" style="width:100%;">
+        </div>
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="taskFollowShuffle" style="width:18px;height:18px;accent-color:var(--red);cursor:pointer;">
+                <span>随机乱序（只打乱跟读顺序，不改单词位置）</span>
+            </label>
         </div>
         <div class="modal-btns">
             <button type="button" class="cancel" onclick="closeTaskFollowModal()">取消</button>
@@ -280,7 +286,7 @@ require 'inc/header.php';
     <input type="hidden" name="task_id" id="completeTaskId" value="<?php echo $selectedTask['id'] ?? ''; ?>">
 </form>
 
-<script src="common.js?v=7"></script>
+<script src="common.js?v=8"></script>
 <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
 <?php if ($selectedTask): ?>
 <script>
@@ -564,11 +570,14 @@ require 'inc/header.php';
         const audio = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(word) + '&type=1');
         dictState.currentAudio = audio;
         audio.volume = dictState.volume / 100;
-        // 音频加载失败处理 — 提示并跳过当前词继续下一个
-        audio.onerror = function() {
+        // 失败守卫：onerror 与 play() 失败可能双双触发，同一失败只推进一次
+        let failed = false;
+        const failAdvance = function(msg) {
+            if (failed) return;
+            failed = true;
             dictState.currentAudio = null;
             if (!dictState.running || dictState.paused) return;
-            showToast('音频加载失败，已跳过：' + word, 'error');
+            showToast(msg + '：' + word, 'error');
             dictState.repeatCount = dictState.repeat; // 跳过剩余重复
             dictState.currentIndex++;
             if (dictState.currentIndex >= dictState.words.length) {
@@ -578,23 +587,12 @@ require 'inc/header.php';
                 startCountdown();
             }
         };
+        // 音频加载失败处理 — 提示并跳过当前词继续下一个
+        audio.onerror = function() { failAdvance('音频加载失败，已跳过'); };
         audio.play().then(function() {
             // 播放成功，清除 onerror 避免误触发
             audio.onerror = null;
-        }).catch(function() {
-            // play() 失败 — 提示并跳到下一个词
-            dictState.currentAudio = null;
-            if (!dictState.running || dictState.paused) return;
-            showToast('音频播放失败，已跳过：' + word, 'error');
-            dictState.repeatCount = dictState.repeat;
-            dictState.currentIndex++;
-            if (dictState.currentIndex >= dictState.words.length) {
-                dictState.running = false;
-                setTimeout(function() { document.getElementById('dictCompleteModal').classList.add('active'); }, dictState.interval * 1000);
-            } else {
-                startCountdown();
-            }
-        });
+        }).catch(function() { failAdvance('音频播放失败，已跳过'); });
         audio.onended = () => {
             dictState.currentAudio = null;
             if (!dictState.running || dictState.paused) return;
@@ -671,12 +669,15 @@ require 'inc/header.php';
     }
 
     // ==================== Task Follow-along ====================
-    let taskFollowCtrl = null, taskFollowPaused = false, taskFollowCollapsed = false, taskFollowCollapseTimer = null;
+    let taskFollowCtrl = null, taskFollowPaused = false, taskFollowCollapsed = false, taskFollowCollapseTimer = null, taskFollowSessionSeq = 0;
     const taskWords = [];
     for (const wid of taskWordIds) { if (wordMapData[wid]) taskWords.push(wordMapData[wid].word); }
 
     function showTaskFollow() { document.getElementById('taskFollowModal').classList.add('active'); }
-    function closeTaskFollowModal() { closeModal('taskFollowModal'); stopTaskFollow(); }
+    function closeTaskFollowModal() {
+        // 只关弹窗，不停止正在进行的跟读
+        closeModal('taskFollowModal');
+    }
 
     function expandTaskFollowBubble() {
         taskFollowCollapsed = false;
@@ -694,39 +695,65 @@ require 'inc/header.php';
     }
 
     function startTaskFollow() {
-        const repeat = parseInt(document.getElementById('taskFollowRepeat').value) || 1;
-        const buffer = parseFloat(document.getElementById('taskFollowBuffer').value) || 0.5;
+        // isNaN 判空，允许合法 0 值（缓冲 0 有效）
+        const repeatRaw = parseInt(document.getElementById('taskFollowRepeat').value, 10);
+        const repeat = isNaN(repeatRaw) || repeatRaw < 1 ? 1 : Math.min(5, repeatRaw);
+        const bufferRaw = parseFloat(document.getElementById('taskFollowBuffer').value);
+        const buffer = isNaN(bufferRaw) || bufferRaw < 0 ? 0.5 : Math.min(5, bufferRaw);
+        const shuffle = document.getElementById('taskFollowShuffle').checked;
         closeModal('taskFollowModal');
         if (taskWords.length === 0) { showToast('没有单词', 'error'); return; }
+        const playWords = shuffle ? shuffleArray(taskWords.slice()) : taskWords;   // 乱序只作用于播放顺序
+
+        // 高亮定位：小写单词 -> 卡片元素 映射（大小写安全、无选择器注入风险）
+        const cardMap = new Map();
+        document.querySelectorAll('.word-card[data-word]').forEach(function(c) {
+            const k = (c.getAttribute('data-word') || '').toLowerCase();
+            if (k && !cardMap.has(k)) cardMap.set(k, c);
+        });
 
         // Save follow settings
         fetch('settings.php?id=' + classId, { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: 'action=save_settings&follow_repeat=' + repeat + '&follow_buffer=' + buffer + '&csrf_token=' + encodeURIComponent(CSRF_TOKEN) }).catch(function(){});
 
+        taskFollowSessionSeq++;
+        const mySeq = taskFollowSessionSeq;
         document.getElementById('taskFollowPlayer').style.display = 'block';
         document.getElementById('taskFollowBubble').style.display = 'none';
         taskFollowCollapsed = false;
         clearTimeout(taskFollowCollapseTimer);
-        document.getElementById('taskFollowProgress').textContent = '0/' + taskWords.length;
+        document.getElementById('taskFollowProgress').textContent = '0/' + playWords.length;
         document.getElementById('taskFollowWord').textContent = '准备中...';
         taskFollowPaused = false;
         document.getElementById('taskFollowPauseBtn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>暂停';
 
-        taskFollowCtrl = startFollowAlong(taskWords, { repeat: repeat, buffer: buffer, volume: <?php echo $settings['volume_' . $classId] ?? $settings['default_volume'] ?? 80; ?> }, function(info) {
+        taskFollowCtrl = startFollowAlong(playWords, { repeat: repeat, buffer: buffer, volume: <?php echo $settings['volume_' . $classId] ?? $settings['default_volume'] ?? 80; ?> }, function(info) {
             if (info.done) {
-                document.getElementById('taskFollowPlayer').style.display = 'none';
-                document.getElementById('taskFollowBubble').style.display = 'none';
                 clearTimeout(taskFollowCollapseTimer);
                 taskFollowCtrl = null;
                 taskFollowCollapsed = false;
                 document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
-                if (!info.stopped) showToast('跟读完成', 'success');
+                if (info.stopped) {
+                    document.getElementById('taskFollowPlayer').style.display = 'none';
+                    document.getElementById('taskFollowBubble').style.display = 'none';
+                } else {
+                    // 显示完成态 N/N 片刻后再收尾
+                    document.getElementById('taskFollowProgress').textContent = playWords.length + '/' + playWords.length;
+                    document.getElementById('taskFollowWord').textContent = '完成';
+                    showToast('跟读完成', 'success');
+                    setTimeout(function() {
+                        if (mySeq === taskFollowSessionSeq) {
+                            document.getElementById('taskFollowPlayer').style.display = 'none';
+                            document.getElementById('taskFollowBubble').style.display = 'none';
+                        }
+                    }, 800);
+                }
             } else {
                 // Always update display text
                 document.getElementById('taskFollowWord').textContent = info.word;
                 document.getElementById('taskFollowProgress').textContent = info.index + '/' + info.total;
                 // Highlight and scroll to current word card
                 document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
-                var card = document.querySelector('.word-card[data-word="' + info.word.toLowerCase() + '"]');
+                var card = cardMap.get(info.word.toLowerCase());
                 if (card) {
                     card.classList.add('follow-highlight');
                     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
