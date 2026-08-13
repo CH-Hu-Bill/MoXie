@@ -237,8 +237,8 @@ require 'inc/header.php';
             <input type="number" id="taskFollowRepeat" value="<?php echo $settings['follow_repeat_' . $classId] ?? $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" style="width:100%;">
         </div>
         <div class="form-group">
-            <label>缓冲时间（秒）：每遍读完自动停顿 = 音频时长 + 此值</label>
-            <input type="number" id="taskFollowBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" style="width:100%;">
+            <label>缓冲时间（-0.5 到 5 秒）：停顿 = 音频时长 + 此值（负数提前，最短 0 秒）</label>
+            <input type="number" id="taskFollowBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="-0.5" max="5" step="0.5" style="width:100%;">
         </div>
         <div class="form-group">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -286,7 +286,7 @@ require 'inc/header.php';
     <input type="hidden" name="task_id" id="completeTaskId" value="<?php echo $selectedTask['id'] ?? ''; ?>">
 </form>
 
-<script src="common.js?v=8"></script>
+<script src="common.js?v=9"></script>
 <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
 <?php if ($selectedTask): ?>
 <script>
@@ -699,7 +699,7 @@ require 'inc/header.php';
         const repeatRaw = parseInt(document.getElementById('taskFollowRepeat').value, 10);
         const repeat = isNaN(repeatRaw) || repeatRaw < 1 ? 1 : Math.min(5, repeatRaw);
         const bufferRaw = parseFloat(document.getElementById('taskFollowBuffer').value);
-        const buffer = isNaN(bufferRaw) || bufferRaw < 0 ? 0.5 : Math.min(5, bufferRaw);
+        const buffer = isNaN(bufferRaw) ? 0.5 : Math.max(-0.5, Math.min(5, bufferRaw));
         const shuffle = document.getElementById('taskFollowShuffle').checked;
         closeModal('taskFollowModal');
         if (taskWords.length === 0) { showToast('没有单词', 'error'); return; }

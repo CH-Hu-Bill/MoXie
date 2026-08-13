@@ -71,7 +71,7 @@
 - **已部署线上**：本轮**安全审计修复 10 文件**（README.md / app_api.php / cron_gallery_thumbs.php / display.js / display.php / gallery.php / inc/db.php / inc/gif_guard.php / inc/mp4_guard.php / upload.php）**MD5 全 MATCH**；线上冒烟：cron 404 守卫生效、display/index/gallery 正常。
 - **已完成**：
   - 图集描述溢出处理（APP/大屏/web 三端）、display 轮播 15s+读完才切、灯箱暂停网格视频、APP 视频贴纸（1.0.10 已发布）。
-  - **跟读逻辑重构**：停顿 = 音频实际时长 + 缓冲；修 9 处 bug；弹窗乱序；参数按班级存储。
+  - **跟读逻辑重构**：停顿 = 音频实际时长 + 缓冲（缓冲 -0.5~5 秒，负数让停顿比音频短、节奏更紧凑，实际停顿钳到 ≥0）；修 9 处 bug；弹窗乱序；参数按班级存储。
   - **安全审计与修复（A+C+D 批）**：
     - GIF 炸弹防护重做（逐帧累加预算 + 单帧 ≤2500 万 + GCE 按规范解析 + 截断文件拒绝）
     - MP4 分辨率 ≤4096×4096 + 只认首个 mvhd（防双 mvhd 伪造时长）+ tkhd 版本严格

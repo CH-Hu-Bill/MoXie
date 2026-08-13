@@ -530,8 +530,8 @@ PROMPT;
                 <input type="number" id="followRepeat" value="<?php echo $settings['follow_repeat_' . $classId] ?? $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" class="input">
             </div>
             <div class="form-group">
-                <label>缓冲时间（秒）：每遍读完自动停顿 = 音频时长 + 此值</label>
-                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="0" max="5" step="0.5" class="input">
+                <label>缓冲时间（-0.5 到 5 秒）：停顿 = 音频时长 + 此值（负数提前，最短 0 秒）</label>
+                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="-0.5" max="5" step="0.5" class="input">
             </div>
             <div class="form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -579,7 +579,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=8"></script>
+    <script src="common.js?v=9"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
@@ -993,7 +993,7 @@ PROMPT;
             const repeatRaw = parseInt(document.getElementById('followRepeat').value, 10);
             const repeat = isNaN(repeatRaw) || repeatRaw < 1 ? 1 : Math.min(5, repeatRaw);
             const bufferRaw = parseFloat(document.getElementById('followBuffer').value);
-            const buffer = isNaN(bufferRaw) || bufferRaw < 0 ? 0.5 : Math.min(5, bufferRaw);
+            const buffer = isNaN(bufferRaw) ? 0.5 : Math.max(-0.5, Math.min(5, bufferRaw));
             const shuffle = document.getElementById('followShuffle').checked;
             closeModal('followModal');
 

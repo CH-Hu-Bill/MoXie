@@ -112,7 +112,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
         </div>
     </div>
 
-    <script src="common.js?v=8"></script>
+    <script src="common.js?v=9"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';

@@ -293,8 +293,9 @@ var _followState = null;
 /**
  * 开始跟读播放 (基于音频自然结束时间)
  * 节奏：每遍朗读后自动停顿 = 音频实际播放时长 + buffer（长词停得久、短词停得短）
+ * buffer 可为负（-0.5~5 秒）：负数让停顿比音频短、节奏更紧凑；实际停顿钳到 ≥0
  * @param {string[]} words - 单词列表（播放顺序，可预先乱序）
- * @param {object} opts - { repeat(每词朗读次数), buffer(秒, 额外缓冲), volume(0-100) }
+ * @param {object} opts - { repeat(每词朗读次数), buffer(秒, -0.5~5 的缓冲偏移), volume(0-100) }
  * @param {function} onUpdate - 回调 { word, index, total, done, stopped }
  * @returns {object} { stop, pause, resume }
  */
@@ -304,7 +305,8 @@ function startFollowAlong(words, opts, onUpdate) {
     var repeat = parseInt(opts.repeat, 10);
     if (isNaN(repeat) || repeat < 1) repeat = 1;
     var buffer = parseFloat(opts.buffer);
-    if (isNaN(buffer) || buffer < 0) buffer = 0.5;
+    if (isNaN(buffer)) buffer = 0.5;
+    buffer = Math.max(-0.5, Math.min(5, buffer)); // 缓冲允许负值：停顿 = 音频时长 + 缓冲（可短于音频）
     var volume = parseFloat(opts.volume);
     if (isNaN(volume)) volume = 80;
     volume = Math.max(0, Math.min(100, volume));
@@ -342,10 +344,10 @@ function startFollowAlong(words, opts, onUpdate) {
         playWordRepeat();
     }
 
-    // 每遍结束后的停顿：音频实际时长 + 缓冲，然后进下一遍/下一词
+    // 每遍结束后的停顿：音频实际时长 + 缓冲（负缓冲可提前，但实际停顿不小于 0）
     function afterPause() {
         if (!st.playing || st.paused) return;
-        var pauseMs = st.playedMs + st.buffer;
+        var pauseMs = Math.max(0, st.playedMs + st.buffer);
         st.timerDeadline = performance.now() + pauseMs;
         st.timer = setTimeout(function() {
             st.timer = null;

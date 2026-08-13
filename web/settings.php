@@ -9,7 +9,7 @@
  *   default_interval — 默认单词间隔 (秒, 1-20) (听写模式初始值)
  *   default_repeat   — 单词朗读次数 1-10 (发音按钮重复次数)
  *   follow_repeat    — 跟读每词朗读次数 1-5 (按班级)
- *   follow_buffer    — 跟读缓冲时间 0-5 秒 (按班级; 每遍读完停顿 = 音频时长 + 此值)
+ *   follow_buffer    — 跟读缓冲时间 -0.5~5 秒 (按班级; 每遍读完停顿 = 音频时长 + 此值, 负数提前, 实际停顿 ≥0)
  *
  * 同步机制:
  *   听写准备环节修改音量/间隔后，开始听写时自动回写 settings.json
@@ -41,7 +41,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     if (isset($_POST['default_repeat_interval'])) $settings['repeat_interval_' . $classId] = max(0.5, min(5, floatval($_POST['default_repeat_interval'])));
     // 跟读参数同样按班级隔离存储（与听写/朗读一致）
     if (isset($_POST['follow_repeat'])) $settings['follow_repeat_' . $classId] = max(1, min(5, intval($_POST['follow_repeat'])));
-    if (isset($_POST['follow_buffer'])) $settings['follow_buffer_' . $classId] = max(0, min(5, floatval($_POST['follow_buffer'])));
+    if (isset($_POST['follow_buffer'])) $settings['follow_buffer_' . $classId] = max(-0.5, min(5, floatval($_POST['follow_buffer'])));
     // 图集公开 API 密钥保护（按班级存储）
     $galleryKeyEnabled = reqPost('gallery_api_enabled') === '1';
     $galleryApiKey = trim(reqPost('gallery_api_key'));
@@ -141,10 +141,10 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
             </div>
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:14px;color:var(--pencil);">缓冲时间（每遍读完停顿 = 音频时长 + 此值，秒）</span>
+                    <span style="font-size:14px;color:var(--pencil);">缓冲时间（-0.5 到 5 秒）：停顿 = 音频时长 + 此值（负数提前，最短 0 秒）</span>
                     <span style="font-size:14px;color:var(--blue);font-weight:bold;" id="followBufValue"><?php echo $followBuffer; ?> 秒</span>
                 </div>
-                <input type="number" class="input" id="followBufInput" value="<?php echo $followBuffer; ?>" min="0" max="5" step="0.5" oninput="document.getElementById('followBufValue').textContent = this.value + ' 秒'">
+                <input type="number" class="input" id="followBufInput" value="<?php echo $followBuffer; ?>" min="-0.5" max="5" step="0.5" oninput="document.getElementById('followBufValue').textContent = this.value + ' 秒'">
             </div>
         </div>
         <div class="card mb-3">
@@ -189,7 +189,7 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=8"></script>
+    <script src="common.js?v=9"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {
