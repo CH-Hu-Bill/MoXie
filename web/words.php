@@ -314,8 +314,13 @@ PROMPT;
     @keyframes hl { 0%,20%,40% { background: var(--post-it); } 100% { background: var(--white); } }
     /* 持久定位高亮：进入页面自动定位到最后任务单词，保持到用户操作 */
     .word-card.locate-highlight { border-color: var(--red); background: var(--post-it); box-shadow: 0 0 0 3px rgba(255,77,77,0.4); }
-    /* 滚动性能：视口外卡片跳过渲染/合成（Chrome/Edge/Safari 16+） */
-    .word-card { content-visibility: auto; contain-intrinsic-size: 236px; }
+    /* 滚动性能说明：曾用 content-visibility:auto 跳过视口外渲染，但它会让视口外卡片按
+       占位高度(236px)布局，getBoundingClientRect 产生累计误差（越靠后越滑过头），且定位时
+       需强制全量真实布局 → 4-5s 卡顿、永久失去优化、部分机器定位失效。已移除，
+       改用常规布局，getBoundingClientRect 始终精确。
+       滚动渲染仍保留 contain: layout paint（隔离布局/绘制，浏览器可跳过视口外卡片的
+       绘制合成），既防滚动卡顿又【不影响】高度测量/定位。 */
+    .word-card { contain: layout paint; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .word-card .corner-tl { position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 4px; z-index: 2; }
     .word-card .number { background: var(--old-paper); color: #777; font-size: 11px; padding: 2px 8px; border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); font-family: var(--font-heading); }
@@ -610,24 +615,23 @@ PROMPT;
             if (!card) return;
             var content = document.getElementById('contentWrap');
             var scroller = content && content.scrollHeight > content.clientHeight ? content : document.scrollingElement;
-            // content-visibility:auto 下视口外卡片用占位高度(236px)布局，getBoundingClientRect
-            // 的 top 会有累计误差 → 定位靠后的单词会滑过头。定位前强制真实布局。
-            // 注意：强制后【不要恢复】——恢复会在滚动结束后改变 scrollHeight 并钳制 scrollTop，
-            // 导致定位目标被"往上拉"（越靠后越明显、最后一行直接被拉走）。
-            var cards = document.querySelectorAll('.word-card');
-            for (var k = 0; k < cards.length; k++) {
-                if (getComputedStyle(cards[k]).contentVisibility === 'auto') {
-                    cards[k].style.contentVisibility = 'visible';
-                }
-            }
-            // 用 scroller 自身的坐标系计算居中目标（此前直接拿 card 的视口 top 计算，
-            // 未减去 scroller 的顶部偏移(header/工具栏)，导致始终多滚一段 → 滑过头）
+            // 已移除 content-visibility:auto → getBoundingClientRect 恒准确，无需强制布局。
+            // 用 scroller 自身的坐标系计算居中目标（直接拿 card 的视口 top 计算会忽略
+            // scroller 顶部偏移(header/工具栏)，导致多滚一段 → 滑过头）。
             var rect = card.getBoundingClientRect();
             var sRect = scroller.getBoundingClientRect();
             var target = scroller.scrollTop + (rect.top - sRect.top) - scroller.clientHeight / 2 + rect.height / 2;
             target = Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
+            var dist = Math.abs(target - scroller.scrollTop);
             try {
-                scroller.scrollTo({ top: target, behavior: 'smooth' });
+                if (dist > scroller.clientHeight * 1.5) {
+                    // 远距离定位：长距离 smooth 滚动中间会短暂空白（浏览器跟不上渲染）。
+                    // 先瞬时跳到目标上方一屏，再平滑滚完最后一段，视觉上几乎无感且不闪白。
+                    scroller.scrollTop = Math.max(0, target - scroller.clientHeight);
+                    scroller.scrollTo({ top: target, behavior: 'smooth' });
+                } else {
+                    scroller.scrollTo({ top: target, behavior: 'smooth' });
+                }
             } catch (e) {
                 scroller.scrollTop = target;
             }
@@ -1102,41 +1106,37 @@ PROMPT;
         }
 
         // ==================== Init ====================
-        window.addEventListener('load', () => {
-            initMarquee();
-            // content-visibility 下视口外卡片跳过布局，进入视口时重新测量跑马灯
-            if ('IntersectionObserver' in window) {
-                try {
-                    const io = new IntersectionObserver(function(entries) {
-                        entries.forEach(function(en) {
-                            if (en.isIntersecting) initMarqueeFor(en.target);
-                        });
-                    }, { rootMargin: '200px 0px' });
-                    document.querySelectorAll('.word-card').forEach(card => io.observe(card));
-                } catch (e) {}
-            }
-            // Click card body to toggle selection
-            document.querySelectorAll('.word-card').forEach(card => {
-                card.addEventListener('click', function(e) {
-                    if (e.target.closest('.speaker') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
-                    const cb = this.querySelector('.checkbox'); if (cb) cb.click();
-                });
+        // 脚本位于 </body> 前，DOM 已解析完成，直接执行定位，不再等 window load。
+        // （window load 会等 Google Fonts/图片全部加载完——字体 CDN 慢或被墙时可能延迟
+        //   数秒甚至一直不触发，这就是"加载完还要等 4-5 秒才开始定位 / 有的机器直接没定位"的根因。）
+        initMarquee();
+        if ('IntersectionObserver' in window) {
+            try {
+                const io = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(en) {
+                        if (en.isIntersecting) initMarqueeFor(en.target);
+                    });
+                }, { rootMargin: '200px 0px' });
+                document.querySelectorAll('.word-card').forEach(card => io.observe(card));
+            } catch (e) {}
+        }
+        // Click card body to toggle selection
+        document.querySelectorAll('.word-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                if (e.target.closest('.speaker') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
+                const cb = this.querySelector('.checkbox'); if (cb) cb.click();
             });
-            // Handle search highlight parameter (prioritized over last-word)
+        });
+
+        // 执行定位（高亮优先级：搜索参数 > 历史"用这些单词重新创建" > 最近创建任务的最后一个单词）
+        function runInitialLocate() {
             const params = new URLSearchParams(location.search);
             const highlightId = params.get('highlight');
             if (highlightId) {
                 const hc = document.querySelector('.word-card[data-id="' + highlightId + '"]');
                 // 搜索定位：持久高亮，直到用户操作才清除（locate-highlight）
-                if (hc) setTimeout(() => { scrollCardToCenter(hc, true); }, 400);
-            } else {
-                const ri = localStorage.getItem('recreate_word_ids');
-                const li = <?php echo $lastWordIndex; ?>;
-                const lid = <?php echo $lastWordId === null ? 'null' : json_encode($lastWordId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-                if (!ri && (li >= 0 || lid) && wordsArray.length > 0) {
-                    const c = document.querySelector(lid ? '.word-card[data-id="' + lid + '"]' : '.word-card[data-index="' + li + '"]');
-                    if (c) setTimeout(() => { scrollCardToCenter(c, true); }, 300);
-                }
+                if (hc) setTimeout(() => { scrollCardToCenter(hc, true); }, 50);
+                return;
             }
             const ri = localStorage.getItem('recreate_word_ids');
             if (ri) {
@@ -1147,10 +1147,20 @@ PROMPT;
                     document.getElementById('selectedCount').textContent = selectedIds.size;
                     // 定位到这批单词中的第一个并持久高亮，方便用户确认要重新创建任务的单词
                     const first = document.querySelector('.word-card[data-id="' + ids[0] + '"]');
-                    if (first) setTimeout(() => { scrollCardToCenter(first, true); }, 300);
+                    if (first) setTimeout(() => { scrollCardToCenter(first, true); }, 50);
                     if (selectedIds.size > 0) showToast('已选择 ' + selectedIds.size + ' 个单词，可直接创建任务', 'success');
                 } catch(e) {}
+                return;
             }
+            const li = <?php echo $lastWordIndex; ?>;
+            const lid = <?php echo $lastWordId === null ? 'null' : json_encode($lastWordId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+            if ((li >= 0 || lid) && wordsArray.length > 0) {
+                const c = document.querySelector(lid ? '.word-card[data-id="' + lid + '"]' : '.word-card[data-index="' + li + '"]');
+                if (c) setTimeout(() => { scrollCardToCenter(c, true); }, 50);
+            }
+        }
+        // 批量导入完成后跳回本页时恢复勾选状态（保持与 load 阶段一致，提前到定位前）
+        (function() {
             const bi = localStorage.getItem('batch_import_selected');
             if (bi) {
                 localStorage.removeItem('batch_import_selected');
@@ -1160,6 +1170,21 @@ PROMPT;
                     document.getElementById('selectedCount').textContent = selectedIds.size;
                 } catch(e) {}
             }
+        })();
+        runInitialLocate();
+
+        // 字体/图片加载完后再做两件事：
+        // 1) 重测跑马灯（字体加载会改变文本宽度）
+        // 2) 若定位高亮仍在（用户尚未操作），字体加载可能改变卡片高度/换行 → 微调定位防漂移
+        window.addEventListener('load', () => {
+            initMarquee();
+            const hl = document.querySelector('.word-card.locate-highlight');
+            if (hl) setTimeout(() => { scrollCardToCenter(hl, true); }, 80);
+        });
+        document.fonts && document.fonts.ready && document.fonts.ready.then(function() {
+            initMarquee();
+            const hl = document.querySelector('.word-card.locate-highlight');
+            if (hl) setTimeout(() => { scrollCardToCenter(hl, true); }, 80);
         });
     </script>
 </body>

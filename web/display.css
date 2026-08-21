@@ -218,8 +218,8 @@ body {
 }
 .d-words-header {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
 }
 .d-words-title {
@@ -230,7 +230,26 @@ body {
 .d-words-date {
   font-family: var(--font-mono);
   font-size: 15px;
-  color: var(--old-paper);
+  color: var(--blue);
+  background: var(--white);
+  border: 1.5px solid var(--pencil);
+  border-radius: var(--wobbly-sm);
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+.d-words-tag {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  color: var(--red);
+  background: #fff1f0;
+  border: 1.5px solid var(--red);
+  border-radius: var(--wobbly-sm);
+  padding: 2px 8px;
+  flex-shrink: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .d-word-grid {
   flex: 1;
@@ -398,6 +417,62 @@ body {
   mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
 }
 
+/* ---- 图集区切换栏 + 文字占位 ---- */
+.d-gallery-mode {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 0 0;
+}
+.d-mode-btn {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 14px;
+  background: var(--white);
+  border: 2px solid var(--pencil);
+  border-radius: var(--wobbly-sm);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  color: var(--pencil);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.d-mode-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.d-mode-btn.active {
+  background: var(--pencil);
+  color: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+.d-motto {
+  flex: 1;
+  min-height: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  font-family: var(--font-heading);
+  user-select: none;
+  padding: 10px;
+}
+.d-motto-line1 {
+  font-size: clamp(44px, 7cqi, 110px);
+  line-height: 1.15;
+  color: var(--red);
+  text-shadow: 4px 4px 0 rgba(255, 77, 77, 0.18);
+}
+.d-motto-line2 {
+  font-size: clamp(30px, 5cqi, 78px);
+  line-height: 1.2;
+  color: var(--blue);
+  text-shadow: 3px 3px 0 rgba(45, 93, 161, 0.15);
+}
+/* motto 模式下隐藏轮播图区 */
+.display-root[data-gallery-mode="motto"] .d-gallery { display: none; }
+.display-root[data-gallery-mode="motto"] .d-motto { display: flex; }
+
 /* =========================================================
    口令弹窗（复用 .modal 视觉风格，独立层）
    ========================================================= */
@@ -431,13 +506,17 @@ body {
   .d-gallery { flex-direction: column; }
   .d-gallery-img { flex: 1 1 auto; }
   .d-gallery-desc { flex: 0 0 auto; }
+  .d-mode-btn { font-size: 12px; padding: 5px 10px; }
+  .d-motto-line1 { font-size: 34px; }
+  .d-motto-line2 { font-size: 24px; }
 }
 
-/* ---- 减少动效偏好 ---- */
+/* ---- 减少动效偏好 ----
+   注意：单词/释义跑马灯【不能】在 reduced-motion 下关掉——大屏壁纸是给全班看的，
+   长单词若只做溢出截断就看不全（很多 Windows 大屏默认开了"显示动画效果：无"，
+   这正是"单词溢出不滚动"的根因）。跑马灯是该页的核心信息展示，保持滚动。 */
 @media (prefers-reduced-motion: reduce) {
   .d-marquee-track.track-scroll { animation: none; }
   .d-gallery-img img { transition: none; }
   .d-divider::after, .d-word, .d-gear { transition: none; }
-  .d-word-main.scrollable .d-word-scroll,
-  .d-word-mean.scrollable .d-word-scroll { animation: none; }
 }

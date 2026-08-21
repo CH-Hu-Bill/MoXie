@@ -301,6 +301,11 @@ require 'inc/header.php';
             <div class="title">展示大屏</div>
             <div class="desc">壁纸投屏模式</div>
         </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('download_app.php')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+            <div class="title">下载 APP</div>
+            <div class="desc">安装最新版客户端</div>
+        </div>
     </div>
 
     <div class="card" style="padding:28px;">

@@ -44,25 +44,24 @@ function displayBannerAnnouncement($classId) {
     return null;
 }
 
-function displayTodayWords($classId) {
+/**
+ * 最近一次默写任务 + 其单词（不再执着于"今天"）。
+ * 取 created_at 最新（未取消）的任务，展示该任务的单词（上限 20）。
+ * 返回结构：['task' => ['id','date','label','status','word_count'], 'items' => [{word,meaning,pos},...]]
+ */
+function displayRecentTaskWords($classId) {
     try {
         $tasks = Database::getTasks($classId);
-        $today = date('Y-m-d');
-        // 取今天最早的 pending 任务（created_at 排序），只展示该任务的单词
-        $candidates = [];
+        $best = null;
         foreach ($tasks as $t) {
-            if (($t['status'] ?? '') === 'pending' && ($t['date'] ?? '') === $today) {
-                $candidates[] = $t;
-            }
+            if (($t['status'] ?? '') === 'cancelled') continue; // 跳过已取消任务
+            if ($best === null) { $best = $t; continue; }
+            $c = (string)($t['created_at'] ?? ($t['date'] ?? ''));
+            $bc = (string)($best['created_at'] ?? ($best['date'] ?? ''));
+            if (strcmp($c, $bc) > 0) $best = $t;
         }
-        if (empty($candidates)) return [];
-        usort($candidates, function($a, $b) {
-            $ta = $a['created_at'] ?? ($a['id'] ?? '');
-            $tb = $b['created_at'] ?? ($b['id'] ?? '');
-            return strcmp((string)$ta, (string)$tb);
-        });
-        $ids = $candidates[0]['word_ids'] ?? [];
-        if (empty($ids)) return [];
+        if ($best === null) return ['task' => null, 'items' => []];
+        $ids = $best['word_ids'] ?? [];
         $ids = array_slice(array_values(array_unique(array_map('strval', $ids))), 0, 20);
         $byId = [];
         foreach (Database::getWords($classId) as $w) $byId[(string)$w['id']] = $w;
@@ -75,8 +74,25 @@ function displayTodayWords($classId) {
                 'pos' => (string)($byId[$wid]['pos'] ?? ''),
             ];
         }
-        return $out;
-    } catch (Throwable $e) { return []; }
+        return [
+            'task' => [
+                'id' => (string)($best['id'] ?? ''),
+                'date' => (string)($best['date'] ?? ''),
+                'label' => (string)($best['label'] ?? ''),
+                'status' => (string)($best['status'] ?? ''),
+                'word_count' => count($out),
+            ],
+            'items' => $out,
+        ];
+    } catch (Throwable $e) { return ['task' => null, 'items' => []]; }
+}
+
+/** 日期转中文星期（如 2026-08-21 → 周五） */
+function displayWeekdayCn($dateStr) {
+    $ts = strtotime((string)$dateStr);
+    if ($ts === false) return '';
+    $map = ['日', '一', '二', '三', '四', '五', '六'];
+    return $map[(int)date('w', $ts)];
 }
 
 function displayGallery($classId) {
@@ -157,7 +173,7 @@ if (reqGet('json') === '1') {
             'ok' => true,
             'class_name' => (string)($classes[$classId]['name'] ?? ''),
             'announcement' => displayBannerAnnouncement($classId),
-            'words' => displayTodayWords($classId),
+            'words' => displayRecentTaskWords($classId),
             'gallery' => displayGallery($classId),
             'bottom_margin' => $bottomMargin,
         ], JSON_UNESCAPED_UNICODE);
@@ -188,7 +204,7 @@ if ($classId !== '' && isset($classes[$classId])) {
 // 各视图数据
 $className = $view === 'content' ? (string)($class['name'] ?? '') : '';
 $banner = $view === 'content' ? displayBannerAnnouncement($classId) : null;
-$words = $view === 'content' ? displayTodayWords($classId) : [];
+$wordsData = $view === 'content' ? displayRecentTaskWords($classId) : ['task' => null, 'items' => []];
 $gallery = $view === 'content' ? displayGallery($classId) : [];
 
 // 班级列表（选择页 + 口令弹窗共用）
@@ -205,7 +221,7 @@ $csrfToken = csrfToken();
 $pageTitle = '展示大屏';
 require 'inc/head.php';
 ?>
-<link rel="stylesheet" href="display.css?v=5">
+<link rel="stylesheet" href="display.css?v=7">
 </head>
 <body>
 <script>
@@ -214,7 +230,7 @@ var DISPLAY_VIEW='<?php echo $view; ?>';
 var DISPLAY_CID='<?php echo $classId !== '' ? htmlspecialchars($classId, ENT_QUOTES, 'UTF-8') : ''; ?>';
 var DISPLAY_CLASSES=<?php echo json_encode($publicClasses, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var DISPLAY_GALLERY=<?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
 
 <div class="display-root" id="displayRoot" data-view="<?php echo $view; ?>"
@@ -264,14 +280,19 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 
       <div class="d-words" id="dWords">
         <div class="d-words-header">
-          <span class="d-words-title">今日默写</span>
-          <span class="d-words-date"><?php echo date('Y-m-d'); ?></span>
+          <span class="d-words-title">最近默写</span>
+          <?php if (!empty($wordsData['task']['date'])): ?>
+            <span class="d-words-date"><?php echo htmlspecialchars((string)$wordsData['task']['date']); ?> 周<?php echo htmlspecialchars(displayWeekdayCn((string)$wordsData['task']['date'])); ?></span>
+          <?php endif; ?>
+          <?php if (!empty($wordsData['task']['label'])): ?>
+            <span class="d-words-tag"><?php echo htmlspecialchars((string)$wordsData['task']['label']); ?></span>
+          <?php endif; ?>
         </div>
-        <?php if (empty($words)): ?>
-          <div class="d-placeholder">今日暂无默写任务 ✍️</div>
+        <?php if (empty($wordsData['items'])): ?>
+          <div class="d-placeholder">最近暂无默写任务 ✍️</div>
         <?php else: ?>
           <div class="d-word-grid">
-            <?php foreach ($words as $w): ?>
+            <?php foreach ($wordsData['items'] as $w): ?>
               <div class="d-word">
                 <div class="d-word-main"><span class="d-word-scroll"><?php echo htmlspecialchars($w['word']); ?></span><?php if ($w['pos'] !== ''): ?><span class="d-word-pos"><?php echo htmlspecialchars($w['pos']); ?></span><?php endif; ?></div>
                 <?php if ($w['meaning'] !== ''): ?><div class="d-word-mean"><span class="d-word-scroll"><?php echo htmlspecialchars($w['meaning']); ?></span></div><?php endif; ?>
@@ -281,7 +302,7 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
         <?php endif; ?>
       </div>
 
-      <div class="d-gallery" id="dGallery">
+        <div class="d-gallery" id="dGallery">
         <div class="d-gallery-img" id="dGalleryImg">
           <?php if (!empty($gallery)): ?>
             <div class="d-gallery-loading"><?php echo $gallery[0]['type'] === 'mp4' ? '视频加载中…' : '加载中…'; ?></div>
@@ -301,6 +322,17 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
           <?php endif; ?>
           </div>
         </div>
+      </div>
+      <!-- 图集区切换栏：图片轮播 / 好好学习 天天向上（壁纸场景下图片轮播可能分散注意力，
+           切换成醒目文字占位保持专注） -->
+      <div class="d-gallery-mode" id="dGalleryMode">
+        <button class="d-mode-btn" data-mode="carousel" onclick="switchGalleryMode('carousel')">🖼 图集轮播</button>
+        <button class="d-mode-btn" data-mode="motto" onclick="switchGalleryMode('motto')">✏️ 好好学习 天天向上</button>
+      </div>
+      <!-- 文字占位（好好学习 天天向上），仅在 motto 模式显示 -->
+      <div class="d-motto" id="dMotto">
+        <div class="d-motto-line1">好好学习</div>
+        <div class="d-motto-line2">天天向上</div>
       </div>
     </div>
   </div>
@@ -334,6 +366,6 @@ var DISPLAY_WORDS=<?php echo json_encode($words, JSON_UNESCAPED_UNICODE | JSON_H
 })();
 </script>
 <script src="common.js?v=9"></script>
-<script src="display.js?v=13"></script>
+<script src="display.js?v=16"></script>
 </body>
 </html>

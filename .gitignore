@@ -18,6 +18,9 @@ web/data/exports/
 web/diag.php
 web/diagnose.php
 
+# ── APK 安装包（后台上传，运行时产物，不进仓库）──
+web/apk/
+
 # ── Composer / PHP 依赖 ──
 vendor/
 composer.lock

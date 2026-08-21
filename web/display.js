@@ -10,23 +10,72 @@ if (!root) return;
 
 var isContentView = root.dataset.view === 'content';
 var POLL_MS = 60000;          // 公告/单词/图集轮询
-var ROTATE_MS = 15000;        // 图集切换
+var ROTATE_MS = 30000;        // 图集切换
 var gallery = (typeof DISPLAY_GALLERY !== 'undefined' && DISPLAY_GALLERY) ? DISPLAY_GALLERY : [];
 var galleryIdx = 0;
 var galleryTimer = null;
 var pollTimer = null;
 var polling = false;
 var reducedMotion = false;
-var lastWords = (typeof DISPLAY_WORDS !== 'undefined' && DISPLAY_WORDS) ? DISPLAY_WORDS : [];
+var lastWords = (typeof DISPLAY_WORDS !== 'undefined' && DISPLAY_WORDS) ? DISPLAY_WORDS : { task: null, items: [] };
+/* 单词区内容指纹：任务日期/状态/标签 + 单词序列，用于 60s 轮询 diff（比 JSON.stringify 全量轻） */
+function wordsFingerprint(w) {
+    if (!w || !w.task) return 'none';
+    return (w.task.id || '') + '#' + (w.task.date || '') + '#' + (w.task.status || '') + '#' + (w.task.label || '') + '|'
+        + (w.items || []).map(function(it) { return it.word + '|' + it.meaning + '|' + it.pos; }).join(';');
+}
 
 /* 图集轮播断点记忆（localStorage）：
    同设备/浏览器记住当前班级的轮播位置，下次打开从上次位置继续。
    图集内容（指纹=url序列）变化时自动从头开始。 */
 var STORE_IDX = 'display_gallery_idx';
 var STORE_FP = 'display_gallery_fp';
+/* 图集区展示模式：carousel（图片轮播，默认）/ motto（好好学习 天天向上 文字占位）。
+   壁纸场景下图片轮播可能分散注意力，切换到文字占位保持专注。localStorage 记忆。 */
+var STORE_MODE = 'display_gallery_mode';
+var galleryMode = 'carousel';
+
+function loadGalleryMode() {
+    try {
+        var m = localStorage.getItem(STORE_MODE);
+        if (m === 'carousel' || m === 'motto') galleryMode = m;
+    } catch (e) {}
+}
+function applyGalleryMode() {
+    root.dataset.galleryMode = galleryMode;
+    var btns = document.querySelectorAll('.d-mode-btn');
+    btns.forEach(function(b) {
+        b.classList.toggle('active', b.dataset.mode === galleryMode);
+    });
+    if (galleryMode === 'motto') {
+        // 文字占位模式：停掉轮播计时/解码，避免后台空转
+        stopGallery();
+        stopDescScroll();
+        var v = document.getElementById('dGalleryPic');
+        if (v && v.tagName === 'VIDEO') { try { v.pause(); } catch (e) {} }
+        return;
+    }
+    // 轮播模式：若当前项还没渲染/计时，重新渲染以挂上"就绪后计时"钩子
+    if (gallery.length > 0 && galleryIdx < gallery.length) {
+        renderGalleryItem(gallery[galleryIdx], false);
+        saveGalleryState();
+    }
+    if (gallery.length > 1) preloadUpcoming();
+}
+function switchGalleryMode(mode) {
+    if (mode !== 'carousel' && mode !== 'motto') return;
+    if (galleryMode === mode) return;
+    galleryMode = mode;
+    try { localStorage.setItem(STORE_MODE, galleryMode); } catch (e) {}
+    applyGalleryMode();
+}
 
 function galleryFingerprint(list) {
     try { return (list || []).map(function(it) { return it.url; }).join('|'); } catch (e) { return ''; }
+}
+/* 轮询 diff 用：url+type+description 全含，描述改动也会触发重渲染（位置指纹只管 url 序列） */
+function galleryDiffFingerprint(list) {
+    try { return (list || []).map(function(it) { return (it.url || '') + '#' + (it.type || '') + '#' + (it.description || ''); }).join('|'); } catch (e) { return ''; }
 }
 function loadGalleryState() {
     try {
@@ -52,6 +101,7 @@ function onVisible() {
     if (document.hidden) return;
     if (isContentView && !polling) startPolling();
     if (!isContentView || gallery.length < 2) return;
+    if (galleryMode === 'motto') return; // 文字占位模式不恢复轮播
     var v = document.getElementById('dGalleryPic');
     if (v && v.tagName === 'VIDEO') { try { if (v.paused) v.play().catch(function() {}); } catch (e) {} }
     if (_itemReady && !galleryTimer) {
@@ -388,6 +438,7 @@ function startDescScroll() {
     var st = {};
     var tick = function(now) {
         if (_descScrollHandle !== st) return; // 已被 stop 或重新开始
+        if (document.hidden) { _descScrollHandle.raf = requestAnimationFrame(tick); return; } // 后台暂停，回前台继续
         var dt = (now - last) / 1000; last = now;
         if (now < pauseUntil) { _descScrollHandle.raf = requestAnimationFrame(tick); return; }
         pos += dir * speed * dt;
@@ -490,17 +541,19 @@ function refresh() {
                     root.style.setProperty('--bottom-margin', data.bottom_margin + 'px');
                 }
                 updateMarquee(data.announcement);
-                // 单词内容 diff：无变化跳过重建 DOM（避免 60s 一次全量 innerHTML + 测量）
-                var newWords = data.words || [];
-                if (JSON.stringify(newWords) !== JSON.stringify(lastWords)) {
+                // 单词内容 diff：用轻量指纹（任务信息+单词序列），无变化跳过重建 DOM
+                var newWords = data.words || { task: null, items: [] };
+                if (wordsFingerprint(newWords) !== wordsFingerprint(lastWords)) {
                     lastWords = newWords;
                     renderWords(newWords);
                 }
                 var newGallery = data.gallery || [];
-                if (JSON.stringify(newGallery) !== JSON.stringify(gallery)) {
+                if (galleryDiffFingerprint(newGallery) !== galleryDiffFingerprint(gallery)) {
                     gallery = newGallery;
                     galleryIdx = 0;
                     saveGalleryState();
+                    // motto（文字占位）模式下不渲染轮播，只更新数据；切回轮播时再渲染
+                    if (galleryMode === 'motto') return;
                     renderGalleryItem(gallery.length ? gallery[0] : null, false);
                     if (gallery.length > 1) {
                         preloadUpcoming(); // 首帧渲染后立即预载后两张（render 就绪后会自行计时）
@@ -525,22 +578,38 @@ function refresh() {
 function renderWords(words) {
     var zone = document.getElementById('dWords');
     if (!zone) return;
-    var header = '';
-    if (words.length === 0) {
-        zone.innerHTML = '<div class="d-words-header"><span class="d-words-title">今日默写</span><span class="d-words-date">' + todayStr() + '</span></div>'
-            + '<div class="d-placeholder">今日暂无默写任务 ✍️</div>';
+    var task = words && words.task;
+    var items = words && words.items ? words.items : [];
+    var header = '<div class="d-words-header"><span class="d-words-title">最近默写</span>';
+    if (task && task.date) {
+        header += '<span class="d-words-date">' + escHtml(task.date) + ' 周' + weekdayCn(task.date) + '</span>';
+    }
+    if (task && task.label) {
+        header += '<span class="d-words-tag">' + escHtml(task.label) + '</span>';
+    }
+    header += '</div>';
+    if (items.length === 0) {
+        zone.innerHTML = header + '<div class="d-placeholder">最近暂无默写任务 ✍️</div>';
         return;
     }
-    var cards = words.map(function(w) {
+    var cards = items.map(function(w) {
         var pos = w.pos ? '<span class="d-word-pos">' + escHtml(w.pos) + '</span>' : '';
         var mean = w.meaning ? '<div class="d-word-mean"><span class="d-word-scroll">' + escHtml(w.meaning) + '</span></div>' : '';
         return '<div class="d-word"><div class="d-word-main"><span class="d-word-scroll">' + escHtml(w.word) + '</span>' + pos + '</div>' + mean + '</div>';
     }).join('');
-    zone.innerHTML = '<div class="d-words-header"><span class="d-words-title">今日默写</span><span class="d-words-date">' + todayStr() + '</span></div>'
-        + '<div class="d-word-grid">' + cards + '</div>';
+    zone.innerHTML = header + '<div class="d-word-grid">' + cards + '</div>';
     fitWords();
     fitWordMarquees();
     marqueeAfterFonts();
+}
+
+/* 日期 → 中文星期（如 2026-08-21 → 周五） */
+function weekdayCn(dateStr) {
+    try {
+        var d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        return '日一二三四五六'.charAt(d.getDay());
+    } catch (e) { return ''; }
 }
 
 /**
@@ -610,24 +679,28 @@ function fitWords() {
  * 长单词 / 长释义溢出检测 → 滚动跑马灯。
  * 复用单词库页 .scrollable 逻辑：在块级父元素上测 scrollWidth - clientWidth（span 的 scrollWidth 在 inline 上下文为 0）。
  * 滚动距离用相对像素 em 计算（随字号缩放），时长按溢出量换算秒。
+ * 双 rAF：等 fitWords 的 CSS 变量（--word-fs 等）真正应用到布局后再测，
+ * 避免单 rAF 时字号还没生效导致测不到溢出（"单词不滚动、只截断"的另一个潜在根因）。
  */
 function fitWordMarquees() {
     var grid = document.getElementById('dWords');
     if (!grid) return;
     var els = grid.querySelectorAll('.d-word-main, .d-word-mean');
-    els.forEach(function(el) {
-        el.classList.remove('scrollable');
-        el.style.removeProperty('--mx');
-        el.style.removeProperty('--md');
+    requestAnimationFrame(function() {
         requestAnimationFrame(function() {
-            var over = el.scrollWidth - el.clientWidth;
-            if (over > 4) {
-                var fs = parseFloat(getComputedStyle(el).fontSize) || 16;
-                var overEm = (over + 8) / fs;
-                el.classList.add('scrollable');
-                el.style.setProperty('--mx', '-' + overEm.toFixed(2) + 'em');
-                el.style.setProperty('--md', Math.max(3, over / 30) + 's');
-            }
+            els.forEach(function(el) {
+                el.classList.remove('scrollable');
+                el.style.removeProperty('--mx');
+                el.style.removeProperty('--md');
+                var over = el.scrollWidth - el.clientWidth;
+                if (over > 4) {
+                    var fs = parseFloat(getComputedStyle(el).fontSize) || 16;
+                    var overEm = (over + 8) / fs;
+                    el.classList.add('scrollable');
+                    el.style.setProperty('--mx', '-' + overEm.toFixed(2) + 'em');
+                    el.style.setProperty('--md', Math.max(3, over / 30) + 's');
+                }
+            });
         });
     });
 }
@@ -648,12 +721,6 @@ window.addEventListener('resize', () => {
     clearTimeout(_marqueeResizeTimer);
     _marqueeResizeTimer = setTimeout(function() { fitWords(); fitWordMarquees(); }, 150);
 });
-
-function todayStr() {
-    var d = new Date();
-    function p(n) { return n < 10 ? '0' + n : '' + n; }
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-}
 
 function escHtml(s) {
     return String(s == null ? '' : s)
@@ -811,12 +878,11 @@ function init() {
     if (!document.hidden) startPolling();
     // 从上次轮播位置继续（图集一致时才生效）
     loadGalleryState();
-    if (gallery.length > 0 && galleryIdx < gallery.length) {
-        // 始终用 JS 重挂"就绪后计时"钩子（服务端直出的首帧无 onload/playing 钩子）
-        renderGalleryItem(gallery[galleryIdx], false);
-        saveGalleryState();
-    }
-    if (gallery.length > 1) preloadUpcoming();
+    // 图集区展示模式（轮播/好好学习 天天向上）：
+    //  carousel → 重挂"就绪后计时"钩子（服务端直出的首帧无 onload/playing 钩子）+ 预载后两张；
+    //  motto    → 停轮播/解码，显示文字占位。
+    loadGalleryMode();
+    applyGalleryMode();
     setTimeout(function() { fitWords(); fitWordMarquees(); }, 0);
     marqueeAfterFonts();
     window.addEventListener('load', function() { setTimeout(function() { fitWords(); fitWordMarquees(); }, 60); marqueeAfterFonts(); });
@@ -848,5 +914,6 @@ window.showPw = showPw;
 window.closePw = closePw;
 window.submitPassword = submitPassword;
 window.openSelect = openSelect;
+window.switchGalleryMode = switchGalleryMode;
 
 })();

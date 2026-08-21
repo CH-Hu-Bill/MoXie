@@ -94,11 +94,14 @@ body {
   padding: 36px 30px;
   max-width: 580px; width: 84%;
   text-align: center;
+  max-height: 70vh;
+  overflow-y: auto;  /* 超长兜底：极端情况仍可滚动查看，不溢出屏幕 */
 }
 .fs-text {
   font-family: var(--font-heading);
   font-size: 28px; font-weight: 700; line-height: 1.5;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .fs-hint {
   margin-top: 22px; font-size: 13px; color: var(--pencil);

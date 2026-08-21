@@ -4,7 +4,19 @@
  */
 require_once 'inc/db.php';
 require_once 'inc/security.php';
+// 后台页面一律禁止缓存：删除公告等操作后刷新必须拿到最新数据，
+// 避免浏览器缓存导致"删了还在/改了没变"的错觉。
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 $config = require 'inc/config.php';
+
+/** 字节数 → 人类可读大小（如 35.2 MB） */
+function self_FormatBytes($bytes) {
+    $bytes = (int)$bytes;
+    if ($bytes < 1024) return $bytes . ' B';
+    if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
+    return round($bytes / 1048576, 1) . ' MB';
+}
 $adminPassword = $config['admin_password'] ?? 'change-this-password';
 $sessionTtl = $config['admin_session_ttl'] ?? 1800;
 
@@ -138,6 +150,61 @@ if ($isAuthed) {
         }
     }
 
+    if (isset($_POST['action']) && $_POST['action'] === 'upload_apk') {
+        // 上传最新 APK：只保留最新一版（覆盖旧文件），并记录大小/时间到 app_versions.json
+        $ver = trim(reqPost('apk_version'));
+        $notes = trim(reqPost('apk_notes'));
+        if (!isset($_FILES['apk_file']) || !is_uploaded_file($_FILES['apk_file']['tmp_name'] ?? '')) {
+            $msg = '请选择要上传的 APK 文件';
+        } elseif (!preg_match('/^\d+\.\d+(\.\d+)?$/', $ver)) {
+            $msg = '请填写对应的版本号（如 1.0.10）';
+        } else {
+            $tmp = $_FILES['apk_file']['tmp_name'];
+            $err = (int)($_FILES['apk_file']['error'] ?? UPLOAD_ERR_OK);
+            $size = (int)($_FILES['apk_file']['size'] ?? 0);
+            if ($err !== UPLOAD_ERR_OK) {
+                $msg = 'APK 上传失败（错误码 ' . $err . '）';
+            } elseif ($size <= 0) {
+                $msg = 'APK 文件为空';
+            } else {
+                // 扩展名校验：允许 .apk（防上传任意文件）
+                $ext = strtolower(pathinfo((string)($_FILES['apk_file']['name'] ?? ''), PATHINFO_EXTENSION));
+                if ($ext !== 'apk') {
+                    $msg = '只允许上传 .apk 文件';
+                } else {
+                    $apkDir = __DIR__ . '/apk';
+                    if (!is_dir($apkDir) && !mkdir($apkDir, 0775, true)) {
+                        $msg = '无法创建 apk 目录，请检查权限';
+                    } else {
+                        // 移动到站点根目录 apk/，只保留最新一版（同名覆盖）
+                        $dest = $apkDir . '/listenwrite-release.apk';
+                        if (move_uploaded_file($tmp, $dest)) {
+                            @chmod($dest, 0644);
+                            $uploadedAt = date('Y-m-d H:i:s');
+                            $note = trim($notes) !== '' ? $notes : '';
+                            Database::update('app_versions.json', function($d) use ($ver, $note, $uploadedAt, $size) {
+                                if (!is_array($d)) $d = ['latest' => '1.0', 'history' => []];
+                                $d['latest'] = $ver;
+                                $d['apk'] = [
+                                    'version' => $ver,
+                                    'url' => 'apk/listenwrite-release.apk',
+                                    'size' => $size,
+                                    'size_human' => self_FormatBytes($size),
+                                    'notes' => $note,
+                                    'uploaded_at' => $uploadedAt,
+                                ];
+                                return $d;
+                            });
+                            $msg = "APK 已上传：v{$ver}（" . self_FormatBytes($size) . "），仅保留最新一版";
+                        } else {
+                            $msg = 'APK 保存失败，请检查目录权限';
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (isset($_POST['action']) && $_POST['action'] === 'save_announcement') {
         $content = sanitizePlainText(reqPost('content'));
         $color = trim(reqPost('color'));
@@ -150,7 +217,16 @@ if ($isAuthed) {
         $endTime = str_replace('T', ' ', trim(reqPost('end_time')));
         $startTs = strtotime($startTime);
         $endTs = strtotime($endTime);
-        if ($content === '' || $startTs === false || $endTs === false) {
+        // 超级霸屏是大字全屏展示，超长内容会溢出（网页端和 APP 端都会）；
+        // 顶部横幅可长一些（跑马灯无限滚动）。超长则直接拒绝并提示。
+        $contentLen = mb_strlen($content);
+        $fsLimit = 60;      // 超级霸屏：60 字以内，保证 28px 大字不溢出卡片
+        $bannerLimit = 200; // 顶部横幅：跑马灯无限滚动，放宽到 200
+        if ($mode === 'fullscreen' && $contentLen > $fsLimit) {
+            $msg = '超级霸屏内容不能超过 ' . $fsLimit . ' 字（当前 ' . $contentLen . ' 字），请精简后重试';
+        } elseif ($contentLen > $bannerLimit) {
+            $msg = '公告内容不能超过 ' . $bannerLimit . ' 字（当前 ' . $contentLen . ' 字）';
+        } elseif ($content === '' || $startTs === false || $endTs === false) {
             $msg = '请填写公告内容、开始时间和结束时间';
         } elseif (!preg_match('/\A#[0-9a-fA-F]{3,8}\z/D', $color)) {
             $msg = '颜色格式无效';
@@ -195,12 +271,21 @@ if ($isAuthed) {
 
     if (isset($_POST['action']) && $_POST['action'] === 'delete_announcement') {
         $delId = reqPost('id');
-        $announcements = Database::getAnnouncements();
-        $announcements = array_values(array_filter($announcements, function($a) use ($delId) {
-            return ($a['id'] ?? '') !== $delId;
-        }));
-        if (Database::saveAnnouncements($announcements)) {
-            $msg = '公告已删除';
+        // 用锁内更新做原子删除，避免"读旧→写"竞态导致删除被覆盖（表现为删了还在）
+        $deleted = false;
+        $ok = Database::update('announcements.json', function($d) use ($delId, &$deleted) {
+            if (!is_array($d) || !isset($d['announcements']) || !is_array($d['announcements'])) return $d;
+            $before = count($d['announcements']);
+            $d['announcements'] = array_values(array_filter($d['announcements'], function($a) use ($delId) {
+                return ($a['id'] ?? '') !== $delId;
+            }));
+            $deleted = count($d['announcements']) < $before;
+            return $d;
+        });
+        if ($ok && $deleted) {
+            $msg = '公告已删除（立即生效）';
+        } elseif ($ok) {
+            $msg = '未找到该公告（可能已被删除）';
         } else {
             $msg = '公告删除失败：服务器数据目录不可写';
         }
@@ -241,7 +326,21 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 
 <?php if ($msg): ?><div class="card <?php echo strpos($msg,'已')!==false||strpos($msg,'成功')!==false||strpos($msg,'发布')!==false?'card-post-it':''; ?>" style="padding:10px 18px;margin-bottom:12px;font-size:14px;<?php echo strpos($msg,'已')!==false||strpos($msg,'成功')!==false||strpos($msg,'发布')!==false?'':'color:var(--red);'; ?>"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
 
-<div class="card" style="margin-bottom:16px;">
+<!-- 分区导航：长页面快速跳转 -->
+<div style="position:sticky;top:0;z-index:100;display:flex;gap:8px;flex-wrap:wrap;background:var(--paper);padding:8px 0;margin-bottom:14px;border-bottom:2px solid var(--pencil);">
+    <a href="#sec-classes" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🏫 班级管理</a>
+    <a href="#sec-app" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">📱 APP 发布</a>
+    <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">📢 公告管理</a>
+    <a href="#sec-display" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🖥️ 大屏设置</a>
+    <span style="flex:1;"></span>
+    <form method="post" style="display:inline;margin:0;">
+        <input type="hidden" name="action" value="logout">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+        <button type="submit" class="btn btn-sm" style="margin:0;opacity:0.5;color:var(--pencil);">退出登录</button>
+    </form>
+</div>
+
+<div class="card" id="sec-classes" style="margin-bottom:16px;scroll-margin-top:60px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">班级列表 (<?php echo count($classes); ?>个)</h2>
     <?php if (empty($classes)): ?>
         <div class="empty-state"><p>暂无班级</p></div>
@@ -258,7 +357,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
     <?php endif; ?>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
+<div class="card" id="sec-app" style="margin-bottom:16px;scroll-margin-top:60px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📱 APP 版本发布</h2>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
         <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">当前线上版本</span><b style="font-size:14px;"><?php echo htmlspecialchars((string)($versionData['latest'] ?? '1.0')); ?></b></div>
@@ -288,6 +387,40 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
         </div>
         <p style="margin-top:10px;font-size:12px;color:var(--pencil);opacity:0.7;line-height:1.5;">发布后 APP 端 <code style="background:var(--old-paper);padding:1px 6px;border-radius:var(--wobbly-sm);">check_version</code> 将与当前客户端版本比较；用户可稍后更新（非强更）。</p>
     </form>
+
+    <?php $apkInfo = $versionData['apk'] ?? null; ?>
+    <div style="margin-top:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
+        <div style="font-family:var(--font-heading);font-size:14px;margin-bottom:8px;">⬇️ 上传安装包（只保留最新一版）</div>
+        <?php if ($apkInfo): ?>
+        <div style="font-size:12px;color:var(--pencil);line-height:1.8;margin-bottom:8px;">
+            <b>当前已上架：</b>v<?php echo htmlspecialchars((string)($apkInfo['version'] ?? '')); ?>
+            · <?php echo htmlspecialchars((string)($apkInfo['size_human'] ?? '?')); ?>
+            · <?php echo htmlspecialchars((string)($apkInfo['uploaded_at'] ?? '')); ?>
+            <?php if (!empty($apkInfo['notes'])): ?><br><span style="opacity:0.7;">更新说明：<?php echo htmlspecialchars((string)$apkInfo['notes']); ?></span><?php endif; ?>
+        </div>
+        <?php else: ?>
+        <div style="font-size:12px;color:var(--pencil);opacity:0.6;margin-bottom:8px;">尚未上传过安装包。上传后可生成「下载 APP」页面，用户可自行下载最新版。</div>
+        <?php endif; ?>
+        <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload_apk">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                <div>
+                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">对应版本号 *</label>
+                    <input type="text" name="apk_version" class="input" placeholder="1.0.10" style="width:110px" required pattern="\d+\.\d+(\.\d+)?$" value="<?php echo htmlspecialchars((string)($apkInfo['version'] ?? '')); ?>">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">APK 文件 *（.apk）</label>
+                    <input type="file" name="apk_file" accept=".apk" required style="font-size:12px;">
+                </div>
+                <div style="flex:1;min-width:160px">
+                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">更新说明（可选）</label>
+                    <input type="text" name="apk_notes" class="input" placeholder="本次更新内容，展示在下载页" style="width:100%" maxlength="300">
+                </div>
+                <button type="submit" class="btn btn-primary" style="white-space:nowrap;">上传（覆盖旧版）</button>
+            </div>
+        </form>
+    </div>
 
     <h3 style="font-family:var(--font-heading);font-size:15px;margin:18px 0 10px;color:var(--pencil);">发布日志</h3>
     <?php if (empty($versionHistory)): ?>
@@ -334,7 +467,7 @@ $serverEndInput = date('Y-m-d\TH:i', time() + 3600);
 $displaySettings = Database::getSettings();
 $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ?? 48));
 ?>
-<div class="card" style="margin-bottom:16px;">
+<div class="card" id="sec-display" style="margin-bottom:16px;scroll-margin-top:60px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">🖥️ 大屏壁纸设置</h2>
     <p style="font-size:13px;color:var(--pencil);opacity:0.75;margin-bottom:12px;">
         壁纸展示页 <code style="background:var(--old-paper);padding:1px 6px;border-radius:var(--wobbly-sm);">display.php</code> 的底部避让高度（防止被电脑任务栏遮挡）。内容只占右侧可用区域（左侧快捷方式区通过页面上可拖拽竖线调整）。
@@ -351,7 +484,7 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
         </div>
     </form>
 </div>
-<div class="card" style="margin-bottom:16px;">
+<div class="card" id="sec-announce" style="margin-bottom:16px;scroll-margin-top:60px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📢 全服公告</h2>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
         <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">当前公告</span><b style="font-size:14px;"><?php echo count($announcements); ?> 条</b></div>
@@ -363,7 +496,8 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
             <div style="flex:1;min-width:200px">
                 <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">公告内容 *</label>
-                <input type="text" name="content" class="input" placeholder="例如：周五下午进行默写测试" style="width:100%" maxlength="200" required>
+                <input type="text" name="content" id="annContent" class="input" placeholder="例如：周五下午进行默写测试" style="width:100%" maxlength="200" required>
+                <div style="font-size:11px;color:var(--pencil);opacity:0.6;margin-top:3px;"><span id="annCount">0</span>/<span id="annMax">200</span> 字 <span id="annLimitHint" style="display:none;color:var(--red);"></span></div>
             </div>
             <div>
                 <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">颜色</label>
@@ -415,10 +549,41 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
         <p style="margin-top:8px;font-size:12px;color:var(--pencil);opacity:0.7;">已预填服务器当前时间（默认发布后立即生效，可自行改为预约时段）。公告仅在「开始~结束」时间段内显示。同一时间段同类公告只允许一条（顶部横幅与超级霸屏可共存）。</p>
     </form>
     <script>
+    var ANN_FS_LIMIT = 60;
+    var ANN_BANNER_LIMIT = 200;
+    function annModeLimit() {
+        return document.querySelector('input[name="mode"]:checked').value === 'fullscreen' ? ANN_FS_LIMIT : ANN_BANNER_LIMIT;
+    }
     function toggleFsSec() {
         var fs = document.querySelector('input[name="mode"]:checked').value === 'fullscreen';
         document.getElementById('fsSecWrap').style.display = fs ? '' : 'none';
+        var c = document.getElementById('annContent');
+        var max = annModeLimit();
+        if (c) {
+            c.maxLength = max;
+            document.getElementById('annMax').textContent = max;
+            document.getElementById('annLimitHint').style.display = fs ? '' : 'none';
+            document.getElementById('annLimitHint').textContent = '超级霸屏限制 ' + max + ' 字以内（大字全屏展示，过长会溢出）';
+            updateAnnCount();
+        }
     }
+    function updateAnnCount() {
+        var c = document.getElementById('annContent');
+        if (!c) return;
+        var len = (c.value || '').length;
+        var max = annModeLimit();
+        document.getElementById('annCount').textContent = len;
+        document.getElementById('annCount').style.color = len > max ? 'var(--red)' : '';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var c = document.getElementById('annContent');
+        if (c) {
+            c.addEventListener('input', updateAnnCount);
+            var radios = document.querySelectorAll('input[name="mode"]');
+            radios.forEach(function(r) { r.addEventListener('change', toggleFsSec); });
+        }
+        toggleFsSec();
+    });
     </script>
     <script>
     (function() {
@@ -491,12 +656,6 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
     </div>
     <?php endif; ?>
 </div>
-
-<form method="post" style="text-align:center;margin-top:12px;">
-    <input type="hidden" name="action" value="logout">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
-    <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--pencil);opacity:0.5;">退出登录</button>
-</form>
 
 <?php endif; ?>
 </div>
