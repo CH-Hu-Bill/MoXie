@@ -264,36 +264,83 @@ class RichTextEditorState extends State<RichTextEditor> {
                 ),
               ),
             ),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: widget.minHeight,
-              maxHeight: widget.minHeight * 2.5,
-            ),
-            child: QuillEditor.basic(
-              controller: _controller,
-              focusNode: _focusNode,
-              scrollController: _scrollController,
-              config: QuillEditorConfig(
-                embedBuilders: FlutterQuillEmbeds.editorBuilders(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                showCursor: true,
-                textSelectionThemeData: TextSelectionThemeData(
-                  cursorColor: AppColors.red,
-                  selectionColor: AppColors.postIt,
-                ),
-                customStyles: const DefaultStyles(
-                  placeHolder: DefaultTextBlockStyle(
-                    TextStyle(
-                      color: Color(0xFFBDBDBD),
-                      fontSize: 15,
+          // 固定视口高度 + 内部滚动：内容再多也不会把编辑器撑高（否则外层 SingleChildScrollView
+          // 无法滚动到编辑器下方的保存按钮），上下叠加渐隐蒙版提示可滚动、更美观。
+          SizedBox(
+            height: widget.minHeight,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Scrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: true,
+                    child: QuillEditor.basic(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      scrollController: _scrollController,
+                      config: QuillEditorConfig(
+                        embedBuilders: FlutterQuillEmbeds.editorBuilders(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        showCursor: true,
+                        textSelectionThemeData: TextSelectionThemeData(
+                          cursorColor: AppColors.red,
+                          selectionColor: AppColors.postIt,
+                        ),
+                        customStyles: const DefaultStyles(
+                          placeHolder: DefaultTextBlockStyle(
+                            TextStyle(
+                              color: Color(0xFFBDBDBD),
+                              fontSize: 15,
+                            ),
+                            HorizontalSpacing.zero,
+                            VerticalSpacing.zero,
+                            VerticalSpacing.zero,
+                            null,
+                          ),
+                        ),
+                      ),
                     ),
-                    HorizontalSpacing.zero,
-                    VerticalSpacing.zero,
-                    VerticalSpacing.zero,
-                    null,
                   ),
                 ),
-              ),
+                // 顶部渐隐蒙版
+                Positioned(
+                  top: 0, left: 0, right: 0,
+                  height: 14,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.white.withValues(alpha: 0.95),
+                            AppColors.white.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 底部渐隐蒙版
+                Positioned(
+                  bottom: 0, left: 0, right: 0,
+                  height: 14,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            AppColors.white.withValues(alpha: 0.95),
+                            AppColors.white.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

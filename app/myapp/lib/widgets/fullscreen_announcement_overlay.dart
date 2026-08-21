@@ -111,9 +111,13 @@ class _FullscreenAnnouncementOverlayState
   }
 
   Widget _buildCard(Announcement ann, Color color) {
+    // 超级霸屏大字展示：内容越长字号越小（自适应不溢出），并允许滚动兜底。
+    final len = ann.content.characters.length;
+    final base = len <= 24 ? 26.0 : (len <= 40 ? 22.0 : (len <= 60 ? 18.0 : 15.0));
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 32),
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+      constraints: const BoxConstraints(maxHeight: 520),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.only(
@@ -134,18 +138,22 @@ class _FullscreenAnnouncementOverlayState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            ann.content,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: AppTheme.fontHeading,
-              fontSize: 26,
-              height: 1.5,
-              fontWeight: FontWeight.w700,
-              color: color,
+          Flexible(
+            child: SingleChildScrollView(
+              child: Text(
+                ann.content,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: AppTheme.fontHeading,
+                  fontSize: base,
+                  height: 1.5,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
           Text(
             '点击任意处进入',
             style: TextStyle(
