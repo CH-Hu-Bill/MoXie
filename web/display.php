@@ -45,8 +45,9 @@ function displayBannerAnnouncement($classId) {
 }
 
 /**
- * 最近一次默写任务 + 其单词（不再执着于"今天"）。
- * 取 created_at 最新（未取消）的任务，展示该任务的单词（上限 20）。
+ * 最近一次未完成的默写任务 + 其单词。
+ * 规则：只显示 status=pending（未完成）的任务；取日期最晚的那天；
+ *      同一天有多个 pending 时，取最先创建（created_at 最早）的那个。
  * 返回结构：['task' => ['id','date','label','status','word_count'], 'items' => [{word,meaning,pos},...]]
  */
 function displayRecentTaskWords($classId) {
@@ -54,11 +55,17 @@ function displayRecentTaskWords($classId) {
         $tasks = Database::getTasks($classId);
         $best = null;
         foreach ($tasks as $t) {
-            if (($t['status'] ?? '') === 'cancelled') continue; // 跳过已取消任务
+            if (($t['status'] ?? '') !== 'pending') continue; // 只显示未完成的任务
             if ($best === null) { $best = $t; continue; }
-            $c = (string)($t['created_at'] ?? ($t['date'] ?? ''));
-            $bc = (string)($best['created_at'] ?? ($best['date'] ?? ''));
-            if (strcmp($c, $bc) > 0) $best = $t;
+            $d = (string)($t['date'] ?? '');
+            $bd = (string)($best['date'] ?? '');
+            if ($d > $bd) { $best = $t; continue; }            // 日期更晚优先
+            if ($d === $bd) {
+                // 同一天多个 pending → 取最先创建的
+                $c = (string)($t['created_at'] ?? '');
+                $bc = (string)($best['created_at'] ?? '');
+                if (strcmp($c, $bc) < 0) $best = $t;
+            }
         }
         if ($best === null) return ['task' => null, 'items' => []];
         $ids = $best['word_ids'] ?? [];

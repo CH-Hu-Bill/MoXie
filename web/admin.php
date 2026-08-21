@@ -151,51 +151,56 @@ if ($isAuthed) {
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'upload_apk') {
-        // 上传最新 APK：只保留最新一版（覆盖旧文件），并记录大小/时间到 app_versions.json
-        $ver = trim(reqPost('apk_version'));
-        $notes = trim(reqPost('apk_notes'));
+        // 上传最新 APK：版本号/更新日志自动从「最新发布版本」读取，无需重复填写。
+        // 只保留最新一版（覆盖旧文件），并记录大小/时间到 app_versions.json 的 apk 字段。
         if (!isset($_FILES['apk_file']) || !is_uploaded_file($_FILES['apk_file']['tmp_name'] ?? '')) {
             $msg = '请选择要上传的 APK 文件';
-        } elseif (!preg_match('/^\d+\.\d+(\.\d+)?$/', $ver)) {
-            $msg = '请填写对应的版本号（如 1.0.10）';
         } else {
             $tmp = $_FILES['apk_file']['tmp_name'];
             $err = (int)($_FILES['apk_file']['error'] ?? UPLOAD_ERR_OK);
             $size = (int)($_FILES['apk_file']['size'] ?? 0);
+            $ext = strtolower(pathinfo((string)($_FILES['apk_file']['name'] ?? ''), PATHINFO_EXTENSION));
             if ($err !== UPLOAD_ERR_OK) {
                 $msg = 'APK 上传失败（错误码 ' . $err . '）';
             } elseif ($size <= 0) {
                 $msg = 'APK 文件为空';
+            } elseif ($ext !== 'apk') {
+                $msg = '只允许上传 .apk 文件';
             } else {
-                // 扩展名校验：允许 .apk（防上传任意文件）
-                $ext = strtolower(pathinfo((string)($_FILES['apk_file']['name'] ?? ''), PATHINFO_EXTENSION));
-                if ($ext !== 'apk') {
-                    $msg = '只允许上传 .apk 文件';
+                $apkDir = __DIR__ . '/apk';
+                if (!is_dir($apkDir) && !mkdir($apkDir, 0775, true)) {
+                    $msg = '无法创建 apk 目录，请检查权限';
                 } else {
-                    $apkDir = __DIR__ . '/apk';
-                    if (!is_dir($apkDir) && !mkdir($apkDir, 0775, true)) {
-                        $msg = '无法创建 apk 目录，请检查权限';
+                    // 读取当前最新发布版本；未发布版本则提示先去「发布新版本」
+                    $verData = Database::read('app_versions.json');
+                    if (!is_array($verData)) $verData = ['latest' => '1.0', 'history' => []];
+                    $latestVer = (string)($verData['latest'] ?? '');
+                    if ($latestVer === '') {
+                        $msg = '请先在「发布新版本」中发布版本，再上传 APK（上传会自动关联该版本的更新日志）';
                     } else {
-                        // 移动到站点根目录 apk/，只保留最新一版（同名覆盖）
                         $dest = $apkDir . '/listenwrite-release.apk';
                         if (move_uploaded_file($tmp, $dest)) {
                             @chmod($dest, 0644);
                             $uploadedAt = date('Y-m-d H:i:s');
-                            $note = trim($notes) !== '' ? $notes : '';
-                            Database::update('app_versions.json', function($d) use ($ver, $note, $uploadedAt, $size) {
+                            // 自动关联最新发布版本的更新日志
+                            $latestNotes = '';
+                            foreach (($verData['history'] ?? []) as $v) {
+                                if (($v['version'] ?? '') === $latestVer) { $latestNotes = (string)($v['notes'] ?? ''); break; }
+                            }
+                            Database::update('app_versions.json', function($d) use ($latestVer, $latestNotes, $uploadedAt, $size) {
                                 if (!is_array($d)) $d = ['latest' => '1.0', 'history' => []];
-                                $d['latest'] = $ver;
+                                $d['latest'] = $latestVer;
                                 $d['apk'] = [
-                                    'version' => $ver,
+                                    'version' => $latestVer,
                                     'url' => 'apk/listenwrite-release.apk',
                                     'size' => $size,
                                     'size_human' => self_FormatBytes($size),
-                                    'notes' => $note,
+                                    'notes' => $latestNotes,
                                     'uploaded_at' => $uploadedAt,
                                 ];
                                 return $d;
                             });
-                            $msg = "APK 已上传：v{$ver}（" . self_FormatBytes($size) . "），仅保留最新一版";
+                            $msg = "APK 已上传：v{$latestVer}（" . self_FormatBytes($size) . "），已自动关联该版本更新日志";
                         } else {
                             $msg = 'APK 保存失败，请检查目录权限';
                         }
@@ -399,25 +404,20 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
             <?php if (!empty($apkInfo['notes'])): ?><br><span style="opacity:0.7;">更新说明：<?php echo htmlspecialchars((string)$apkInfo['notes']); ?></span><?php endif; ?>
         </div>
         <?php else: ?>
-        <div style="font-size:12px;color:var(--pencil);opacity:0.6;margin-bottom:8px;">尚未上传过安装包。上传后可生成「下载 APP」页面，用户可自行下载最新版。</div>
+        <div style="font-size:12px;color:var(--pencil);opacity:0.6;margin-bottom:8px;">尚未上传过安装包。上传后自动关联「最新发布版本」的版本号与更新日志，生成「下载 APP」页面。</div>
         <?php endif; ?>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="upload_apk">
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-                <div>
-                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">对应版本号 *</label>
-                    <input type="text" name="apk_version" class="input" placeholder="1.0.10" style="width:110px" required pattern="\d+\.\d+(\.\d+)?$" value="<?php echo htmlspecialchars((string)($apkInfo['version'] ?? '')); ?>">
-                </div>
-                <div>
-                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">APK 文件 *（.apk）</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <div style="flex:1;min-width:200px">
+                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">APK 文件 *（.apk，仅保留最新一版）</label>
                     <input type="file" name="apk_file" accept=".apk" required style="font-size:12px;">
                 </div>
-                <div style="flex:1;min-width:160px">
-                    <label style="font-size:12px;color:var(--pencil);display:block;margin-bottom:2px;font-family:var(--font-heading);">更新说明（可选）</label>
-                    <input type="text" name="apk_notes" class="input" placeholder="本次更新内容，展示在下载页" style="width:100%" maxlength="300">
-                </div>
-                <button type="submit" class="btn btn-primary" style="white-space:nowrap;">上传（覆盖旧版）</button>
+                <button type="submit" class="btn btn-primary" style="white-space:nowrap;">上传</button>
+            </div>
+            <div style="margin-top:6px;font-size:12px;color:var(--pencil);opacity:0.7;">
+                将自动关联「发布新版本」中的最新版本号（<?php echo htmlspecialchars((string)($versionData['latest'] ?? '未发布')); ?>）与其更新日志，无需重复填写。
             </div>
         </form>
     </div>
