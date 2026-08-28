@@ -54,29 +54,28 @@
 - 站点已配置：`open_basedir=/www/wwwroot/moxie.billspace.top/:/tmp/`、`display_errors=Off`、`memory_limit=256M`（在 `.user.ini`，**不要乱改**）。
 - 视频首帧缩略图：由 **CLI 计划任务**（每分钟）`cron_gallery_thumbs.php` 生成（FPM 禁用了 exec/proc_open，php-ffmpeg 只能在 CLI 跑）；接口 `video_thumb.php` 只读不生成。
 
-## 5. APK 构建（默认走小号）
+## 5. APK 构建（大号 CI → GitHub Release）
 
-1. 改 APP 代码后**必须 bump 版本**：`.github/workflows/build.yml` 的 `appVersion` + `app/myapp/pubspec.yaml` `version` + 根 `README.md` 第 5 行，三者一致。
-2. **源码更新仍推大号**（`push origin main`），但**出 APK 用小号**：
-   - 把小号仓库同步到最新 `app/myapp`（用 `git ls-files` 拷跟踪文件，保持 `app/myapp/` 目录结构 + `.github/workflows/build.yml`；**注意别把本地低配版 gradle.properties/settings.gradle.kts 带进去**，要用 git HEAD 的原始字节；`.gitattributes` 保证 LF）。
-   - 小号仓库已配好 secrets：`API_BASE_URL=http://moxie.billspace.top`、`KEYSTORE_BASE64`（= `D:\Downloads\moxie.jks` 的 base64）、`KEY_STORE_PASS`/`KEY_KEY_PASS`=`billhandsome`、`KEY_ALIAS`=`hu`。
-   - 触发 `workflow_dispatch` → 从新账户 Artifacts 下载 `listenwrite-release` APK。
-   - 下载后用 `D:\android-sdk\build-tools\36.0.0\apksigner.bat verify --print-certs` 核对签名（SHA-256 应为 `bfed770f39ab26791aa56f0bd386b5c144d85588e8731da7be91fcb88f8a3223`）。
-3. **大号 CI**：构建本身成功，但制品上传被 GitHub 免费配额拦截（每 6–12h 才重算一次，未恢复前上传必失败）；已清理制品到 ~105MB 并加 `retention-days:14`，配额恢复后大号也可用，但**当前一律用小号出包**。
-4. **发布**：拿到 APK 后，在 `admin.php`「发布 APP 版本」录入版本号/更新说明（写入服务器 `data/app_versions.json`），APP 端 `check_version` 才会弹更新。
+1. 改 APP 代码后**必须 bump 版本**：`.github/workflows/build.yml` 的 `appVersion` + `app/myapp/pubspec.yaml` `version` + `app/myapp/lib/config/api_config.example.dart` `appVersion` + 根 `README.md` 第 5 行，四处一致。
+2. **构建流程（2026-08-28 起）**：推送大号 `main`（改动 `app/myapp/**` 自动触发）或 `workflow_dispatch` → 构建后 APK **发布到 GitHub Release（tag `apk-latest`，覆盖式）**，从仓库 Releases 页下载。
+   - **不再用 Artifact**（免费 500MB 配额反复被 "storage quota has been hit" 拦截，删除旧制品也要 6-12h 重算）；**不再用小号**。
+   - Release 下载：`gh release download apk-latest --repo CH-Hu-Bill/MoXie`（gh 已登录大号）。
+3. 下载后核对签名：`apksigner verify --print-certs`（SHA-256 应为 `bfed770f39ab26791aa56f0bd386b5c144d85588e8731da7be91fcb88f8a3223`）。
+4. **发布**：上传 APK 到服务器 `apk/listenwrite-release.apk` + 在 `app_versions.json` 写版本记录（`Database::update`），APP 端 `check_version` 即弹更新。
+5. record 插件用 **^6.2.1**（5.x 的 record_linux 与新 platform interface 不兼容导致 CI 编译失败；v7 要求 AGP 9 勿升）。
 
 ## 6. 最近工作状态（截至 2026-08-28）
 
-- **main** = `origin/main`，线上 5 个改动文件 MD5 全 MATCH（gallery/main/history_book/admin/display）。
-- **2026-08-28 批次（5 bug 修复，纯 web 端，无 APK）**：
-  - 手写板触屏无效修复：Pointer Events 统一鼠标/触摸/笔 + `touch-action:none` + 弹窗锁 body 滚动 + 高分屏 dpr 渲染（触屏电脑根因：触摸手势被浏览器合成器接管滚动后面编辑器页）
-  - 上传卡死缓解（Windows 触屏文件选择对话框自身卡死，网页侧绕行）：gallery 上传区拖拽 + Ctrl+V 粘贴、history_book 编辑器拖拽插图、accept 改纯 MIME
-  - 图集数据事故确认：8/9 20:33~8/10 13:17 之间 1 号班 8/4~8/9 的 65 条图集（记录+文件）全部丢失，根因不可考（当晚有数据修复操作）；当前代码无批量删除路径（已复查）；65 条描述文字已导出到 `data/classes/6a7173c7e84ab/lost_gallery_20260809.md`；6 个孤儿文件已补回（1 号班 1 张 + 2 号班 5 张，描述标"（恢复）"）
-  - 灯箱视频加载进度百分比（低带宽体验）+ preload=auto
-  - web 端 emoji 全部换 SVG 线条图标（main.php 加 iconSvg() 助手，~30 处）
-- **下一批（已规划待开工）**：「全球发音」功能——班级内共享、每人每单词 1 条（重录覆盖）、全部非默写单词卡片入口（APP 录音长按/短按播放，web 只听）；后端 3 个 API + audio_guard（M4A 时长≤10s ≤2MB）；出 1.0.12 APK **走大号**。
-- **已推送大号**：main 与 origin/main 同步。
-- **已完成（2026-08-21 批次）**：display 只显示最近未完成任务、admin APK 上传简化（自动关联最新版本）、1.0.11 发布上架、README 全面更新。
+- **main** = `origin/main`；1.0.12 已构建发布（大号 Release `apk-latest`），线上 check_version/下载页验证通过。
+- **2026-08-28 批次 2（全球发音，1.0.12 已发布）**：
+  - 后端：`inc/audio_guard.php`（M4A magic + mvhd 时长≤10s≤2MB，自测 5/5）+ `pronunciation.php` 输出端点（Range+immutable，免鉴权靠 32hex 随机文件名）+ app_api 3 个 action（列表/上传限流 20 次/h/删除；每人每单词 1 条重录覆盖）
+  - 数据：`data/classes/{cid}/pronunciations.json` + `pronunciations/{wordId}/{32hex}.m4a`
+  - Web：words.php 卡片地球按钮 → 手绘风发音列表弹窗播放（只听不录）
+  - APP：record ^6.2.1 + path_provider + RECORD_AUDIO 权限 + GlobePronButton（长按录音松手上传/短按播放列表）；WordCard 加 classId/wordId（默写场景不传即隐藏）；有道标准发音保留（两个按钮并存）
+  - 顺手修：MarqueeText 冷字体设备滚动失效（300/800/1600ms 延迟重测）；display 词性改卡片顶部独立行（不再与单词同行挤爆）
+- **2026-08-28 批次 1（5 bug 修复）**：手写板 Pointer Events/touch-action/锁滚动/高分屏；上传拖拽+粘贴（绕 Windows 触屏文件对话框卡死）；图集 8/9 事故（丢 65 条，描述已导出 `data/classes/6a7173c7e84ab/lost_gallery_20260809.md`，补回 6 张孤儿图）；灯箱视频加载进度；web 端 emoji→SVG
+- **⚠️ 服务器运维铁律**：在服务器跑 PHP 脚本**必须 `runuser -u www --`**——用 root 跑写出的文件 root 所有，PHP-FPM（www 用户）读不了会直接挂页面（8/28 图集因此打不开一次）；文件所有权规范 = `www:www` + ACL `u:moxie-agent:rwx`
+- **待用户验证**：手写板触屏（重做/颜色框已加固但根因未定，画画是否正常/是否先撤销过/取色窗是否弹出待确认）
 
 ## 7. 本地校验命令
 
