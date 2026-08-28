@@ -160,7 +160,7 @@ require 'inc/header.php';
 
 <div class="content">
     <div class="card mb-4" id="uploadCard">
-        <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);">📷 上传图片 / 视频</h3>
+        <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> 上传图片 / 视频</h3>
         <div class="upload-form" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;">
             <div class="upload-preview-wrap" id="uploadPreviewWrap" style="display:none;width:100%;justify-content:center;margin-bottom:6px;">
                 <div style="position:relative;max-width:100%;overflow:hidden;">
@@ -172,8 +172,8 @@ require 'inc/header.php';
             </div>
             <div id="uploadHint" style="width:100%;text-align:center;font-size:13px;color:var(--red);min-height:18px;margin-bottom:4px;"></div>
             <label class="input upload-file-btn" for="galleryImage" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;min-width:220px;flex:1;">
-                <span id="uploadFileName">📎 选择图片或视频（JPG/PNG/WebP/GIF/MP4）</span>
-                <input type="file" id="galleryImage" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" style="display:none;" onchange="previewUpload()">
+                <span id="uploadFileName"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（JPG/PNG/WebP/GIF/MP4）</span>
+                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" style="display:none;" onchange="previewUpload()">
             </label>
             <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="flex:2;min-width:250px;">
             <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
@@ -182,22 +182,23 @@ require 'inc/header.php';
     </div>
 
     <div class="card mb-4" style="font-size:13px;color:#888;">
-💡 公开 API：<code class="tag">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，每次随机返回一张图集图片；可在<a href="settings.php?id=<?php echo htmlspecialchars($classId); ?>" style="color:var(--blue);">设置页</a>为本班启用 API 密钥保护，启用后调用需加 <code class="tag">&amp;apikey=你的密钥</code>
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg> 公开 API：<code class="tag">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，每次随机返回一张图集图片；可在<a href="settings.php?id=<?php echo htmlspecialchars($classId); ?>" style="color:var(--blue);">设置页</a>为本班启用 API 密钥保护，启用后调用需加 <code class="tag">&amp;apikey=你的密钥</code>
     </div>
 
     <div class="gallery-grid" id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;"></div>
-    <div class="empty-state" id="emptyState" style="display:none"><p>还没有图片，上传第一张吧 📷</p></div>
+    <div class="empty-state" id="emptyState" style="display:none"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-8px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><p>还没有图片，上传第一张吧</p></div>
 </div>
 
 <!-- Lightbox：左侧媒体 + 右侧描述整列。display 由 .lightbox/.lightbox.active 控制（勿内联 display:flex，否则常显关不掉）；固定定位/背景/层级必须内联补齐 -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
-    <button class="btn" onclick="closeLightbox()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;">✕</button>
-    <div id="lbMedia" onclick="event.stopPropagation()" style="flex:1 1 58%;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;">
+    <button class="btn" onclick="closeLightbox()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <div id="lbMedia" onclick="event.stopPropagation()" style="flex:1 1 58%;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;position:relative;">
         <img id="lbImg" src="" alt="" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);object-fit:contain;">
-        <video id="lbVideo" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline></video>
+        <video id="lbVideo" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);background:#000;" controls playsinline preload="auto"></video>
+        <div id="lbLoadTip" style="display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 16px;background:rgba(0,0,0,.65);color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:999px;font-size:13px;pointer-events:none;white-space:nowrap;">正在加载…</div>
     </div>
     <div id="lbDesc" onclick="event.stopPropagation()" style="flex:0 0 34%;max-width:34%;align-self:stretch;box-sizing:border-box;display:flex;flex-direction:column;min-width:0;padding:14px 18px;background:rgba(0,0,0,0.5);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);color:var(--white);font-size:15px;text-align:center;line-height:1.7;">
-        <div style="font-size:12px;opacity:.65;padding-bottom:10px;">📝 描述</div>
+        <div style="font-size:12px;opacity:.65;padding-bottom:10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 描述</div>
         <div id="lbDescScroll" style="flex:1;min-height:0;overflow:hidden;"><span id="lbDescText"></span></div>
     </div>
 </div>
@@ -222,7 +223,7 @@ function renderGallery() {
         var isMp4 = /\.mp4$/i.test(item.image);
         var media;
         // 占位层 z-index:2 位于媒体之上；媒体加载完成后由 hideGalleryPlaceholder 隐藏
-        var placeholder = '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;pointer-events:none;">📷<span style="font-size:11px;color:#bbb;margin-top:4px;">加载中…</span></div>';
+        var placeholder = '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;pointer-events:none;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:11px;color:#bbb;margin-top:4px;">加载中…</span></div>';
         if (isMp4) {
             // 视频卡片：首帧缩略图（ffmpeg）+ 原生 poster 双保险。
             // - 首帧图先加载并显示（onload 隐藏占位）——先加载首帧，用户立刻看到预览；
@@ -245,8 +246,8 @@ function renderGallery() {
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'
-            + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date">📅 ' + dateText + '</span>'
-            + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\')" style="padding:2px 10px;">✏️</button>'
+            + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ' + dateText + '</span>'
+            + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\')" style="padding:2px 10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
             + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button></span>'
             + '</div></div></div>';
     }).join('');
@@ -266,7 +267,7 @@ function markGalleryError(el) {
     if (!p) return;
     var ph = p.querySelector('.gallery-placeholder');
     if (ph) {
-        ph.innerHTML = '⚠️<span style="font-size:11px;color:#bbb;margin-top:4px;">媒体已失效</span>';
+        ph.innerHTML = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg><span style="font-size:11px;color:#bbb;margin-top:4px;">媒体已失效</span>';
         ph.style.display = 'flex';
     }
 }
@@ -312,6 +313,8 @@ function openLightbox(url, id, isMp4, thumbUrl) {
     // 描述过长：右列内来回自动滚动；用户鼠标悬停/触摸可暂停，离开 2 秒后恢复
     setTimeout(function() { lbDescScroll(); }, 0);
     // 描述框宽度按媒体宽高比自适应：竖图给描述更宽、横图更窄
+    var lbLoadTip = document.getElementById('lbLoadTip');
+    var lbHideLoad = function() { if (lbLoadTip) lbLoadTip.style.display = 'none'; };
     var sizeDescForMedia = function(w, h) {
         var d = document.getElementById('lbDesc');
         if (!d || !w || !h) return;
@@ -326,18 +329,32 @@ function openLightbox(url, id, isMp4, thumbUrl) {
     if (isMp4) {
         img.style.display = 'none';
         video.style.display = '';
+        // 视频加载进度：服务器带宽小时正片下载慢，显示缓冲百分比避免"点开没反应"的错觉
+        if (lbLoadTip) { lbLoadTip.style.display = 'flex'; lbLoadTip.textContent = '正在加载…'; }
+        video.onprogress = function() {
+            if (myToken !== lbToken) return;
+            try {
+                if (video.duration && video.buffered.length) {
+                    var pct = Math.min(99, Math.round(video.buffered.end(video.buffered.length - 1) / video.duration * 100));
+                    if (lbLoadTip) lbLoadTip.textContent = '正在加载 ' + pct + '%';
+                }
+            } catch (e) {}
+        };
+        video.oncanplay = lbHideLoad;
+        video.onplaying = lbHideLoad;
         video.onloadedmetadata = function() {
             if (myToken !== lbToken) return; // 已切到其他项，忽略过期回调
             sizeDescForMedia(video.videoWidth, video.videoHeight);
             setTimeout(lbDescScroll, 0); // 布局变化后重测溢出
         };
-        video.onerror = function() { if (myToken === lbToken) showToast('媒体已失效', 'error'); };
+        video.onerror = function() { if (myToken === lbToken) { lbHideLoad(); showToast('媒体已失效', 'error'); } };
         // 首帧图作 poster：缓冲/加载时显示预览，不黑屏
         video.poster = thumbUrl || '';
         video.src = url;
         video.muted = true;
         try { var pv = video.play(); if (pv && pv.catch) pv.catch(function() {}); } catch (e) {}
     } else {
+        lbHideLoad();
         video.pause(); video.src = '';
         video.onerror = null; // 图片项不保留视频的 error 回调
         video.style.display = 'none';
@@ -365,6 +382,8 @@ function closeLightbox() {
     video.pause();
     video.removeAttribute('src');
     video.load();
+    var tip = document.getElementById('lbLoadTip');
+    if (tip) tip.style.display = 'none';
 }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 
@@ -444,7 +463,7 @@ function previewUpload() {
     // 格式预校验
     var imgExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
     if (!imgExts.includes(ext) && !isMp4) {
-        if (hint) hint.textContent = '⚠️ 不支持的文件格式：' + file.name + '（仅支持 JPG/PNG/WebP/GIF/MP4）';
+        if (hint) hint.textContent = '不支持的文件格式：' + file.name + '（仅支持 JPG/PNG/WebP/GIF/MP4）';
         btn.disabled = true;
         btn.textContent = '无法上传';
         wrap.style.display = 'flex';
@@ -456,7 +475,7 @@ function previewUpload() {
     var maxBytes = isMp4 ? 15728640 : (isGif ? 16777216 : 12582912);
     var maxLabel = isMp4 ? '15MB' : (isGif ? '16MB' : '12MB');
     if (file.size > maxBytes) {
-        if (hint) hint.textContent = '⚠️ 文件过大：' + (file.size / 1024 / 1024).toFixed(1) + 'MB（' + maxLabel + ' 以内）';
+        if (hint) hint.textContent = '文件过大：' + (file.size / 1024 / 1024).toFixed(1) + 'MB（' + maxLabel + ' 以内）';
         btn.disabled = true;
         btn.textContent = '无法上传';
         wrap.style.display = 'flex';
@@ -472,7 +491,7 @@ function previewUpload() {
         // 视频时长预校验（≤30s）
         video.onloadedmetadata = function() {
             if (video.duration && video.duration > 30.5) {
-                if (hint) hint.textContent = '⚠️ 视频时长 ' + Math.round(video.duration) + ' 秒，不能超过 30 秒';
+                if (hint) hint.textContent = '视频时长 ' + Math.round(video.duration) + ' 秒，不能超过 30 秒';
                 btn.disabled = true;
                 btn.textContent = '无法上传';
             }
@@ -501,7 +520,7 @@ function clearUpload() {
     img.style.display = 'none'; img.src = '';
     if (video.src) URL.revokeObjectURL(video.src);
     video.removeAttribute('src'); video.style.display = 'none';
-    document.getElementById('uploadFileName').textContent = '📎 选择图片或视频（JPG/PNG/WebP/GIF/MP4）';
+    document.getElementById('uploadFileName').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（JPG/PNG/WebP/GIF/MP4）';
     document.getElementById('clearBtn').style.display = 'none';
     document.getElementById('uploadBtn').disabled = false;
     document.getElementById('uploadBtn').textContent = '上传';
@@ -587,7 +606,59 @@ function editGallery(id) {
                 galleryData = galleryData.map(function(item) {
                     return item.id === id ? Object.assign({}, item, { description: newDesc }) : item;
                 });
-                renderGallery();
+// 上传区拖拽 / Ctrl+V 粘贴（绕开 Windows 触屏设备文件选择对话框卡死问题）
+function setupUploadHelpers() {
+    var input = document.getElementById('galleryImage');
+    var dropZone = input.closest('.upload-file-btn');
+    var setFile = function(f) {
+        if (!f) return;
+        try {
+            var dt = new DataTransfer();
+            dt.items.add(f);
+            input.files = dt.files;
+        } catch (err) {}
+        previewUpload();
+    };
+    if (dropZone) {
+        ['dragenter', 'dragover'].forEach(function(ev) {
+            dropZone.addEventListener(ev, function(e) {
+                e.preventDefault(); e.stopPropagation();
+                dropZone.style.borderColor = 'var(--blue)';
+                dropZone.style.background = 'rgba(45,93,161,.06)';
+                dropZone.style.color = 'var(--blue)';
+            });
+        });
+        ['dragleave', 'drop'].forEach(function(ev) {
+            dropZone.addEventListener(ev, function(e) {
+                e.preventDefault(); e.stopPropagation();
+                dropZone.style.borderColor = '';
+                dropZone.style.background = '';
+                dropZone.style.color = '';
+            });
+        });
+        dropZone.addEventListener('drop', function(e) {
+            var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            setFile(f);
+        });
+    }
+    document.addEventListener('paste', function(e) {
+        var cd = e.clipboardData;
+        if (!cd || !cd.items) return;
+        for (var i = 0; i < cd.items.length; i++) {
+            var it = cd.items[i];
+            if (it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+                var f = it.getAsFile();
+                if (!f) return;
+                e.preventDefault();
+                setFile(f);
+                return;
+            }
+        }
+    });
+}
+setupUploadHelpers();
+
+renderGallery();
                 showToast('描述已更新');
             } else {
                 showToast(r.error || '更新失败');

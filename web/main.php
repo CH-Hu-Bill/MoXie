@@ -329,6 +329,19 @@ require 'inc/header.php';
 
     <script src="common.js?v=9"></script>
     <script>
+        // SVG 线条图标助手（代替 emoji，统一手绘线条风）
+        function iconSvg(name, size) {
+            var paths = {
+                book: '<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>',
+                edit: '<path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+                clipboard: '<path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
+                search: '<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>',
+                star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+                note: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>'
+            };
+            var s = size || 16;
+            return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:' + Math.round(-s / 4) + 'px">' + (paths[name] || '') + '</svg>';
+        }
         const weekendClickable = <?php echo $weekendClickable ? 'true' : 'false'; ?>;
         const weekendCompleted = <?php echo $weekendCompleted ? 'true' : 'false'; ?>;
         const weekendTaskId = <?php echo $weekendTaskId ? json_encode($weekendTaskId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : 'null'; ?>;
@@ -451,7 +464,7 @@ require 'inc/header.php';
                 const data = d.data;
                 srQuery = q; srWordsOffset = data.words.items.length; srWordsTotal = data.words.total;
                 let html = '';
-                html += '<div class="sr-group"><div class="sr-group-title">📖 单词库 (' + data.words.total + '条)</div>';
+                html += '<div class="sr-group"><div class="sr-group-title">' + iconSvg('book') + ' 单词库 (' + data.words.total + '条)</div>';
                 if (data.words.total === 0) html += '<div class="sr-empty" style="padding:8px;">无匹配结果</div>';
                 else {
                     html += '<div id="srWordsList">' + data.words.items.map(srWordItemHtml).join('') + '</div>';
@@ -459,7 +472,7 @@ require 'inc/header.php';
                     if (wRemaining > 0) html += '<div class="sr-more" id="srWordsMore" onclick="loadMoreWords()">查看更多单词（还有 ' + wRemaining + ' 条）→</div>';
                 }
                 html += '</div>';
-                html += '<div class="sr-group"><div class="sr-group-title">📝 进行中任务 (' + data.pending_tasks.total + '条)</div>';
+                html += '<div class="sr-group"><div class="sr-group-title">' + iconSvg('note') + ' 进行中任务 (' + data.pending_tasks.total + '条)</div>';
                 if (data.pending_tasks.total === 0) html += '<div class="sr-empty" style="padding:8px;">无匹配结果</div>';
                 else {
                     data.pending_tasks.items.forEach(t => {
@@ -468,7 +481,7 @@ require 'inc/header.php';
                     if (data.pending_tasks.has_more) html += '<div class="sr-more" onclick="showOkOverlayThen(\'task.php?id='+classId+'&search='+encodeURIComponent(q)+'\')">查看更多任务 →</div>';
                 }
                 html += '</div>';
-                html += '<div class="sr-group"><div class="sr-group-title">📋 默写历史 (' + data.history_tasks.total + '条)</div>';
+                html += '<div class="sr-group"><div class="sr-group-title">' + iconSvg('clipboard') + ' 默写历史 (' + data.history_tasks.total + '条)</div>';
                 if (data.history_tasks.total === 0) html += '<div class="sr-empty" style="padding:8px;">无匹配结果</div>';
                 else {
                     data.history_tasks.items.forEach(t => {
@@ -514,11 +527,11 @@ require 'inc/header.php';
             if (localStorage.getItem('guide_done')) return;
             const steps = [
                 { title: '欢迎使用 ListenWrite', desc: '这是一个班级单词学习工具，帮助您高效管理单词、进行默写练习。' },
-                { title: '📖 单词库', desc: '管理班级所有单词。可以添加、编辑、批量导入单词，AI 智能补全释义。' },
-                { title: '✏️ 默写任务', desc: '选择单词创建默写任务，支持听写模式。完成任务后可在历史记录中查看。' },
-                { title: '📋 默写记录', desc: '查看所有已完成和已取消的任务。可以重新创建任务或查看单词详情。' },
-                { title: '🔍 搜索功能', desc: '在上方搜索框输入单词或释义，可以快速查找词库、任务和历史中的内容。' },
-                { title: '开始学习吧！', desc: '点击任意功能卡片即可开始。随时可在设置页面重新查看本说明。' }
+                { title: '单词库', desc: '管理班级所有单词。可以添加、编辑、批量导入单词，AI 智能补全释义。', icon: 'book' },
+                { title: '默写任务', desc: '选择单词创建默写任务，支持听写模式。完成任务后可在历史记录中查看。', icon: 'edit' },
+                { title: '默写记录', desc: '查看所有已完成和已取消的任务。可以重新创建任务或查看单词详情。', icon: 'clipboard' },
+                { title: '搜索功能', desc: '在上方搜索框输入单词或释义，可以快速查找词库、任务和历史中的内容。', icon: 'search' },
+                { title: '开始学习吧！', desc: '点击任意功能卡片即可开始。随时可在设置页面重新查看本说明。', icon: 'star' }
             ];
             let stepIdx = 0;
             const overlay = document.createElement('div');
@@ -537,7 +550,7 @@ require 'inc/header.php';
                 const s = steps[stepIdx];
                 box.innerHTML = '';
                 box.appendChild(skip);
-                box.insertAdjacentHTML('beforeend', '<div style="font-size:40px;margin-bottom:14px">' + (stepIdx===0?'📚':stepIdx===1?'📖':stepIdx===2?'✏️':stepIdx===3?'📋':stepIdx===4?'🔍':'🎉') + '</div>');
+                box.insertAdjacentHTML('beforeend', '<div style="margin-bottom:14px;color:var(--blue)">' + iconSvg(s.icon || 'star', 44) + '</div>');
                 box.insertAdjacentHTML('beforeend', '<h2 style="font-size:22px;color:#333;margin-bottom:10px">' + s.title + '</h2>');
                 box.insertAdjacentHTML('beforeend', '<p style="color:#666;font-size:14px;line-height:1.7;margin-bottom:24px">' + s.desc + '</p>');
                 box.insertAdjacentHTML('beforeend', '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">' + steps.map(function(_,i){return '<span style="width:8px;height:8px;border-radius:50%;background:'+(i===stepIdx?'var(--blue)':'#ddd')+'"></span>';}).join('') + '</div>');

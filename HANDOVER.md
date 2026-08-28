@@ -33,8 +33,8 @@
 
 | 账户 | 用途 | 仓库 |
 |------|------|------|
-| **大号 `CH-Hu-Bill`** | **源码更新一律推这里** | `CH-Hu-Bill/MoXie`（remote `origin`） |
-| **小号 `HUBILLHANDSOME`** | **APK 构建默认走这里**（大号制品配额暂未恢复，出包都用小号） | `HUBILLHANDSOME/Moie-APK-2`（只含 `app/myapp/**` + workflow，已配 secrets） |
+| **大号 `CH-Hu-Bill`** | **源码更新一律推这里；APK 构建也走这里**（2026-08-28 起配额已恢复，改 `app/myapp/**` 推送即自动触发 CI，或手动 `workflow_dispatch`） | `CH-Hu-Bill/MoXie`（remote `origin`） |
+| **小号 `HUBILLHANDSOME`** | 备用（大号配额再次受限时才用） | `HUBILLHANDSOME/Moie-APK-2`（只含 `app/myapp/**` + workflow，已配 secrets） |
 
 **推送/构建规范（每次执行前）：**
 1. **先告诉用户「用哪个账户做推送/触发 CI 构建」，用户确认后再执行**。
@@ -65,23 +65,18 @@
 3. **大号 CI**：构建本身成功，但制品上传被 GitHub 免费配额拦截（每 6–12h 才重算一次，未恢复前上传必失败）；已清理制品到 ~105MB 并加 `retention-days:14`，配额恢复后大号也可用，但**当前一律用小号出包**。
 4. **发布**：拿到 APK 后，在 `admin.php`「发布 APP 版本」录入版本号/更新说明（写入服务器 `data/app_versions.json`），APP 端 `check_version` 才会弹更新。
 
-## 6. 最近工作状态（截至 2026-08-13）
+## 6. 最近工作状态（截至 2026-08-28）
 
-- **已推送大号**：`main` = `5220f20`（跟读重构），与 `origin/main` 同步（本轮审计修复待推）。
-- **已部署线上**：本轮**安全审计修复 10 文件**（README.md / app_api.php / cron_gallery_thumbs.php / display.js / display.php / gallery.php / inc/db.php / inc/gif_guard.php / inc/mp4_guard.php / upload.php）**MD5 全 MATCH**；线上冒烟：cron 404 守卫生效、display/index/gallery 正常。
-- **已完成**：
-  - 图集描述溢出处理（APP/大屏/web 三端）、display 轮播 15s+读完才切、灯箱暂停网格视频、APP 视频贴纸（1.0.10 已发布）。
-  - **跟读逻辑重构**：停顿 = 音频实际时长 + 缓冲（缓冲 -0.5~5 秒，负数让停顿比音频短、节奏更紧凑，实际停顿钳到 ≥0）；修 9 处 bug；弹窗乱序；参数按班级存储。
-  - **安全审计与修复（A+C+D 批）**：
-    - GIF 炸弹防护重做（逐帧累加预算 + 单帧 ≤2500 万 + GCE 按规范解析 + 截断文件拒绝）
-    - MP4 分辨率 ≤4096×4096 + 只认首个 mvhd（防双 mvhd 伪造时长）+ tkhd 版本严格
-    - cron_gallery_thumbs.php：仅 CLI 可运行（Web 404）+ 失败写 .failed 标记 1h 退避 + 内层 50s 预算
-    - display.js：单图集不再 15s 无限重渲染；视频复用占位不再累积；预加载防重复下载（在途标记 + 主播放器尺寸直取）；视频/图片 error 兜底（「不可用」占位 + 推进轮播）；后台 visibilitychange 暂停/恢复；openSelect 清描述滚动 + pause 视频
-    - gallery.php：网格视频改 preload=metadata + IntersectionObserver 进视口才播放（不再首屏全量并发下载）；删除 pointer-events:none 下永不触发的 hover 声音死代码；网格媒体 onerror「媒体已失效」占位；灯箱只恢复之前正在播放的网格视频 + 关闭释放 src/解码器 + 世代 token 防快速切图竞态 + onerror toast；save_gallery 写库失败回滚孤儿文件；description 消毒；自愈清理改锁内 updateClassData
-    - upload.php/app_api.php：上传限值按类型统一（GIF 16MB/MP4 15MB/图片 12MB）；upload_image 补字节上限
-    - README 修正：video_thumb.php 真实行为（只读+404、CLI 预生成）
-  - **未做（B 批，按用户选择暂缓）**：gallery_api 默认拒绝无 key、班级 id 隐藏、上传限流/配额、HTTPS 部署（站点当前仅 HTTP 80）。
-- **APK**：1.0.10 已发布（`data/app_versions.json`）；签名与 moxie.jks 一致。
+- **main** = `origin/main`，线上 5 个改动文件 MD5 全 MATCH（gallery/main/history_book/admin/display）。
+- **2026-08-28 批次（5 bug 修复，纯 web 端，无 APK）**：
+  - 手写板触屏无效修复：Pointer Events 统一鼠标/触摸/笔 + `touch-action:none` + 弹窗锁 body 滚动 + 高分屏 dpr 渲染（触屏电脑根因：触摸手势被浏览器合成器接管滚动后面编辑器页）
+  - 上传卡死缓解（Windows 触屏文件选择对话框自身卡死，网页侧绕行）：gallery 上传区拖拽 + Ctrl+V 粘贴、history_book 编辑器拖拽插图、accept 改纯 MIME
+  - 图集数据事故确认：8/9 20:33~8/10 13:17 之间 1 号班 8/4~8/9 的 65 条图集（记录+文件）全部丢失，根因不可考（当晚有数据修复操作）；当前代码无批量删除路径（已复查）；65 条描述文字已导出到 `data/classes/6a7173c7e84ab/lost_gallery_20260809.md`；6 个孤儿文件已补回（1 号班 1 张 + 2 号班 5 张，描述标"（恢复）"）
+  - 灯箱视频加载进度百分比（低带宽体验）+ preload=auto
+  - web 端 emoji 全部换 SVG 线条图标（main.php 加 iconSvg() 助手，~30 处）
+- **下一批（已规划待开工）**：「全球发音」功能——班级内共享、每人每单词 1 条（重录覆盖）、全部非默写单词卡片入口（APP 录音长按/短按播放，web 只听）；后端 3 个 API + audio_guard（M4A 时长≤10s ≤2MB）；出 1.0.12 APK **走大号**。
+- **已推送大号**：main 与 origin/main 同步。
+- **已完成（2026-08-21 批次）**：display 只显示最近未完成任务、admin APK 上传简化（自动关联最新版本）、1.0.11 发布上架、README 全面更新。
 
 ## 7. 本地校验命令
 

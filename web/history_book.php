@@ -144,6 +144,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
 .hw-tools input[type=color]{width:32px;height:32px;border:1.5px solid var(--pencil);cursor:pointer;border-radius:var(--wobbly-sm)}
 .hw-tools input[type=range]{width:80px}
 .hw-canvas-wrap{border:2px solid var(--pencil);border-radius:var(--wobbly);overflow:hidden;background:var(--white)}
+.hw-canvas-wrap canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
 .hw-canvas-wrap canvas{display:block;width:100%;cursor:crosshair}
 .hw-btns{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
 .hw-btns button{padding:8px 20px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:14px;cursor:pointer;font-weight:600;font-family:var(--font-heading);box-shadow:var(--shadow-sm)}
@@ -188,7 +189,7 @@ require 'inc/header.php';
     <div class="card editor-panel">
         <div class="meta-bar" id="metaBar">
             <div class="meta-item">
-                <span class="icon">📅</span>
+                <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
                 <span id="selectedDateLabel" style="font-weight:700;color:var(--pencil);">请选择日期</span>
             </div>
             <div class="meta-item" id="moodItem" style="display:none">
@@ -222,7 +223,7 @@ require 'inc/header.php';
             <span class="badge badge-readonly" id="readonlyBadge" style="display:none">只读</span>
             <span class="badge badge-class" id="badgeClass" style="display:none">班级史记</span>
             <span class="spacer"></span>
-            <button type="button" class="btn btn-secondary btn-sm" id="handwriteBtn" onclick="openHandwrite()" style="display:none">✏️ 手写板</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="handwriteBtn" onclick="openHandwrite()" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 手写板</button>
         </div>
 
         <input type="text" class="title-input" id="entryTitle" placeholder="今天发生了什么有趣的事？" maxlength="80" style="display:none" disabled>
@@ -249,7 +250,7 @@ require 'inc/header.php';
 
 <div class="hw-modal" id="hwModal">
 <div class="hw-box">
-<h4>✏️ 手写板</h4>
+<h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 手写板</h4>
 <div class="hw-tools">
 <button type="button" onclick="setPenColor('#000000')" id="clrBlack" class="active">黑</button>
 <button type="button" onclick="setPenColor('#e53935')" id="clrRed">红</button>
@@ -474,7 +475,7 @@ function renderTags() {
         if (editable) {
             var btn = document.createElement('button');
             btn.type = 'button';
-            btn.textContent = '✕';
+            btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
             btn.onclick = function() { removeTag(t); };
             span.appendChild(document.createTextNode(' '));
             span.appendChild(btn);
@@ -534,7 +535,7 @@ function selectDate(dateStr) {
             pes.forEach(function(pe) {
                 if (!uidMap[pe.author_uid]) { uidMap[pe.author_uid] = true; unique.push(pe); }
             });
-            listEl.innerHTML = '<div class="user-list-title">📋 ' + dateStr + ' 的授权用户</div>'
+            listEl.innerHTML = '<div class="user-list-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> ' + dateStr + ' 的授权用户</div>'
                 + unique.map(function(pe) {
                     var sub = (pe.title || '无标题');
                     return '<div class="user-card' + (selectedPersonalAuthor === pe.author_uid ? ' active' : '') + '" onclick="showPersonalEntry(\'' + pe.author_uid + '\')">'
@@ -622,7 +623,7 @@ function showPersonalEntry(authorUid) {
     var pes = personalData[selectedDate] || [];
     var uidMap = {}, unique = [];
     pes.forEach(function(p) { if (!uidMap[p.author_uid]) { uidMap[p.author_uid] = true; unique.push(p); } });
-    listEl.innerHTML = '<div class="user-list-title">📋 ' + selectedDate + ' 的授权用户</div>'
+    listEl.innerHTML = '<div class="user-list-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> ' + selectedDate + ' 的授权用户</div>'
         + unique.map(function(p) {
             var sub = (p.title || '无标题');
             return '<div class="user-card' + (p.author_uid === authorUid ? ' active' : '') + '" onclick="showPersonalEntry(\'' + p.author_uid + '\')">'
@@ -728,7 +729,7 @@ async function saveEntry() {
             hasUnsavedChanges = false;
             updateUnsavedDot();
             renderCalendar();
-            showToast('✅ 已保存', 'success');
+            showToast('已保存', 'success');
             return true;
         }
         showToast(r.error || '保存失败');
@@ -748,6 +749,36 @@ function initEditor() {
         var el = document.getElementById(id);
         el.addEventListener('change', markDirty);
         el.addEventListener('input', markDirty);
+    });
+    setupEditorDrop();
+}
+
+// 编辑器拖拽图片直接上传插入（绕开 Windows 触屏设备文件选择对话框卡死问题）
+function setupEditorDrop() {
+    var editorEl = document.getElementById('quillEditor');
+    if (!editorEl) return;
+    // 阻止浏览器默认打开拖入的文件
+    ['dragover', 'drop'].forEach(function(ev) {
+        document.addEventListener(ev, function(e) { e.preventDefault(); });
+    });
+    editorEl.addEventListener('dragover', function(e) { e.preventDefault(); });
+    editorEl.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        if (!canEditClass()) { showToast('只能编辑今天的记录'); return; }
+        var dt = e.dataTransfer;
+        if (!dt || !dt.files || !dt.files[0]) return;
+        var f = dt.files[0];
+        if (f.type && f.type.indexOf('image/') !== 0) { showToast('仅支持拖入图片'); return; }
+        try {
+            var url = await uploadHistoryImage(f);
+            var range = quill.getSelection(true);
+            quill.insertEmbed(range.index, 'image', url);
+            quill.setSelection(range.index + 1);
+            hasUnsavedChanges = true;
+            updateUnsavedDot();
+        } catch (err) {
+            showToast(err.message || '图片上传失败');
+        }
     });
 }
 
@@ -819,60 +850,57 @@ function openHandwrite() {
     document.getElementById('hwModal').classList.add('active');
     hwCanvas = document.getElementById('hwCanvas');
     hwCtx = hwCanvas.getContext('2d');
+    // 高分屏：物理分辨率 = CSS 尺寸 × devicePixelRatio，绘制坐标系用 CSS 像素（setTransform）
+    var dpr = window.devicePixelRatio || 1;
+    var cssW = hwCanvas.parentElement.clientWidth - 0 || 560;
+    cssW = Math.min(cssW, 560);
+    var cssH = Math.round(cssW * 360 / 560);
+    hwCanvas.style.width = cssW + 'px';
+    hwCanvas.style.height = cssH + 'px';
+    hwCanvas.width = Math.round(cssW * dpr);
+    hwCanvas.height = Math.round(cssH * dpr);
+    hwCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     hwCtx.lineWidth = parseInt(document.getElementById('penWidth').value, 10) || 3;
     hwCtx.lineCap = 'round';
     hwCtx.strokeStyle = '#000000';
-    hwCtx.clearRect(0, 0, hwCanvas.width, hwCanvas.height);
+    hwCtx.clearRect(0, 0, cssW, cssH);
     hwStrokes = [];
     hwRedoStrokes = [];
-    hwCanvas.onmousedown = function(e) {
+    // Pointer Events 统一鼠标/触摸/触控笔；touch-action:none(CSS) 阻止浏览器接管手势滚动页面
+    hwCanvas.onpointerdown = function(e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        try { hwCanvas.setPointerCapture(e.pointerId); } catch (err) {}
         hwDrawing = true;
-        var p = getHwPos(e);
+        var p = getHwPoint(e);
         hwCurrentStroke = [{ x: p.x, y: p.y }];
         hwCtx.beginPath();
         hwCtx.moveTo(p.x, p.y);
     };
-    hwCanvas.onmousemove = function(e) {
+    hwCanvas.onpointermove = function(e) {
         if (!hwDrawing) return;
-        var p = getHwPos(e);
+        e.preventDefault();
+        var p = getHwPoint(e);
         hwCurrentStroke.push({ x: p.x, y: p.y });
         hwCtx.lineTo(p.x, p.y);
         hwCtx.stroke();
     };
-    hwCanvas.onmouseup = hwEndStroke;
-    hwCanvas.onmouseleave = hwEndStroke;
-    hwCanvas.ontouchstart = function(e) {
-        e.preventDefault();
-        hwDrawing = true;
-        var p = getHwTouch(e);
-        hwCurrentStroke = [{ x: p.x, y: p.y }];
-        hwCtx.beginPath();
-        hwCtx.moveTo(p.x, p.y);
-    };
-    hwCanvas.ontouchmove = function(e) {
-        e.preventDefault();
-        if (!hwDrawing) return;
-        var p = getHwTouch(e);
-        hwCurrentStroke.push({ x: p.x, y: p.y });
-        hwCtx.lineTo(p.x, p.y);
-        hwCtx.stroke();
-    };
-    hwCanvas.ontouchend = hwEndStroke;
+    hwCanvas.onpointerup = hwEndStroke;
+    hwCanvas.onpointercancel = hwEndStroke;
+    // 弹窗期间锁住 body 滚动（防止弹窗后面的编辑器页面跟着滚）
+    document.body.style.overflow = 'hidden';
 }
-function hwEndStroke() {
+function hwEndStroke(e) {
+    if (e && e.pointerId !== undefined) { try { hwCanvas.releasePointerCapture(e.pointerId); } catch (err) {} }
     if (hwDrawing) {
         hwStrokes.push({ color: hwCtx.strokeStyle, width: hwCtx.lineWidth, points: hwCurrentStroke });
         hwRedoStrokes = [];
         hwDrawing = false;
     }
 }
-function getHwPos(e) {
+function getHwPoint(e) {
     var r = hwCanvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (hwCanvas.width / r.width), y: (e.clientY - r.top) * (hwCanvas.height / r.height) };
-}
-function getHwTouch(e) {
-    var t = e.touches[0], r = hwCanvas.getBoundingClientRect();
-    return { x: (t.clientX - r.left) * (hwCanvas.width / r.width), y: (t.clientY - r.top) * (hwCanvas.height / r.height) };
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 function setPenColor(c) {
     hwCtx.strokeStyle = c;
@@ -900,7 +928,7 @@ function redrawHw() {
         }
     });
 }
-function closeHandwrite() { document.getElementById('hwModal').classList.remove('active'); }
+function closeHandwrite() { document.getElementById('hwModal').classList.remove('active'); document.body.style.overflow = ''; }
 function insertHandwrite() {
     hwCanvas.toBlob(async function(blob) {
         if (!blob) { showToast('手写图片生成失败'); return; }

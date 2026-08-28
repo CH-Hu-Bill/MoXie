@@ -334,7 +334,7 @@ var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JS
            切换成醒目文字占位保持专注） -->
       <div class="d-gallery-mode" id="dGalleryMode">
         <button class="d-mode-btn" data-mode="carousel" onclick="switchGalleryMode('carousel')">🖼 图集轮播</button>
-        <button class="d-mode-btn" data-mode="motto" onclick="switchGalleryMode('motto')">✏️ 好好学习 天天向上</button>
+        <button class="d-mode-btn" data-mode="motto" onclick="switchGalleryMode('motto')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 好好学习 天天向上</button>
       </div>
       <!-- 文字占位（好好学习 天天向上），仅在 motto 模式显示 -->
       <div class="d-motto" id="dMotto">

@@ -335,7 +335,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 <div style="position:sticky;top:0;z-index:100;display:flex;gap:8px;flex-wrap:wrap;background:var(--paper);padding:8px 0;margin-bottom:14px;border-bottom:2px solid var(--pencil);">
     <a href="#sec-classes" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🏫 班级管理</a>
     <a href="#sec-app" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">📱 APP 发布</a>
-    <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">📢 公告管理</a>
+    <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 公告管理</a>
     <a href="#sec-display" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🖥️ 大屏设置</a>
     <span style="flex:1;"></span>
     <form method="post" style="display:inline;margin:0;">
@@ -485,7 +485,7 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
     </form>
 </div>
 <div class="card" id="sec-announce" style="margin-bottom:16px;scroll-margin-top:60px;">
-    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📢 全服公告</h2>
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 全服公告</h2>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">
         <div><span style="display:block;font-size:11px;color:var(--pencil);margin-bottom:2px;opacity:0.7;">当前公告</span><b style="font-size:14px;"><?php echo count($announcements); ?> 条</b></div>
         <div><span style="display:block;font-size:11px;color:var(--red);margin-bottom:2px;font-weight:700;">服务器时间（以此为准）</span><b style="font-size:14px;color:var(--red);"><?php echo date('Y-m-d H:i'); ?></b></div>
@@ -630,7 +630,7 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
                 ?>
                 <tr>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars($ann['content']); ?></td>
-                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;white-space:nowrap;"><?php echo ($ann['mode'] ?? 'banner') === 'fullscreen' ? '🔊 霸屏' . (int)($ann['fullscreen_seconds'] ?? 1) . 's' : '顶部横幅'; ?></td>
+                    <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;white-space:nowrap;"><?php echo ($ann['mode'] ?? 'banner') === 'fullscreen' ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 霸屏' . (int)($ann['fullscreen_seconds'] ?? 1) . 's' : '顶部横幅'; ?></td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:<?php echo htmlspecialchars($ann['color'] ?? '#ff4d4d'); ?>;border:1px solid var(--pencil);"></span></td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo in_array('all', $ann['target_classes'] ?? []) ? '全部' : implode(', ', $ann['target_classes']); ?></td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;"><?php echo implode(', ', $ann['target_platforms'] ?? []); ?></td>
@@ -663,7 +663,7 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
 <!-- Delete Modal -->
 <div class="modal" id="deleteModal">
     <div class="modal-content">
-        <h3 class="modal-title">⚠️ 删除班级</h3>
+        <h3 class="modal-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg> 删除班级</h3>
         <p style="text-align:center;margin-bottom:12px;color:var(--pencil);">请输入班级名确认删除：<br><b id="deleteClassName"></b></p>
         <form method="post">
             <input type="hidden" name="action" value="delete_class">
