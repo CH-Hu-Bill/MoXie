@@ -691,10 +691,24 @@ function fitWordMarquees() {
                 el.classList.remove('scrollable');
                 el.style.removeProperty('--mx');
                 el.style.removeProperty('--md');
-                var over = el.scrollWidth - el.clientWidth;
-                if (over > 4) {
+                // 用真实文本宽度测量：scrollWidth 在 ellipsis/overflow 下可能失真
+                var text = el.textContent || '';
+                var over = 0;
+                if (text) {
                     var fs = parseFloat(getComputedStyle(el).fontSize) || 16;
-                    var overEm = (over + 8) / fs;
+                    var ff = getComputedStyle(el).fontFamily;
+                    var m = document.createElement('span');
+                    m.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font-size:' + fs + 'px;font-family:' + ff + ';font-weight:' + (getComputedStyle(el).fontWeight || 'normal') + ';';
+                    m.textContent = text;
+                    document.body.appendChild(m);
+                    var textW = m.getBoundingClientRect().width;
+                    document.body.removeChild(m);
+                    var availW = el.clientWidth;
+                    over = textW - availW;
+                }
+                if (over > 2) {
+                    var fs2 = parseFloat(getComputedStyle(el).fontSize) || 16;
+                    var overEm = (over + 8) / fs2;
                     el.classList.add('scrollable');
                     el.style.setProperty('--mx', '-' + overEm.toFixed(2) + 'em');
                     el.style.setProperty('--md', Math.max(3, over / 30) + 's');

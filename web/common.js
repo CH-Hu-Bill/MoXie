@@ -479,3 +479,119 @@ function stopFollowAlong() {
     }
 }
 
+
+/* =========================================================
+   全球发音面板（words/task/history 共用）
+   懒创建 DOM；列表缓存 TTL 5 分钟；音频浏览器 HTTP 缓存
+   ========================================================= */
+var _pronModal = null, _pronAudio = null, _pronCache = {};
+var PRON_TTL = 5 * 60 * 1000;
+
+function _ensurePronModal() {
+    if (_pronModal) return _pronModal;
+    var modal = document.createElement('div');
+    modal.className = 'pron-modal';
+    modal.id = 'pronModal';
+    modal.innerHTML =
+        '<div class="pron-box">' +
+            '<h4 id="pronTitle"></h4>' +
+            '<div class="pron-sub" id="pronSub">全球发音</div>' +
+            '<div class="pron-list" id="pronList"></div>' +
+            '<button type="button" class="pron-close" id="pronCloseBtn">关闭</button>' +
+        '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closePronModal(); });
+    document.getElementById('pronCloseBtn').addEventListener('click', closePronModal);
+    _pronModal = modal;
+    return modal;
+}
+
+function showPronList(wordId, wordText) {
+    var c = _pronCache[wordId];
+    if (c && Date.now() - c.ts < PRON_TTL) {
+        openPronModal(wordText, c.items, false);
+        return;
+    }
+    openPronModal(wordText, null, true); // 先弹窗显示加载态，避免干等网络
+    var fd = new FormData();
+    fd.append('action', 'pron_list');
+    fd.append('word_id', wordId);
+    fd.append('csrf_token', typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : (document.getElementById('globalCsrfToken') || {}).value || '');
+    fetch(location.pathname + '?id=' + encodeURIComponent(classId), { method: 'POST', body: fd, cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (!r.success) { openPronModal(wordText, [], false, r.error || '加载失败'); return; }
+            _pronCache[wordId] = { ts: Date.now(), items: r.items || [] };
+            openPronModal(wordText, _pronCache[wordId].items, false);
+        })
+        .catch(function() { openPronModal(wordText, [], false, '网络异常'); });
+}
+
+function openPronModal(wordText, items, loading, error) {
+    _ensurePronModal();
+    document.getElementById('pronTitle').textContent = wordText || '';
+    var listEl = document.getElementById('pronList');
+    if (loading) {
+        document.getElementById('pronSub').textContent = '正在加载同学们的发音…';
+        listEl.innerHTML = '<div class="pron-empty"><span class="pron-spinner"></span></div>';
+        document.getElementById('pronModal').classList.add('active');
+        return;
+    }
+    if (error) {
+        document.getElementById('pronSub').textContent = '全球发音';
+        listEl.innerHTML = '<div class="pron-empty">' + escHtml(error) + '</div>';
+        document.getElementById('pronModal').classList.add('active');
+        return;
+    }
+    document.getElementById('pronSub').textContent = '全球发音 · ' + items.length + ' 条';
+    if (!items.length) {
+        listEl.innerHTML = '<div class="pron-empty">还没有人录过这个词<br><span style="font-size:12px;">打开 APP，在单词卡上长按地球按钮即可录制</span></div>';
+    } else {
+        listEl.innerHTML = '';
+        items.forEach(function(p) {
+            var item = document.createElement('div');
+            item.className = 'pron-item';
+            item.setAttribute('data-url', p.url);
+            var avatar = document.createElement('span');
+            avatar.className = 'pron-avatar';
+            avatar.textContent = (p.name || '同').charAt(0).toUpperCase();
+            var info = document.createElement('span');
+            info.className = 'pron-info';
+            var b = document.createElement('b'); b.textContent = p.name || '同学';
+            var i = document.createElement('i');
+            i.textContent = (p.duration || 0).toFixed(1) + 's · ' + (p.uploaded_at || '').slice(5, 16);
+            info.appendChild(b); info.appendChild(i);
+            var play = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            play.setAttribute('viewBox', '0 0 24 24'); play.setAttribute('width', '20'); play.setAttribute('height', '20');
+            play.setAttribute('fill', 'currentColor'); play.setAttribute('stroke', 'currentColor');
+            play.setAttribute('stroke-width', '2'); play.setAttribute('stroke-linecap', 'round');
+            play.setAttribute('stroke-linejoin', 'round'); play.setAttribute('class', 'pron-play');
+            var poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            poly.setAttribute('points', '5 3 19 12 5 21 5 3');
+            play.appendChild(poly);
+            item.appendChild(avatar); item.appendChild(info); item.appendChild(play);
+            item.addEventListener('click', function() { playPron(item); });
+            listEl.appendChild(item);
+        });
+    }
+    document.getElementById('pronModal').classList.add('active');
+}
+
+function playPron(el) {
+    var url = el.getAttribute('data-url');
+    if (!url) return;
+    if (_pronAudio) { try { _pronAudio.pause(); } catch (e) {} }
+    document.querySelectorAll('.pron-item.playing').forEach(function(x) { x.classList.remove('playing'); });
+    _pronAudio = new Audio(url);
+    el.classList.add('playing');
+    _pronAudio.play().catch(function() { el.classList.remove('playing'); showToast('播放失败'); });
+    _pronAudio.onended = function() { el.classList.remove('playing'); };
+    _pronAudio.onerror = function() { el.classList.remove('playing'); showToast('录音加载失败'); };
+}
+
+function closePronModal() {
+    if (!_pronModal) return;
+    _pronModal.classList.remove('active');
+    if (_pronAudio) { try { _pronAudio.pause(); } catch (e) {} }
+    document.querySelectorAll('.pron-item.playing').forEach(function(x) { x.classList.remove('playing'); });
+}

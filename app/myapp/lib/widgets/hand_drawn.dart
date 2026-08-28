@@ -994,84 +994,95 @@ class _PronSheetState extends State<_PronSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // 固定视口高度（屏幕 50%），内容在内部滚动——避免 loading/列表切换时
+    // sheet 高度突变回弹；外层加边距，文字不再紧贴边框
+    final sheetHeight = MediaQuery.of(context).size.height * 0.5;
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 16),
-          // 顶部：单词大字（过长自动缩字，不与边界冲突）
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width - 32),
-                child: Text(
-                  widget.word,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: AppTheme.fontHeading,
-                    fontSize: 28,
-                    color: AppColors.pencil,
+      child: SizedBox(
+        height: sheetHeight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Column(
+            children: [
+              // 顶部：单词大字（过长自动缩字，不与边界冲突）
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width - 32),
+                  child: Text(
+                    widget.word,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontHeading,
+                      fontSize: 28,
+                      color: AppColors.pencil,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          // 下方：副标题
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.public,
-                  size: 13, color: AppColors.pencil.withValues(alpha: 0.5)),
-              const SizedBox(width: 4),
-              Text(
-                _loading
-                    ? '正在加载同学们的发音…'
-                    : '全球发音 · ${_items?.length ?? 0} 条' +
-                        (_refreshing ? ' · 更新中' : (_fromCache ? ' · 缓存' : '')),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.pencil.withValues(alpha: 0.55),
-                ),
+              const SizedBox(height: 6),
+              // 下方：副标题
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.public,
+                      size: 13, color: AppColors.pencil.withValues(alpha: 0.5)),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      _loading
+                          ? '正在加载同学们的发音…'
+                          : '全球发音 · ${_items?.length ?? 0} 条' +
+                              (_refreshing ? ' · 更新中' : (_fromCache ? ' · 缓存' : '')),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.pencil.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              Expanded(child: _buildBody()),
             ],
           ),
-          const SizedBox(height: 10),
-          Flexible(child: _buildBody()),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 36),
-        child: Column(
-          children: [
-            const CircularProgressIndicator(color: AppColors.blue),
-            const SizedBox(height: 12),
-            Text('正在加载发音…',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.pencil.withValues(alpha: 0.6))),
-          ],
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: AppColors.blue),
+              SizedBox(height: 12),
+              Text('正在加载发音…',
+                  style: TextStyle(fontSize: 13, color: AppColors.pencil)),
+            ],
+          ),
         ),
       );
     }
     if (_error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
+      return Center(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.cloud_off,
                 size: 38, color: AppColors.pencil.withValues(alpha: 0.35)),
             const SizedBox(height: 8),
             Text(_error!,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 13,
                     color: AppColors.pencil.withValues(alpha: 0.6))),
@@ -1093,29 +1104,31 @@ class _PronSheetState extends State<_PronSheet> {
     }
     final items = _items ?? const [];
     if (items.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Column(
-          children: [
-            Icon(Icons.public,
-                size: 40, color: AppColors.pencil.withValues(alpha: 0.3)),
-            const SizedBox(height: 8),
-            Text(
-              '还没有人录过这个词\n长按地球按钮，做第一个发音的人',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.pencil.withValues(alpha: 0.6),
-                height: 1.6,
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.public,
+                  size: 40, color: AppColors.pencil.withValues(alpha: 0.3)),
+              const SizedBox(height: 8),
+              Text(
+                '还没有人录过这个词\n长按地球按钮，做第一个发音的人',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.pencil.withValues(alpha: 0.6),
+                  height: 1.6,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
     return ListView.builder(
-      shrinkWrap: true,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      padding: EdgeInsets.zero,
       itemCount: items.length,
       itemBuilder: (ctx, i) => _buildItem(items[i], i),
     );

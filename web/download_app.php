@@ -53,8 +53,11 @@ require 'inc/head.php';
                 </div>
                 <a href="apk/listenwrite-release.apk" download="listenwrite-release.apk"
                    class="btn btn-primary" style="font-size:17px;padding:14px 26px;text-decoration:none;display:inline-block;width:100%;box-sizing:border-box;">
-                    ⬇️ 下载最新版 APP
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载最新版 APP
                 </a>
+                <div style="font-size:11px;color:var(--pencil);opacity:0.55;margin-top:10px;text-align:center;line-height:1.6;">
+                    安装包由 <a href="https://github.com/CH-Hu-Bill/MoXie/releases/tag/apk-latest" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;">GitHub Releases</a>（CH-Hu-Bill）构建提供
+                </div>
             <?php else: ?>
                 <div style="background:var(--old-paper);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);padding:22px 16px;margin-bottom:18px;">
                     <div style="font-family:var(--font-heading);font-size:16px;color:var(--pencil);">安装包暂未上架</div>

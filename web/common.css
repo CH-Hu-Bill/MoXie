@@ -919,3 +919,28 @@ body.lb-open .gallery-card img[src$=".gif"] {
   background: rgba(45, 93, 161, 0.85);
   border-color: rgba(255, 255, 255, 0.45);
 }
+/* =========================================================
+   全球发音面板（words/task/history 共用）
+   ========================================================= */
+.pron-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:5000;align-items:center;justify-content:center}
+.pron-modal.active{display:flex}
+.pron-box{background:var(--white);border-radius:var(--wobbly);padding:18px;width:92%;max-width:400px;max-height:75vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);border:2px solid var(--pencil)}
+.pron-box h4{text-align:center;margin-bottom:2px;color:var(--pencil);font-family:var(--font-heading);font-size:22px;word-break:break-all;padding:0 6px}
+.pron-sub{text-align:center;color:#999;font-size:12px;margin-bottom:12px}
+.pron-spinner{display:inline-block;width:26px;height:26px;border:3px solid #e5e0d5;border-top-color:var(--blue);border-radius:50%;animation:pronSpin .8s linear infinite}
+@keyframes pronSpin{to{transform:rotate(360deg)}}
+.pron-list{overflow-y:auto;min-height:80px;flex:1}
+.pron-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);margin-bottom:8px;cursor:pointer;box-shadow:2px 2px 0 var(--pencil);transition:transform .1s,box-shadow .1s;background:var(--white)}
+.pron-item:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--pencil)}
+.pron-item.playing{background:var(--blue);color:#fff;border-color:var(--blue);box-shadow:2px 2px 0 var(--blue)}
+.pron-item.playing .pron-info i{color:rgba(255,255,255,.8)}
+.pron-avatar{flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-size:15px;border:2px solid var(--pencil)}
+.pron-item:nth-child(even) .pron-avatar{background:var(--red)}
+.pron-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pron-info b{font-size:14px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pron-info i{font-style:normal;font-size:11px;color:#999}
+.pron-play{flex:0 0 22px;color:var(--blue)}
+.pron-item.playing .pron-play{color:#fff}
+.pron-empty{padding:26px 10px;text-align:center;color:#999;font-size:14px;line-height:1.8}
+.pron-close{margin-top:10px;align-self:center;padding:8px 28px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);background:var(--white);cursor:pointer;font-family:var(--font-heading);box-shadow:2px 2px 0 var(--pencil)}
+.pron-close:hover{border-color:var(--blue);color:var(--blue)}
