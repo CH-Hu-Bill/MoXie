@@ -284,11 +284,21 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.d-word-pos-row {
+  display: flex;
+  justify-content: flex-start;
+  min-height: calc(var(--word-pos-fs, clamp(13px, 4cqi, 24px)) * 1.25);
+  overflow: hidden;
+  margin-bottom: 2px;
+}
 .d-word-pos {
   font-family: var(--font-body);
   font-size: var(--word-pos-fs, clamp(13px, 4cqi, 24px));
   color: var(--blue);
-  margin-left: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .d-word-mean {
   font-family: var(--font-body);

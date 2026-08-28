@@ -593,9 +593,11 @@ function renderWords(words) {
         return;
     }
     var cards = items.map(function(w) {
-        var pos = w.pos ? '<span class="d-word-pos">' + escHtml(w.pos) + '</span>' : '';
+        // 词性独立成行放卡片顶部：不再与单词同行混排（词性过长会把整行挤成省略号，
+        // 并让跑马灯位移量与内容错位失效）；main 现在只含单词，溢出检测/滚动纯净
+        var posRow = w.pos ? '<div class="d-word-pos-row"><span class="d-word-pos">' + escHtml(w.pos) + '</span></div>' : '';
         var mean = w.meaning ? '<div class="d-word-mean"><span class="d-word-scroll">' + escHtml(w.meaning) + '</span></div>' : '';
-        return '<div class="d-word"><div class="d-word-main"><span class="d-word-scroll">' + escHtml(w.word) + '</span>' + pos + '</div>' + mean + '</div>';
+        return '<div class="d-word">' + posRow + '<div class="d-word-main"><span class="d-word-scroll">' + escHtml(w.word) + '</span></div>' + mean + '</div>';
     }).join('');
     zone.innerHTML = header + '<div class="d-word-grid">' + cards + '</div>';
     fitWords();
@@ -639,20 +641,17 @@ function fitWords() {
     var cardW = (availW - (cols - 1) * GAP) / cols;
     var cardH = (availH - (rows - 1) * GAP) / rows;
     // 单词长度（横向约束）—— 用 75 分位数，避免个别超长词把整屏压小
+    // （词性已独立成行，main 内只有单词文本，直接取长度即可）
     var lens = [];
     cards.forEach(function(c) {
         var t = c.querySelector('.d-word-main');
-        if (t) {
-            var pos = t.querySelector('.d-word-pos');
-            var txt = pos ? t.textContent.replace(pos.textContent, '') : t.textContent;
-            lens.push(txt.trim().length || 1);
-        }
+        if (t) lens.push(t.textContent.trim().length || 1);
     });
     lens.sort(function(a, b) { return a - b; });
     var maxLen = lens.length ? lens[Math.min(lens.length - 1, Math.floor(lens.length * 0.75))] : 1;
     // 字号：受卡片宽度、卡片高度、代表性单词长度三者共同约束
     var fsByW = cardW * 0.34;
-    var fsByH = cardH * 0.5;
+    var fsByH = cardH * 0.42; // 留出顶部词性行与底部释义行的高度
     var fsByLen = (cardW - 14) / (maxLen * 0.62);
     var fs = Math.floor(Math.min(fsByW, fsByH, fsByLen));
     fs = Math.max(16, Math.min(fs, 64));

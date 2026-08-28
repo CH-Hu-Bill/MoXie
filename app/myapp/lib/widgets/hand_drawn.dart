@@ -416,6 +416,14 @@ class _MarqueeTextState extends State<MarqueeText>
     super.initState();
     _controller = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+    // 字体是异步加载的：冷缓存设备首次用 fallback 字体测量会偏窄，
+    // 误判"不溢出"后渲染成普通文本，字体加载完也不会重建 → 滚动失效。
+    // 延迟强制重建几次，字体就位后 TextPainter 重测即恢复滚动。
+    for (final delay in const [300, 800, 1600]) {
+      Future.delayed(Duration(milliseconds: delay), () {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   void _checkOverflow() {
@@ -500,6 +508,10 @@ class _MarqueeTextState extends State<MarqueeText>
             style: style,
           );
         }
+        // 切换到滚动分支后 controller 需要一帧才 attach；补一次检测启动滚动
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _checkOverflow();
+        });
         return GestureDetector(
           onHorizontalDragStart: (_) {
             _userInteracting = true;
