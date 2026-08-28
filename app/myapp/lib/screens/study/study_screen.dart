@@ -117,34 +117,40 @@ class StudyScreenState extends State<StudyScreen> {
         return;
       }
 
+      // 旧算法 base=index*90 低估卡高，向前扫描上限仅 ~21 个视口：
+      // 长列表（千词级）尾部累计偏差远超扫描范围，导致"后面的词永远未找到"。
+      // 新算法：先触底校准真实列表总高 → 按平均卡高精确跳转 → 小步兜底扫描。
       final max = _wordListScrollController.position.maxScrollExtent;
-      final viewport = _wordListScrollController.position.viewportDimension;
-      final base = index * 90.0; // 低估 → 通常落在目标之前
-      final step = viewport * 0.7;
+      if (max <= 0) {
+        // 列表还没算出可滚动范围（内容不足一屏 = 目标必在首屏）
+        _isLocating = false;
+        return;
+      }
+      final n = _words.length;
+      final avg = n > 0 ? max / n : 100.0; // 触底后 maxScrollExtent 为真实值
+      final est = (index * avg).clamp(0.0, max);
       double target;
       if (round == 0) {
-        target = base;
-      } else if (round <= 30) {
-        target = base + step * round; // 向前扫描
-      } else if (round <= 42) {
-        target = base - step * (round - 30); // 向后回扫
+        target = max; // 一跳到底：逼 ListView 构建尾区，校准真实 maxScrollExtent
+      } else if (round == 1) {
+        target = est;
+      } else if (round <= 9) {
+        // 目标附近 ± 交错小步扫（卡高差异通常 ±100px，cacheExtent 250px 大概率第 2 轮即命中）
+        final delta = (round - 1) * 500.0 * ((round.isOdd) ? 1 : -1);
+        target = (est + delta).clamp(0.0, max);
       } else {
         _isLocating = false;
         _showLocateHint('未找到该单词');
         return;
       }
-      target = target.clamp(0.0, max);
       _wordListScrollController.jumpTo(target);
 
-      // jumpTo 后等待一帧让 ListView 构建可视区，再下一轮检查
+      // jumpTo 后等两帧：一帧构建可视区、一帧挂载 key，再检查
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (round < 45) {
-          attempt(round: round + 1);
-        } else {
-          _isLocating = false;
-          _showLocateHint('未找到该单词');
-        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) attempt(round: round + 1);
+        });
       });
     }
 
@@ -302,16 +308,20 @@ class StudyScreenState extends State<StudyScreen> {
         }
         _loading = false;
       });
-      _storage.cacheWords(
-          classId,
-          _words
-              .map((w) => {
+      // 缓存全量写盘只在首次加载/下拉刷新时做——"加载更多"高频触发，
+      // 千词级列表每次全量序列化写 SharedPreferences 是滚动卡顿来源之一
+      if (reset) {
+        _storage.cacheWords(
+            classId,
+            _words
+                .map((w) => {
                     'id': w.id,
                     'word': w.word,
                     'meaning': w.meaning,
                     'pos': w.pos
                   })
               .toList());
+      }
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {

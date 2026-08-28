@@ -393,7 +393,10 @@ PROMPT;
 .pron-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:5000;align-items:center;justify-content:center}
 .pron-modal.active{display:flex}
 .pron-box{background:var(--white);border-radius:var(--wobbly);padding:18px;width:92%;max-width:400px;max-height:75vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);border:2px solid var(--pencil)}
-.pron-box h4{text-align:center;margin-bottom:12px;color:var(--pencil);font-family:var(--font-heading);font-size:16px;word-break:break-all}
+.pron-box h4{text-align:center;margin-bottom:2px;color:var(--pencil);font-family:var(--font-heading);font-size:22px;word-break:break-all;padding:0 6px}
+.pron-sub{text-align:center;color:#999;font-size:12px;margin-bottom:12px}
+.pron-spinner{display:inline-block;width:26px;height:26px;border:3px solid #e5e0d5;border-top-color:var(--blue);border-radius:50%;animation:pronSpin .8s linear infinite}
+@keyframes pronSpin{to{transform:rotate(360deg)}}
 .pron-list{overflow-y:auto;min-height:80px;flex:1}
 .pron-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);margin-bottom:8px;cursor:pointer;box-shadow:2px 2px 0 var(--pencil);transition:transform .1s,box-shadow .1s;background:var(--white)}
 .pron-item:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--pencil)}
@@ -471,6 +474,7 @@ PROMPT;
     <div class="pron-modal" id="pronModal">
         <div class="pron-box">
             <h4 id="pronTitle">全球发音</h4>
+            <div class="pron-sub" id="pronSub">全球发音</div>
             <div class="pron-list" id="pronList"></div>
             <button type="button" class="pron-close" onclick="closePronModal()">关闭</button>
         </div>
@@ -645,7 +649,16 @@ PROMPT;
 
         // ===== 全球发音 =====
         var pronAudio = null;
+        var pronCache = {}; // 会话内缓存：wordId -> {ts, items}（TTL 5 分钟）
+        var PRON_TTL = 5 * 60 * 1000;
         function showPronList(wordId, wordText) {
+            var c = pronCache[wordId];
+            if (c && Date.now() - c.ts < PRON_TTL) {
+                openPronModal(wordText, c.items, false);
+                return;
+            }
+            // 先弹窗显示加载态，避免干等网络
+            openPronModal(wordText, null, true);
             var fd = new FormData();
             fd.append('action', 'pron_list');
             fd.append('word_id', wordId);
@@ -653,14 +666,28 @@ PROMPT;
             fetch(location.pathname + '?id=' + encodeURIComponent(classId), { method: 'POST', body: fd, cache: 'no-store' })
                 .then(function(r) { return r.json(); })
                 .then(function(r) {
-                    if (!r.success) { showToast(r.error || '加载失败'); return; }
-                    openPronModal(wordText, r.items || []);
+                    if (!r.success) { openPronModal(wordText, [], false, r.error || '加载失败'); return; }
+                    pronCache[wordId] = { ts: Date.now(), items: r.items || [] };
+                    openPronModal(wordText, pronCache[wordId].items, false);
                 })
-                .catch(function() { showToast('网络异常'); });
+                .catch(function() { openPronModal(wordText, [], false, '网络异常'); });
         }
-        function openPronModal(wordText, items) {
-            document.getElementById('pronTitle').textContent = (wordText || '') + ' · 全球发音';
+        function openPronModal(wordText, items, loading, error) {
+            document.getElementById('pronTitle').textContent = wordText || '';
             var listEl = document.getElementById('pronList');
+            if (loading) {
+                document.getElementById('pronSub').textContent = '正在加载同学们的发音…';
+                listEl.innerHTML = '<div class="pron-empty"><span class="pron-spinner"></span></div>';
+                document.getElementById('pronModal').classList.add('active');
+                return;
+            }
+            if (error) {
+                document.getElementById('pronSub').textContent = '全球发音';
+                listEl.innerHTML = '<div class="pron-empty">' + escHtml(error) + '</div>';
+                document.getElementById('pronModal').classList.add('active');
+                return;
+            }
+            document.getElementById('pronSub').textContent = '全球发音 · ' + items.length + ' 条';
             if (!items.length) {
                 listEl.innerHTML = '<div class="pron-empty">还没有人录过这个词<br><span style="font-size:12px;">打开 APP，在单词卡上长按地球按钮即可录制</span></div>';
             } else {

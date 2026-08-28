@@ -275,6 +275,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           isWrong: w.isWrong,
                           highlight: _shouldHighlight(w),
                           onToggleWrong: () => _toggleWrong(w),
+                          classId: widget.classId,
+                          wordId: w.id,
                         ),
                       );
                     },

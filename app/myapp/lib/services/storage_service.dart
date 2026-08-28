@@ -142,6 +142,40 @@ class StorageService {
   Future<void> saveConsent(bool consent) => _p.setBool('consent', consent);
   bool getConsent() => _p.getBool('consent') ?? false;
 
+  // ── 全球发音列表缓存 ──
+
+  /// 缓存发音列表（TTL 内直接用，避免每次点按都等网络）
+  Future<void> cachePronunciations(
+      String classId, String wordId, List<dynamic> items) async {
+    await _p.setString(
+        'cache_pron_${classId}_$wordId', jsonEncode(items));
+    await _p.setInt('cache_pron_ts_${classId}_$wordId',
+        DateTime.now().millisecondsSinceEpoch);
+  }
+
+  /// 读发音列表缓存；过期/损坏返回 null
+  List<dynamic>? getPronunciations(String classId, String wordId) {
+    final ts = _p.getInt('cache_pron_ts_${classId}_$wordId');
+    if (ts == null ||
+        DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts)) >
+            _cacheTtl) {
+      return null;
+    }
+    final raw = _p.getString('cache_pron_${classId}_$wordId');
+    if (raw == null) return null;
+    try {
+      return jsonDecode(raw) as List<dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 上传/删除发音后清对应缓存
+  Future<void> clearPronunciationCache(String classId, String wordId) async {
+    await _p.remove('cache_pron_${classId}_$wordId');
+    await _p.remove('cache_pron_ts_${classId}_$wordId');
+  }
+
   // ── Clear ──
 
   Future<void> clearAll() async {

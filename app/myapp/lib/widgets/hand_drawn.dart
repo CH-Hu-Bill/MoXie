@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:just_audio/just_audio.dart';
 import '../theme/app_theme.dart';
 import '../services/tts_service.dart';
+import '../services/storage_service.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
 
@@ -814,6 +816,9 @@ class _GlobePronButtonState extends State<GlobePronButton> {
       }
       await ApiService()
           .uploadPronunciation(widget.classId, widget.wordId, f, 'p.m4a');
+      // 上传成功：清列表缓存，下次打开拉到最新
+      await StorageService()
+          .clearPronunciationCache(widget.classId, widget.wordId);
       _toast('发音已上传，同学们都能听到啦');
     } on ApiException catch (e) {
       _toast(e.message);
@@ -829,125 +834,22 @@ class _GlobePronButtonState extends State<GlobePronButton> {
 
   Future<void> _showList() async {
     if (_busy || _recording) return;
-    _toast('加载发音中…');
-    List<dynamic> items;
-    try {
-      items = await ApiService().getPronunciations(widget.classId, widget.wordId);
-    } on ApiException catch (e) {
-      _toast(e.message);
-      return;
-    } catch (e) {
-      _toast('网络异常');
-      return;
-    }
-    if (!mounted) return;
+    // 立即弹出面板（内部自带加载态/缓存），不再让用户干等网络
     await showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
         side: BorderSide(color: AppColors.pencil, width: 2),
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 14),
-            Text(
-              '${widget.word} · 全球发音',
-              style: TextStyle(
-                fontFamily: AppTheme.fontHeading,
-                fontSize: 17,
-                color: AppColors.pencil,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: items.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 28),
-                      child: Column(
-                        children: [
-                          Icon(Icons.public, size: 40, color: AppColors.pencil.withValues(alpha: 0.3)),
-                          const SizedBox(height: 8),
-                          Text(
-                            '还没有人录过这个词\n长按地球按钮，做第一个发音的人',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.pencil.withValues(alpha: 0.6),
-                              height: 1.6,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                      itemCount: items.length,
-                      itemBuilder: (ctx, i) => _buildItem(items[i]),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildItem(dynamic p) {
-    final name = (p['name'] ?? '同学') as String;
-    final duration = (p['duration'] ?? 0) as num;
-    final uploadedAt = (p['uploaded_at'] ?? '') as String;
-    final url = (p['url'] ?? '') as String;
-    final fullUrl = url.startsWith('http')
-        ? url
-        : '${ApiConfig.baseUrl}/${url.replaceFirst(RegExp(r'^/'), '')}';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border.all(color: AppColors.pencil, width: 2),
-        borderRadius: AppTheme.wobblySm,
-        boxShadow: AppTheme.hardShadowSm,
-      ),
-      child: ListTile(
-        dense: true,
-        leading: CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.blue,
-          child: Text(
-            name.isNotEmpty ? name.characters.first.toUpperCase() : '同',
-            style: const TextStyle(color: AppColors.white, fontSize: 13),
-          ),
-        ),
-        title: Text(name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14)),
-        subtitle: Text(
-          '$duration s  ·  ${uploadedAt.length >= 16 ? uploadedAt.substring(5, 16) : uploadedAt}',
-          style: TextStyle(
-              fontSize: 11, color: AppColors.pencil.withValues(alpha: 0.5)),
-        ),
-        trailing: const Icon(Icons.play_arrow, color: AppColors.blue),
-        onTap: () async {
-          try {
-            await _player.stop();
-            await _player.setUrl(fullUrl);
-            await _player.play();
-          } catch (e) {
-            _toast('播放失败');
-          }
-        },
-      ),
+      builder: (ctx) => _PronSheet(classId: widget.classId, wordId: widget.wordId, word: widget.word),
     );
   }
 
   @override
   void dispose() {
     _recorder.dispose();
-    _player.dispose();
     super.dispose();
   }
 
@@ -977,6 +879,301 @@ class _GlobePronButtonState extends State<GlobePronButton> {
                 ),
               )
             : Icon(Icons.public, size: 16, color: color),
+      ),
+    );
+  }
+}
+
+/// 全球发音底部弹窗：
+/// - 布局：顶部单词大字（过长自动缩字不撞边界），下方「全球发音」副标题
+/// - 打开即显示加载态（不干等网络）；有缓存先展示缓存并静默刷新
+/// - 列表缓存（StorageService，TTL 5 分钟）+ 音频文件缓存（flutter_cache_manager）
+class _PronSheet extends StatefulWidget {
+  final String classId;
+  final String wordId;
+  final String word;
+  const _PronSheet({required this.classId, required this.wordId, required this.word});
+
+  @override
+  State<_PronSheet> createState() => _PronSheetState();
+}
+
+class _PronSheetState extends State<_PronSheet> {
+  final AudioPlayer _player = AudioPlayer();
+  List<dynamic>? _items;
+  bool _loading = true;
+  bool _refreshing = false; // 有缓存时的后台静默刷新
+  bool _fromCache = false;
+  String? _error;
+  int _playingIndex = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    final cached =
+        StorageService().getPronunciations(widget.classId, widget.wordId);
+    if (cached != null) {
+      _items = cached;
+      _loading = false;
+      _fromCache = true;
+      _refreshing = true; // 有缓存：先展示，后台拉最新
+    }
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final items =
+          await ApiService().getPronunciations(widget.classId, widget.wordId);
+      await StorageService()
+          .cachePronunciations(widget.classId, widget.wordId, items);
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+        _refreshing = false;
+        _fromCache = false;
+        _error = null;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (_items != null) {
+        // 已有缓存内容：静默失败，仅标记
+        setState(() => _refreshing = false);
+      } else {
+        setState(() {
+          _loading = false;
+          _error = e.message;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (_items != null) {
+        setState(() => _refreshing = false);
+      } else {
+        setState(() {
+          _loading = false;
+          _error = '网络异常，请重试';
+        });
+      }
+    }
+  }
+
+  String _fullUrl(String url) => url.startsWith('http')
+      ? url
+      : '${ApiConfig.baseUrl}/${url.replaceFirst(RegExp(r'^/'), '')}';
+
+  Future<void> _play(int i) async {
+    final items = _items;
+    if (items == null || i < 0 || i >= items.length) return;
+    final url = _fullUrl((items[i]['url'] ?? '') as String);
+    if (url.isEmpty || url.endsWith('/')) return;
+    setState(() => _playingIndex = i);
+    try {
+      // 音频缓存：首次下载落盘，之后秒开
+      final f = await DefaultCacheManager().getSingleFile(url);
+      await _player.stop();
+      await _player.setFilePath(f.path);
+      await _player.play();
+      if (mounted) setState(() => _playingIndex = -1);
+    } catch (e) {
+      if (mounted) setState(() => _playingIndex = -1);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('播放失败'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 16),
+          // 顶部：单词大字（过长自动缩字，不与边界冲突）
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width - 32),
+                child: Text(
+                  widget.word,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontHeading,
+                    fontSize: 28,
+                    color: AppColors.pencil,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          // 下方：副标题
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.public,
+                  size: 13, color: AppColors.pencil.withValues(alpha: 0.5)),
+              const SizedBox(width: 4),
+              Text(
+                _loading
+                    ? '正在加载同学们的发音…'
+                    : '全球发音 · ${_items?.length ?? 0} 条' +
+                        (_refreshing ? ' · 更新中' : (_fromCache ? ' · 缓存' : '')),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.pencil.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Flexible(child: _buildBody()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 36),
+        child: Column(
+          children: [
+            const CircularProgressIndicator(color: AppColors.blue),
+            const SizedBox(height: 12),
+            Text('正在加载发音…',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.pencil.withValues(alpha: 0.6))),
+          ],
+        ),
+      );
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Column(
+          children: [
+            Icon(Icons.cloud_off,
+                size: 38, color: AppColors.pencil.withValues(alpha: 0.35)),
+            const SizedBox(height: 8),
+            Text(_error!,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.pencil.withValues(alpha: 0.6))),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _loading = true;
+                  _error = null;
+                });
+                _fetch();
+              },
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+    final items = _items ?? const [];
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Column(
+          children: [
+            Icon(Icons.public,
+                size: 40, color: AppColors.pencil.withValues(alpha: 0.3)),
+            const SizedBox(height: 8),
+            Text(
+              '还没有人录过这个词\n长按地球按钮，做第一个发音的人',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.pencil.withValues(alpha: 0.6),
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      itemCount: items.length,
+      itemBuilder: (ctx, i) => _buildItem(items[i], i),
+    );
+  }
+
+  Widget _buildItem(dynamic p, int i) {
+    final name = (p['name'] ?? '同学') as String;
+    final duration = (p['duration'] ?? 0) as num;
+    final uploadedAt = (p['uploaded_at'] ?? '') as String;
+    final playing = _playingIndex == i;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: playing ? AppColors.blue : AppColors.white,
+        border: Border.all(
+            color: playing ? AppColors.blue : AppColors.pencil, width: 2),
+        borderRadius: AppTheme.wobblySm,
+        boxShadow: AppTheme.hardShadowSm,
+      ),
+      child: ListTile(
+        dense: true,
+        leading: CircleAvatar(
+          radius: 16,
+          backgroundColor:
+              playing ? AppColors.white : AppColors.blue,
+          child: Text(
+            name.isNotEmpty ? name.characters.first.toUpperCase() : '同',
+            style: TextStyle(
+                color: playing ? AppColors.blue : AppColors.white,
+                fontSize: 13),
+          ),
+        ),
+        title: Text(name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontSize: 14,
+                color: playing ? AppColors.white : AppColors.pencil)),
+        subtitle: Text(
+          '$duration s  ·  ${uploadedAt.length >= 16 ? uploadedAt.substring(5, 16) : uploadedAt}',
+          style: TextStyle(
+              fontSize: 11,
+              color: playing
+                  ? AppColors.white.withValues(alpha: 0.8)
+                  : AppColors.pencil.withValues(alpha: 0.5)),
+        ),
+        trailing: playing
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: Padding(
+                  padding: EdgeInsets.all(2),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : Icon(Icons.play_arrow,
+                color: playing ? AppColors.white : AppColors.blue),
+        onTap: () => _play(i),
       ),
     );
   }
