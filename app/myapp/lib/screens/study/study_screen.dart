@@ -657,6 +657,8 @@ class StudyScreenState extends State<StudyScreen> {
                 isWrong: w.isWrong,
                 highlight: isHighlighted,
                 onToggleWrong: () => _toggleWrong(classId, w),
+                classId: classId,
+                wordId: w.id,
               ),
             );
           },
@@ -697,6 +699,8 @@ class StudyScreenState extends State<StudyScreen> {
                   isWrong: true,
                   showRemoveButton: true,
                   onToggleWrong: () => _toggleWrong(classId, w),
+                  classId: classId,
+                  wordId: w.id,
                 ),
               );
             },

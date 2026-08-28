@@ -431,4 +431,31 @@ class ApiService {
       'description': description,
     });
   }
+
+  // ── 全球发音 ──
+
+  /// 拉取某单词的全球发音列表
+  Future<List<dynamic>> getPronunciations(String classId, String wordId) async {
+    final res = await _post('get_pronunciations',
+        fields: {'class_id': classId, 'word_id': wordId});
+    return (res['data']?['items'] as List<dynamic>?) ?? [];
+  }
+
+  /// 上传自己的发音录音（M4A），同一单词重复上传自动覆盖
+  Future<Map<String, dynamic>> uploadPronunciation(
+      String classId, String wordId, File file, String filename) {
+    return _postWithFile(
+      'upload_pronunciation',
+      {'class_id': classId, 'word_id': wordId},
+      'audio',
+      file,
+      filename,
+    );
+  }
+
+  /// 删除自己的发音
+  Future<void> deletePronunciation(String classId, String wordId) {
+    return _post('delete_pronunciation',
+        fields: {'class_id': classId, 'word_id': wordId});
+  }
 }

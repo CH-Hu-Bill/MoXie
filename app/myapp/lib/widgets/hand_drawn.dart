@@ -1,7 +1,13 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+import 'package:just_audio/just_audio.dart';
 import '../theme/app_theme.dart';
 import '../services/tts_service.dart';
+import '../services/api_service.dart';
+import '../config/api_config.dart';
 
 class HandDrawnCard extends StatelessWidget {
   final Widget child;
@@ -722,6 +728,248 @@ class _AutoScrollTextState extends State<AutoScrollText> {
   }
 }
 
+/// 全球发音按钮：
+/// - 短按：拉取该单词的班级发音列表（底部弹窗），点选播放
+/// - 长按：按住录音（AAC/M4A），松开自动上传（同一单词重复上传自动覆盖）
+class GlobePronButton extends StatefulWidget {
+  final String classId;
+  final String wordId;
+  final String word;
+  const GlobePronButton({
+    super.key,
+    required this.classId,
+    required this.wordId,
+    required this.word,
+  });
+
+  @override
+  State<GlobePronButton> createState() => _GlobePronButtonState();
+}
+
+class _GlobePronButtonState extends State<GlobePronButton> {
+  final AudioRecorder _recorder = AudioRecorder();
+  final AudioPlayer _player = AudioPlayer();
+  bool _recording = false;
+  bool _busy = false;
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      duration: const Duration(seconds: 2),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  Future<void> _startRecording() async {
+    if (_busy || _recording) return;
+    try {
+      if (!await _recorder.hasPermission()) {
+        _toast('没有麦克风权限，请在系统设置中允许');
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final path =
+          '${dir.path}/pron_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc),
+        path: path,
+      );
+      if (mounted) setState(() => _recording = true);
+      _toast('正在录音，松开结束');
+    } catch (e) {
+      _toast('录音启动失败');
+    }
+  }
+
+  Future<void> _stopAndUpload() async {
+    if (!_recording) return;
+    if (mounted) setState(() {
+      _recording = false;
+      _busy = true;
+    });
+    String? path;
+    try {
+      path = await _recorder.stop();
+      if (path == null) {
+        _toast('录音未保存');
+        return;
+      }
+      final f = File(path);
+      if (await f.length() < 2000) {
+        _toast('录音太短，长按地球按钮重录');
+        return;
+      }
+      await ApiService()
+          .uploadPronunciation(widget.classId, widget.wordId, f, 'p.m4a');
+      _toast('发音已上传，同学们都能听到啦');
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('上传失败，请重试');
+    } finally {
+      if (path != null) {
+        try { File(path).delete(); } catch (_) {}
+      }
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _showList() async {
+    if (_busy || _recording) return;
+    _toast('加载发音中…');
+    List<dynamic> items;
+    try {
+      items = await ApiService().getPronunciations(widget.classId, widget.wordId);
+    } on ApiException catch (e) {
+      _toast(e.message);
+      return;
+    } catch (e) {
+      _toast('网络异常');
+      return;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        side: BorderSide(color: AppColors.pencil, width: 2),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 14),
+            Text(
+              '${widget.word} · 全球发音',
+              style: TextStyle(
+                fontFamily: AppTheme.fontHeading,
+                fontSize: 17,
+                color: AppColors.pencil,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Flexible(
+              child: items.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 28),
+                      child: Column(
+                        children: [
+                          Icon(Icons.public, size: 40, color: AppColors.pencil.withValues(alpha: 0.3)),
+                          const SizedBox(height: 8),
+                          Text(
+                            '还没有人录过这个词\n长按地球按钮，做第一个发音的人',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.pencil.withValues(alpha: 0.6),
+                              height: 1.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                      itemCount: items.length,
+                      itemBuilder: (ctx, i) => _buildItem(items[i]),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItem(dynamic p) {
+    final name = (p['name'] ?? '同学') as String;
+    final duration = (p['duration'] ?? 0) as num;
+    final uploadedAt = (p['uploaded_at'] ?? '') as String;
+    final url = (p['url'] ?? '') as String;
+    final fullUrl = url.startsWith('http')
+        ? url
+        : '${ApiConfig.baseUrl}/${url.replaceFirst(RegExp(r'^/'), '')}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        border: Border.all(color: AppColors.pencil, width: 2),
+        borderRadius: AppTheme.wobblySm,
+        boxShadow: AppTheme.hardShadowSm,
+      ),
+      child: ListTile(
+        dense: true,
+        leading: CircleAvatar(
+          radius: 16,
+          backgroundColor: AppColors.blue,
+          child: Text(
+            name.isNotEmpty ? name.characters.first.toUpperCase() : '同',
+            style: const TextStyle(color: AppColors.white, fontSize: 13),
+          ),
+        ),
+        title: Text(name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14)),
+        subtitle: Text(
+          '$duration s  ·  ${uploadedAt.length >= 16 ? uploadedAt.substring(5, 16) : uploadedAt}',
+          style: TextStyle(
+              fontSize: 11, color: AppColors.pencil.withValues(alpha: 0.5)),
+        ),
+        trailing: const Icon(Icons.play_arrow, color: AppColors.blue),
+        onTap: () async {
+          try {
+            await _player.stop();
+            await _player.setUrl(fullUrl);
+            await _player.play();
+          } catch (e) {
+            _toast('播放失败');
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _recorder.dispose();
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _recording ? AppColors.red : AppColors.blue;
+    return GestureDetector(
+      onTap: _showList,
+      onLongPressStart: (_) => _startRecording(),
+      onLongPressEnd: (_) => _stopAndUpload(),
+      onLongPressCancel: _stopAndUpload,
+      child: Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: _recording ? AppColors.red.withValues(alpha: 0.12) : AppColors.white,
+          border: Border.all(color: color, width: 2),
+          borderRadius: AppTheme.wobblySm,
+          boxShadow: AppTheme.hardShadowSm,
+        ),
+        child: _busy
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: Padding(
+                  padding: EdgeInsets.all(2),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : Icon(Icons.public, size: 16, color: color),
+      ),
+    );
+  }
+}
+
 class WordCard extends StatelessWidget {
   final String word;
   final String meaning;
@@ -731,6 +979,10 @@ class WordCard extends StatelessWidget {
   final VoidCallback? onToggleWrong;
   final VoidCallback? onTap;
   final bool highlight;
+
+  /// 全球发音：班级 id + 单词 id 都传入时才显示地球按钮（默写场景不传即隐藏）
+  final String? classId;
+  final String? wordId;
 
   const WordCard({
     super.key,
@@ -742,6 +994,8 @@ class WordCard extends StatelessWidget {
     this.onToggleWrong,
     this.onTap,
     this.highlight = false,
+    this.classId,
+    this.wordId,
   });
 
   double _wordFontSize(String text) {
@@ -805,6 +1059,15 @@ class WordCard extends StatelessWidget {
               ],
               const SizedBox(width: 4),
               _buildSpeaker(context),
+              if (wordId != null && classId != null) ...[
+                const SizedBox(width: 4),
+                GlobePronButton(
+                  key: ValueKey('pron_${classId}_$wordId'),
+                  classId: classId!,
+                  wordId: wordId!,
+                  word: word,
+                ),
+              ],
               if (onToggleWrong != null || showRemoveButton) ...[
                 const SizedBox(width: 4),
                 _buildWrongButton(),

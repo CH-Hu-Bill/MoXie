@@ -62,6 +62,30 @@ foreach ($pendingTasks as $task) { foreach ($task['word_ids'] ?? [] as $wid) { $
 $wordCompletedInfo = [];
 foreach ($completedTasks as $task) { foreach ($task['word_ids'] ?? [] as $wid) { $wordCompletedInfo[$wid] = true; } }
 if (isset($_POST['action'])) {
+    // 全球发音 — 拉取某单词的发音列表（班级口令会话内，只读）
+    if ($_POST['action'] === 'pron_list') {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        $pronWordId = $_POST['word_id'] ?? '';
+        if (!is_string($pronWordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $pronWordId)) {
+            echo json_encode(['success' => false, 'error' => '参数无效']); exit;
+        }
+        $pron = Database::getClassData($classId, 'pronunciations');
+        $pronItems = [];
+        $pronWordData = (is_array($pron) && isset($pron[$pronWordId]) && is_array($pron[$pronWordId])) ? $pron[$pronWordId] : [];
+        foreach ($pronWordData as $pronUid => $p) {
+            if (!is_array($p) || empty($p['file'])) continue;
+            if (!is_file(Database::getClassDir($classId) . '/pronunciations/' . $pronWordId . '/' . $p['file'])) continue;
+            $pronItems[] = [
+                'name' => (string)($p['name'] ?? '同学'),
+                'duration' => (float)($p['duration'] ?? 0),
+                'uploaded_at' => (string)($p['uploaded_at'] ?? ''),
+                'url' => 'pronunciation.php?class_id=' . rawurlencode($classId) . '&word_id=' . rawurlencode($pronWordId) . '&file=' . rawurlencode($p['file']),
+            ];
+        }
+        echo json_encode(['success' => true, 'items' => $pronItems], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     if ($_POST['action'] === 'add_word') {
         requireCsrf(); // CSRF校验
         $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning')); $pos = sanitizePlainText(reqPost('pos'));
@@ -365,6 +389,26 @@ PROMPT;
         .toolbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
         .selection-info { margin-left: 0; width: 100%; text-align: right; }
     }
+/* ===== 全球发音弹窗 ===== */
+.pron-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:5000;align-items:center;justify-content:center}
+.pron-modal.active{display:flex}
+.pron-box{background:var(--white);border-radius:var(--wobbly);padding:18px;width:92%;max-width:400px;max-height:75vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);border:2px solid var(--pencil)}
+.pron-box h4{text-align:center;margin-bottom:12px;color:var(--pencil);font-family:var(--font-heading);font-size:16px;word-break:break-all}
+.pron-list{overflow-y:auto;min-height:80px;flex:1}
+.pron-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);margin-bottom:8px;cursor:pointer;box-shadow:2px 2px 0 var(--pencil);transition:transform .1s,box-shadow .1s;background:var(--white)}
+.pron-item:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--pencil)}
+.pron-item.playing{background:var(--blue);color:#fff;border-color:var(--blue);box-shadow:2px 2px 0 var(--blue)}
+.pron-item.playing .pron-info i{color:rgba(255,255,255,.8)}
+.pron-avatar{flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-size:15px;border:2px solid var(--pencil)}
+.pron-item:nth-child(even) .pron-avatar{background:var(--red)}
+.pron-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pron-info b{font-size:14px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pron-info i{font-style:normal;font-size:11px;color:#999}
+.pron-play{flex:0 0 22px;color:var(--blue)}
+.pron-item.playing .pron-play{color:#fff}
+.pron-empty{padding:26px 10px;text-align:center;color:#999;font-size:14px;line-height:1.8}
+.pron-close{margin-top:10px;align-self:center;padding:8px 28px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);background:var(--white);cursor:pointer;font-family:var(--font-heading);box-shadow:2px 2px 0 var(--pencil)}
+.pron-close:hover{border-color:var(--blue);color:var(--blue)}
 </style>
 </head>
 <body>
@@ -407,6 +451,7 @@ PROMPT;
                         </div>
                         <div class="corner-bl">
                             <button class="speaker" onclick='event.stopPropagation();speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                            <button class="pron-btn speaker" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
                         </div>
                         <div class="corner-br">
                             <?php if (isset($wordCompletedInfo[$w['id']])): ?>
@@ -421,6 +466,15 @@ PROMPT;
     </div>
     <button class="fab" onclick="showBatchModal()" title="批量添加单词"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     <div class="toast" id="toast"></div>
+
+    <!-- 全球发音弹窗 -->
+    <div class="pron-modal" id="pronModal">
+        <div class="pron-box">
+            <h4 id="pronTitle">全球发音</h4>
+            <div class="pron-list" id="pronList"></div>
+            <button type="button" class="pron-close" onclick="closePronModal()">关闭</button>
+        </div>
+    </div>
 
     <div class="modal" id="addModal">
         <div class="modal-content">
@@ -588,6 +642,75 @@ PROMPT;
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
+
+        // ===== 全球发音 =====
+        var pronAudio = null;
+        function showPronList(wordId, wordText) {
+            var fd = new FormData();
+            fd.append('action', 'pron_list');
+            fd.append('word_id', wordId);
+            fd.append('csrf_token', CSRF_TOKEN);
+            fetch(location.pathname + '?id=' + encodeURIComponent(classId), { method: 'POST', body: fd, cache: 'no-store' })
+                .then(function(r) { return r.json(); })
+                .then(function(r) {
+                    if (!r.success) { showToast(r.error || '加载失败'); return; }
+                    openPronModal(wordText, r.items || []);
+                })
+                .catch(function() { showToast('网络异常'); });
+        }
+        function openPronModal(wordText, items) {
+            document.getElementById('pronTitle').textContent = (wordText || '') + ' · 全球发音';
+            var listEl = document.getElementById('pronList');
+            if (!items.length) {
+                listEl.innerHTML = '<div class="pron-empty">还没有人录过这个词<br><span style="font-size:12px;">打开 APP，在单词卡上长按地球按钮即可录制</span></div>';
+            } else {
+                listEl.innerHTML = '';
+                items.forEach(function(p) {
+                    var item = document.createElement('div');
+                    item.className = 'pron-item';
+                    item.setAttribute('data-url', p.url);
+                    var avatar = document.createElement('span');
+                    avatar.className = 'pron-avatar';
+                    avatar.textContent = (p.name || '同').charAt(0).toUpperCase();
+                    var info = document.createElement('span');
+                    info.className = 'pron-info';
+                    var b = document.createElement('b'); b.textContent = p.name || '同学';
+                    var i = document.createElement('i');
+                    i.textContent = (p.duration || 0).toFixed(1) + 's · ' + (p.uploaded_at || '').slice(5, 16);
+                    info.appendChild(b); info.appendChild(i);
+                    var play = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    play.setAttribute('viewBox', '0 0 24 24'); play.setAttribute('width', '20'); play.setAttribute('height', '20');
+                    play.setAttribute('fill', 'currentColor'); play.setAttribute('stroke', 'currentColor');
+                    play.setAttribute('stroke-width', '2'); play.setAttribute('stroke-linecap', 'round');
+                    play.setAttribute('stroke-linejoin', 'round'); play.setAttribute('class', 'pron-play');
+                    var poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    poly.setAttribute('points', '5 3 19 12 5 21 5 3');
+                    play.appendChild(poly);
+                    item.appendChild(avatar); item.appendChild(info); item.appendChild(play);
+                    item.addEventListener('click', function() { playPron(item); });
+                    listEl.appendChild(item);
+                });
+            }
+            document.getElementById('pronModal').classList.add('active');
+        }
+        function playPron(el) {
+            var url = el.getAttribute('data-url');
+            if (!url) return;
+            if (pronAudio) { try { pronAudio.pause(); } catch (e) {} }
+            document.querySelectorAll('.pron-item.playing').forEach(function(x) { x.classList.remove('playing'); });
+            pronAudio = new Audio(url);
+            el.classList.add('playing');
+            pronAudio.play().catch(function() { el.classList.remove('playing'); showToast('播放失败'); });
+            pronAudio.onended = function() { el.classList.remove('playing'); };
+            pronAudio.onerror = function() { el.classList.remove('playing'); showToast('录音加载失败'); };
+        }
+        function closePronModal() {
+            document.getElementById('pronModal').classList.remove('active');
+            if (pronAudio) { try { pronAudio.pause(); } catch (e) {} }
+            document.querySelectorAll('.pron-item.playing').forEach(function(x) { x.classList.remove('playing'); });
+        }
+        document.getElementById('pronModal').addEventListener('click', function(e) { if (e.target === this) closePronModal(); });
+
         // wordsArray is kept in sync with server state for edit/delete lookups
         let wordsArray = <?php echo json_encode($words, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
         const searchQuery = <?php echo json_encode($searchQ, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
@@ -840,6 +963,9 @@ PROMPT;
                         '<button class="speaker" onclick=\'event.stopPropagation();speak(' + escHtml(JSON.stringify(w['word'] || '')) + ')\'>' +
                             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>' +
                         '</button>' +
+                        '<button class="pron-btn speaker" title="全球发音" onclick=\'event.stopPropagation();showPronList(' + JSON.stringify(wid) + ',' + escHtml(JSON.stringify(w['word'] || '')) + ')\'>' +
+                            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>' +
+                        '</button>' +
                     '</div>' +
                     '<div class="corner-br">' +
                         (completed ? '<span class="completed-mark" title="已默写"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') +
@@ -851,7 +977,7 @@ PROMPT;
             // Re-bind card body click listeners
             grid.querySelectorAll('.word-card').forEach(card => {
                 card.addEventListener('click', function(e) {
-                    if (e.target.closest('.speaker') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
+                    if (e.target.closest('.speaker') || e.target.closest('.pron-btn') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
                     const cb = this.querySelector('.checkbox'); if (cb) cb.click();
                 });
             });
@@ -1123,7 +1249,7 @@ PROMPT;
         // Click card body to toggle selection
         document.querySelectorAll('.word-card').forEach(card => {
             card.addEventListener('click', function(e) {
-                if (e.target.closest('.speaker') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
+                if (e.target.closest('.speaker') || e.target.closest('.pron-btn') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
                 const cb = this.querySelector('.checkbox'); if (cb) cb.click();
             });
         });

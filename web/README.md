@@ -34,6 +34,7 @@
 | **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB/4096×4096）；**MP4 自动生成首帧缩略图**（ffmpeg，`video_thumb.php` 提供，加载中/列表先显示首帧预览）；**网格视频进视口才播放**（preload=metadata + IntersectionObserver，首屏不并发全量下载）；支持修改描述；**灯箱布局为「左媒体 + 右描述整列」**，描述框宽度按媒体宽高比自适应（竖图更宽、横图更窄），描述过长在右列内**来回自动滚动**（缓慢、requestAnimationFrame 逐帧平滑、溢出时加边缘渐变蒙版防硬截断，鼠标悬停/触摸暂停、离开 2s 后恢复；描述存 JS 映射表按 id 取，不内嵌到 onclick，杜绝长描述/换行导致卡片打不开）；**打开详情时暂停网格所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后只恢复之前正在播放的**；媒体失效显示「媒体已失效」占位；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好；**图集描述过长在固定区域内来回自动滚动**（壁纸页纯自动、无手动打断，requestAnimationFrame 平滑 + 边缘渐变蒙版） |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数（跟读停顿 = 单词音频实际时长 + 缓冲时间，长词停得久、短词停得短；缓冲 **-0.5~5 秒**，负数让停顿比音频短、节奏更紧凑，实际停顿不低于 0）、图集公开 API 密钥保护、展示大屏 token，均按班级隔离存储 |
+| **全球发音** (`pronunciation.php` + `app_api.php` + 单词库卡片) | 班级内真人发音共享：APP 端单词卡（单词库/错题本/搜索）地球按钮**长按录音（AAC/M4A ≤10s ≤2MB，`inc/audio_guard.php` 校验 magic bytes + mvhd 时长）**、松手上传，**短按播放列表**（选同学发音播放）；web 端单词库卡片地球按钮短按弹手绘风列表播放（只听不录）。数据：`data/classes/{cid}/pronunciations.json`（wordId→uid→{file,name,duration,size}）+ `pronunciations/{wordId}/{32hex}.m4a`；**每人每单词 1 条（重录覆盖）**；文件名随机不可枚举，输出端点无需鉴权（同图集模式） |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**APK 安装包上传**（只保留最新一版，自动关联最新发布版本的版本号与更新日志，写入 `app_versions.json` 的 `apk` 字段）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭，超级霸屏限 60 字、顶部横幅限 200 字，前端实时计数）。页面已加 no-store 防缓存 + 分区导航（班级/APP/公告/大屏） |
 | **全服公告** | 公告分两类：**顶部横幅**（状态栏跑马灯，可关闭）与**超级霸屏**（mode=fullscreen）。超级霸屏：仅站内点击跳转时触发（刷新/直达/系统返回不触发），新页面**首帧即渲染**（无内容闪现），页面加载完成后开始计时展示 1~5 秒、点击任意处跳过；霸屏层只占状态栏（横幅）**下方**区域，不遮挡顶部横幅。两类同时间段可共存、同类互斥。后台时间选择已预填服务器当前时间（默认立即生效），并醒目显示服务器时间 |
 | **APP 后端 API** (`app_api.php`) | 用户注册 / 登录 / token 鉴权、单词 / 任务 / 错题本 / 收藏、史记、图集、导出等完整接口 |
@@ -348,6 +349,7 @@ data/
 ├── classes.json                # 全局班级注册表
 ├── settings.json               # 全局设置
 ├── app_versions.json           # APP 版本发布日志
+├── pronunciation.php           # 全球发音音频输出端点（Range+immutable 缓存，只读）
 ├── announcements.json          # 全服公告列表
 ├── exports.json + exports/     # 临时导出文件与 token
 ├── ratelimit.json              # 限流计数
@@ -406,6 +408,7 @@ data/
 | 图集 | `get_gallery` `save_gallery` `update_gallery` `delete_gallery` `upload_image` |
 | 授权 | `set_global_consent` `set_consent` `get_consent` |
 | 版本 | `check_version` |
+| 全球发音 | `get_pronunciations` `upload_pronunciation` `delete_pronunciation`（音频输出端点 `pronunciation.php`，只读） |
 | 导出 | `export_words_pdf` `export_task_csv` `export_task_text` `export_wrong_csv` `export_wrong_text` |
 | 其它 | `get_csrf_token` |
 
@@ -414,6 +417,7 @@ data/
 | 桶 | 限制 |
 |----|------|
 | `login` | 10 次 / 5 分钟（按 IP） |
+| `pron_up` | 20 次 / 小时（按用户，全球发音上传） |
 | `bindpw` | 10 次 / 5 分钟（按 IP） |
 | `ai` | 40 次 / 小时（按用户） |
 

@@ -307,7 +307,7 @@ if ($action === 'unbind_class') {
     appJson(['success' => true]);
 }
 
-$classActions = ['verify_class_password', 'get_words', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent'];
+$classActions = ['verify_class_password', 'get_words', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent', 'get_pronunciations', 'upload_pronunciation', 'delete_pronunciation'];
 $classId = null;
 if (in_array($action, $classActions, true)) {
     $classId = appStrictId($_POST['class_id'] ?? '', 'class_id');
@@ -625,6 +625,96 @@ switch ($action) {
         }
 
         appJson(['success' => true, 'data' => ['url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($filename)]]);
+
+    // ===== 全球发音 =====
+    // pronunciations.json 结构: {wordId: {uid: {file,name,duration,size,uploaded_at}}}
+    // 音频文件: data/classes/{cid}/pronunciations/{wordId}/{32hex}.m4a（文件名随机不可枚举，输出端点无需鉴权）
+
+    case 'get_pronunciations':
+        $wordId = reqPost('word_id');
+        if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) appError('单词参数无效');
+        $pron = Database::getClassData($classId, 'pronunciations');
+        $wordPron = (is_array($pron) && isset($pron[$wordId]) && is_array($pron[$wordId])) ? $pron[$wordId] : [];
+        $items = [];
+        foreach ($wordPron as $uid => $p) {
+            if (!is_array($p) || empty($p['file'])) continue;
+            if (!is_file(Database::getClassDir($classId) . '/pronunciations/' . $wordId . '/' . $p['file'])) continue; // 自愈跳过已丢文件
+            $items[] = [
+                'uid' => (string)$uid,
+                'name' => (string)($p['name'] ?? '同学'),
+                'duration' => (float)($p['duration'] ?? 0),
+                'size' => (int)($p['size'] ?? 0),
+                'uploaded_at' => (string)($p['uploaded_at'] ?? ''),
+                'url' => 'pronunciation.php?class_id=' . rawurlencode($classId) . '&word_id=' . rawurlencode($wordId) . '&file=' . rawurlencode($p['file']),
+            ];
+        }
+        appJson(['success' => true, 'data' => ['items' => $items, 'mine' => isset($wordPron[(string)$userId])]]);
+
+    case 'upload_pronunciation':
+        appRateLimit('pron_up', $userId, 20, 3600);
+        $wordId = reqPost('word_id');
+        if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) appError('单词参数无效');
+        // 单词必须存在
+        $wordExists = false;
+        foreach (Database::getWords($classId) as $w) {
+            if (($w['id'] ?? '') === $wordId) { $wordExists = true; break; }
+        }
+        if (!$wordExists) appError('单词不存在');
+        if (!isset($_FILES['audio']) || !is_array($_FILES['audio'])) appError('请选择录音');
+        $audio = $_FILES['audio'];
+        if (($audio['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('录音上传失败');
+        if (!is_uploaded_file($audio['tmp_name'])) appError('上传文件无效');
+
+        require_once 'inc/audio_guard.php';
+        try {
+            $info = AudioGuard::validateM4a($audio['tmp_name'], 2 * 1048576); // ≤2MB / ≤10s / M4A magic
+        } catch (RuntimeException $e) {
+            appError($e->getMessage(), null, 413);
+        }
+
+        $dir = Database::getClassDir($classId) . '/pronunciations/' . $wordId;
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) appError('存储目录创建失败');
+        $oldFile = null;
+        $pronOld = Database::getClassData($classId, 'pronunciations');
+        if (isset($pronOld[$wordId][(string)$userId]['file'])) $oldFile = $pronOld[$wordId][(string)$userId]['file'];
+
+        $newFile = bin2hex(random_bytes(16)) . '.m4a';
+        $dest = $dir . '/' . $newFile;
+        if (!@move_uploaded_file($audio['tmp_name'], $dest)) appError('录音保存失败');
+        $userName = (string)(Database::getUser($userId)['name'] ?? '同学');
+        $ok = Database::updateClassData($classId, 'pronunciations', function($latest) use ($wordId, $userId, $newFile, $userName, $info) {
+            if (!is_array($latest)) $latest = [];
+            if (!isset($latest[$wordId]) || !is_array($latest[$wordId])) $latest[$wordId] = [];
+            $latest[$wordId][(string)$userId] = [
+                'file' => $newFile,
+                'name' => $userName,
+                'duration' => $info['duration'],
+                'size' => $info['size'],
+                'uploaded_at' => date('Y-m-d H:i:s'),
+            ];
+            return $latest;
+        });
+        if ($ok === false) { @unlink($dest); appError('数据保存失败，请重试'); }
+        if ($oldFile && $oldFile !== $newFile) @unlink($dir . '/' . $oldFile); // 重录覆盖：清理旧文件
+        appJson(['success' => true, 'data' => [
+            'duration' => $info['duration'],
+            'url' => 'pronunciation.php?class_id=' . rawurlencode($classId) . '&word_id=' . rawurlencode($wordId) . '&file=' . rawurlencode($newFile),
+        ]]);
+
+    case 'delete_pronunciation':
+        $wordId = reqPost('word_id');
+        if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) appError('单词参数无效');
+        $oldFile = null;
+        $ok = Database::updateClassData($classId, 'pronunciations', function($latest) use ($wordId, $userId, &$oldFile) {
+            if (!is_array($latest) || !isset($latest[$wordId][(string)$userId])) return null; // 无记录 → 保持原样
+            $oldFile = $latest[$wordId][(string)$userId]['file'] ?? null;
+            unset($latest[$wordId][(string)$userId]);
+            if (empty($latest[$wordId])) unset($latest[$wordId]);
+            return $latest;
+        });
+        if ($ok === false) appError('删除失败，请重试');
+        if ($oldFile) @unlink(Database::getClassDir($classId) . '/pronunciations/' . $wordId . '/' . $oldFile);
+        appJson(['success' => true]);
 
     case 'set_consent':
         $allow = reqPost('consent', reqPost('allow', '0')) === '1';

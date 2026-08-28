@@ -191,6 +191,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   onTap: widget.onWordFound != null
                       ? () => widget.onWordFound!(w.word)
                       : null,
+                  classId: context.read<AuthProvider>().currentClassId,
+                  wordId: w.id,
                 ),
               )),
           const SizedBox(height: 16),
