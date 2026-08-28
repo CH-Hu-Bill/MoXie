@@ -183,7 +183,10 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
             </div>
         </div>
         <div class="card mb-3" style="text-align:center;padding:18px;">
-            <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-secondary" style="font-size:14px;">重新查看使用说明</button>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-secondary" style="font-size:14px;">重新查看引导弹窗</button>
+                <a href="help.php" class="btn btn-secondary" style="font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 打开完整使用说明</a>
+            </div>
         </div>
         <button class="btn btn-primary mt-3" style="width:100%" onclick="saveSettings()">保存设置</button>
     </div>

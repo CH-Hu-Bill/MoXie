@@ -572,6 +572,12 @@ require 'inc/header.php';
                 };
                 btnRow.appendChild(next);
                 box.appendChild(btnRow);
+                if (stepIdx === steps.length - 1) {
+                    const helpLink = document.createElement('div');
+                    helpLink.style.cssText = 'text-align:center;margin-top:14px';
+                    helpLink.innerHTML = '<a href="help.php" target="_blank" rel="noopener" style="color:var(--blue);font-size:13px;text-decoration:underline;">查看完整使用说明（图文）→</a>';
+                    box.appendChild(helpLink);
+                }
             }
             render();
         })();

@@ -224,6 +224,7 @@ require 'inc/header.php';
             <span class="badge badge-class" id="badgeClass" style="display:none">班级史记</span>
             <span class="spacer"></span>
             <button type="button" class="btn btn-secondary btn-sm" id="handwriteBtn" onclick="openHandwrite()" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 手写板</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="cameraBtn" onclick="chooseAndCaptureImage()" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> 拍照</button>
         </div>
 
         <input type="text" class="title-input" id="entryTitle" placeholder="今天发生了什么有趣的事？" maxlength="80" style="display:none" disabled>
@@ -523,6 +524,7 @@ function selectDate(dateStr) {
         document.getElementById('readonlyBadge').style.display = '';
         document.getElementById('saveBtn').style.display = 'none';
         document.getElementById('handwriteBtn').style.display = 'none';
+        document.getElementById('cameraBtn').style.display = 'none';
         document.getElementById('entryTitle').style.display = 'none';
         document.getElementById('tagRow').classList.remove('show');
         showMetaFields(false);
@@ -602,6 +604,7 @@ function selectDate(dateStr) {
         document.getElementById('readonlyBadge').style.display = isT ? 'none' : '';
         document.getElementById('saveBtn').style.display = isT ? '' : 'none';
         document.getElementById('handwriteBtn').style.display = isT ? '' : 'none';
+        document.getElementById('cameraBtn').style.display = isT ? '' : 'none';
         document.getElementById('tagInputArea').style.display = isT ? '' : 'none';
     }
     renderCalendar();
@@ -659,6 +662,7 @@ function showPersonalEntry(authorUid) {
     document.getElementById('readonlyBadge').style.display = '';
     document.getElementById('saveBtn').style.display = 'none';
     document.getElementById('handwriteBtn').style.display = 'none';
+        document.getElementById('cameraBtn').style.display = 'none';
     document.getElementById('bottomBar').classList.add('show');
 }
 
@@ -798,6 +802,35 @@ function chooseAndUploadImage() {
             updateUnsavedDot();
         } catch (e) {
             showToast(e.message || '图片上传失败');
+        }
+    };
+    input.click();
+}
+
+// 拍照直接插入光标位置：
+// - 移动端浏览器：capture 属性直接调起摄像头
+// - 桌面端（含触屏电脑的桌面版 Chrome/Edge）：退化为普通文件选择框
+function chooseAndCaptureImage() {
+    if (!canEditClass()) { showToast('只能编辑今天的记录，先切换到今天'); return; }
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    // 仅移动端加 capture（桌面版浏览器对 capture 支持有怪癖，加了可能点击无反应）
+    if (/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent)) {
+        input.setAttribute('capture', 'environment'); // 后置摄像头
+    }
+    input.onchange = async function() {
+        if (!input.files || !input.files[0]) return;
+        try {
+            var url = await uploadHistoryImage(await compressHistoryImage(input.files[0]));
+            var range = quill.getSelection(true);
+            quill.insertEmbed(range.index, 'image', url);
+            quill.setSelection(range.index + 1);
+            hasUnsavedChanges = true;
+            updateUnsavedDot();
+            showToast('已插入照片');
+        } catch (e) {
+            showToast(e.message || '照片上传失败');
         }
     };
     input.click();
