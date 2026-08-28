@@ -1004,15 +1004,14 @@ class _PronSheetState extends State<_PronSheet> {
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
           child: Column(
             children: [
-              // 顶部：单词大字（过长自动缩字，不与边界冲突）
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width - 32),
-                  child: Text(
-                    widget.word,
-                    textAlign: TextAlign.center,
+              // 顶部：单词大字（超长时固定一行内横向滚动，不溢出/不压缩到看不清）
+              SizedBox(
+                height: 34,
+                width: double.infinity,
+                child: Center(
+                  child: MarqueeText(
+                    text: widget.word,
+                    fontSize: 28,
                     style: TextStyle(
                       fontFamily: AppTheme.fontHeading,
                       fontSize: 28,

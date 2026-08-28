@@ -300,6 +300,7 @@ class StudyScreenState extends State<StudyScreen> {
           if (changed) _words = List.of(_words);
           // 不动分页计数，保持加载更多状态一致
         } else {
+          _loading = true; // 加载更多：标记 loading，防止滚动到底并发触发多个请求
           final existingIds = {for (final w in _words) w.id};
           for (final w in words) {
             if (!existingIds.contains(w.id)) {

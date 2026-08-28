@@ -991,6 +991,12 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
       await c.setVolume(0);
       await c.play();
       setState(() {});
+      // 预热磁盘缓存：预览流式播放时后台把整文件写入缓存，
+      // 用户点开灯箱时缓存命中 → 本地播放秒开（服务器带宽小，避免灯箱重新拉 15MB）
+      DefaultCacheManager()
+          .getSingleFile(widget.videoUrl)
+          .then((_) {})
+          .catchError((_) {});
       return;
     } catch (_) {
       // 网络播放失败：兜底用磁盘缓存文件

@@ -4,7 +4,7 @@ ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 
 - **应用名称**：ListenWrite
 - **Android 包名**：`billspace.listenwrite.flutter`
-- **当前版本**：1.0.15
+- **当前版本**：1.0.16
 
 > **注意**：GitHub Actions 自动构建的 APK 会通过 Secret `API_BASE_URL` 写入正式服务器地址；未设置该 Secret 时回退到 `http://127.0.0.1:8000/web`（本地测试）。如需连接真实服务器，请配置 GitHub Secret 或本地复制 `api_config.dart` 修改 `baseUrl` 后重新打包。
 
