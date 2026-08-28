@@ -189,7 +189,7 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=9"></script>
+    <script src="common.js?v=10"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {

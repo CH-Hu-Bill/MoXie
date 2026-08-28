@@ -389,6 +389,231 @@ PROMPT;
         .toolbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
         .selection-info { margin-left: 0; width: 100%; text-align: right; }
     }
+</style>
+</head>
+<body>
+    <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
+    <?php
+    $backUrl = 'main.php?id=' . $classId;
+    $className = $class['name'];
+    $pageTitle = '单词库';
+    $rightContent = '<button class="btn btn-sm btn-primary" onclick="showFollowModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>';
+    require 'inc/header.php';
+    ?>
+    <div class="toolbar">
+        <button class="btn btn-sm btn-secondary" onclick="showImportModal()">导入CSV</button>
+        <button class="btn btn-sm btn-secondary" onclick="exportCsv()">导出CSV</button>
+        <button class="btn btn-sm btn-primary" onclick="createTask()">创建默写任务</button>
+        <span class="selection-info" id="selectionInfo">已选 <span id="selectedCount">0</span> 个</span>
+    </div>
+    <div class="content" id="contentWrap">
+        <?php if (empty($words)): ?>
+            <div class="empty-state"><div class="icon"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div><div>单词库为空，点击下方按钮添加单词</div></div>
+        <?php else: ?>
+            <div class="word-grid" id="wordGrid">
+                <?php foreach ($words as $idx => $w): ?>
+                    <div class="word-card" data-id="<?php echo $w['id']; ?>" data-index="<?php echo $idx; ?>" data-word-db="<?php echo htmlspecialchars($w['word']); ?>" data-meaning-db="<?php echo htmlspecialchars($w['meaning']); ?>" data-pos-db="<?php echo htmlspecialchars($w['pos'] ?? ''); ?>">
+                        <div class="corner-tl">
+                            <span class="number"><?php echo $idx + 1; ?></span>
+                            <?php if (isset($wordPendingInfo[$w['id']])): ?>
+                                <span class="pending-mark" title="即将于<?php echo $wordPendingInfo[$w['id']]; ?>默写"></span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="corner-tr">
+                            <span class="checkbox" onclick="toggleSelect(event, '<?php echo $w['id']; ?>')"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
+                            <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
+                            <?php if ($w['pos']): ?>
+                                <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="corner-bl">
+                            <button class="speaker" onclick='event.stopPropagation();speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                            <button class="pron-btn speaker" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
+                        </div>
+                        <div class="corner-br">
+                            <?php if (isset($wordCompletedInfo[$w['id']])): ?>
+                                <span class="completed-mark" title="已默写"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <?php endif; ?>
+                            <button class="edit-btn" onclick="event.stopPropagation();showEditModal('<?php echo $w['id']; ?>')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+    <button class="fab" onclick="showBatchModal()" title="批量添加单词"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    <div class="toast" id="toast"></div>
+
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <div class="modal-title">添加单词</div>
+            <form id="addForm">
+                <div class="form-group"><label>单词</label><input type="text" name="word" required autofocus></div>
+                <div class="form-group"><label>释义</label><input type="text" name="meaning" required></div>
+                <div class="form-group"><label>词性（选填）</label><input type="text" name="pos" placeholder="如 n. v. adj."></div>
+                <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('addModal')">取消</button><button type="submit" class="submit">添加</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <div class="modal-title">编辑单词</div>
+            <form id="editForm">
+                <input type="hidden" name="word_id" id="editWordId">
+                <div class="form-group"><label>单词</label><input type="text" name="word" id="editWord" required></div>
+                <div class="form-group"><label>释义</label><input type="text" name="meaning" id="editMeaning" required></div>
+                <div class="form-group"><label>词性</label><input type="text" name="pos" id="editPos" placeholder="如 n. v. adj."></div>
+                <div class="modal-btns"><button type="button" class="delete" onclick="deleteWord()">删除</button><button type="button" class="cancel" onclick="closeModal('editModal')">取消</button><button type="submit" class="submit">保存</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="importModal">
+        <div class="modal-content">
+            <div class="modal-title">导入CSV</div>
+            <div class="csv-hint">
+                请上传 <code>.csv</code> 格式文件，每行一条单词，格式为：<br>
+                <code>单词,释义,词性</code><br>
+                示例：<code>apple,苹果,n.</code><br>
+                词性可省略，如：<code>apple,苹果</code>
+            </div>
+            <form id="importForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <div class="file-input-wrapper">
+                        <div class="file-input-label" id="fileLabel">点击选择CSV文件</div>
+                        <input type="file" name="csv_file" accept=".csv" onchange="document.getElementById('fileLabel').textContent = this.files[0]?.name || '点击选择CSV文件'">
+                    </div>
+                </div>
+                <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('importModal')">取消</button><button type="button" class="submit" onclick="importCsv()">导入</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="taskDateModal">
+        <div class="modal-content">
+            <div class="modal-title">创建默写任务</div>
+            <div class="form-group">
+                <label>日期</label>
+                <input type="date" id="taskDate" value="<?php echo date('Y-m-d'); ?>" class="input">
+            </div>
+            <div class="form-group">
+                <label>任务标签（可选，如"第1次""上午"等）</label>
+                <input type="text" id="taskLabel" placeholder="留空自动生成编号" class="input">
+            </div>
+            <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('taskDateModal')">取消</button><button type="button" class="submit" onclick="confirmCreateTask()">确认创建</button></div>
+        </div>
+    </div>
+
+    <!-- Batch AI Import Modal -->
+    <div class="modal" id="batchModal">
+        <div class="modal-content" style="max-width:520px;">
+            <div class="modal-title">批量添加单词</div>
+            <div class="form-group">
+                <label>每行一个单词，可粘贴大量单词</label>
+                <textarea id="batchTextarea" rows="10" placeholder="apple&#10;book&#10;computer&#10;..." class="textarea"></textarea>
+            </div>
+            <div class="modal-btns">
+                <button type="button" class="cancel" onclick="closeModal('batchModal')">取消</button>
+                <button type="button" class="submit" id="batchSubmitBtn" onclick="submitBatchPreview()">AI 智能补全</button>
+            </div>
+            <div style="text-align:center;margin-top:8px;">
+                <a href="javascript:void(0)" onclick="closeModal('batchModal');showAddModal();" style="color:#999;font-size:13px;">逐个添加单词</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Preview Modal -->
+    <div class="modal" id="previewModal" style="z-index:1100;">
+        <div class="modal-content" style="max-width:600px;max-height:85vh;">
+            <div class="modal-title">预览与确认 (<span id="previewCount">0</span> 个单词)</div>
+            <div id="previewList" style="max-height:50vh;overflow-y:auto;margin-bottom:12px;"></div>
+            <div style="color:#999;font-size:12px;margin-bottom:8px;">
+                <span style="color:var(--red);">■</span> 不确定的单词 &nbsp;
+                <span style="color:#bbb;text-decoration:line-through;">灰色删除线</span> 已存在 &nbsp;
+                <span>✨</span> 修改英文后点击可AI补全
+            </div>
+            <div class="modal-btns">
+                <button type="button" class="cancel" onclick="closeModal('previewModal')">取消</button>
+                <button type="button" class="submit" onclick="confirmBatchImport()">确认导入</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Follow-along Modal -->
+    <div class="modal" id="followModal">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-title">跟读设置</div>
+            <div class="form-group">
+                <label>单词范围</label>
+                <select id="followScope" class="input">
+                    <option value="all">全部单词</option>
+                    <option value="selected" id="followSelectedOpt">已选单词</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>每个单词朗读次数</label>
+                <input type="number" id="followRepeat" value="<?php echo $settings['follow_repeat_' . $classId] ?? $settings['follow_repeat'] ?? 1; ?>" min="1" max="5" step="1" class="input">
+            </div>
+            <div class="form-group">
+                <label>缓冲时间（-0.5 到 5 秒）：停顿 = 音频时长 + 此值（负数提前，最短 0 秒）</label>
+                <input type="number" id="followBuffer" value="<?php echo $settings['follow_buffer_' . $classId] ?? $settings['follow_buffer'] ?? 0.5; ?>" min="-0.5" max="5" step="0.5" class="input">
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="followShuffle" style="width:18px;height:18px;accent-color:var(--red);cursor:pointer;">
+                    <span>随机乱序（只打乱跟读顺序，不改单词库位置）</span>
+                </label>
+            </div>
+            <div class="modal-btns">
+                <button type="button" class="cancel" onclick="closeFollowModal()">取消</button>
+                <button type="button" class="submit" onclick="startFollow()">开始跟读</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Follow-along Player Overlay (auto-collapses to bubble after 3s) -->
+    <div id="followPlayer" style="display:none;position:fixed;bottom:100px;left:16px;right:16px;z-index:700;max-width:500px;margin:0 auto;">
+        <div style="background:var(--white);border:2px solid var(--blue);border-radius:var(--wobbly);padding:14px 18px;box-shadow:var(--shadow-md);">
+            <div style="display:flex;align-items:center;gap:14px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:11px;color:#999;margin-bottom:2px;">跟读中 <span id="followProgress">0/0</span></div>
+                    <div id="followWordDisplay" style="font-size:20px;font-weight:bold;color:var(--blue);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">准备中...</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-shrink:0;">
+                    <button id="followPauseBtn" onclick="toggleFollowPause()" class="btn btn-sm" style="background:#ff9800;color:var(--white);border-color:#ff9800;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="vertical-align:-2px;margin-right:4px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>暂停
+                    </button>
+                    <button onclick="stopFollow()" class="btn btn-sm btn-danger">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>停止
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Follow-along Bubble (collapsed state, bottom-left corner) -->
+    <div id="followBubble" onclick="expandFollowBubble()" style="display:none;position:fixed;bottom:24px;left:20px;width:52px;height:52px;background:var(--pencil);border-radius:var(--wobbly);z-index:702;cursor:pointer;box-shadow:var(--shadow-md);animation:followBubblePulse 2s ease-in-out infinite;align-items:center;justify-content:center;border:2px solid var(--pencil);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--white)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+    </div>
+
+    <form id="taskForm" style="display:none;">
+        <input type="hidden" name="action" value="create_task">
+        <input type="hidden" name="selected_ids" id="selectedIds">
+        <input type="hidden" name="task_date" id="taskDateInput">
+        <input type="hidden" name="task_label" id="taskLabelInput">
+        <input type="hidden" name="overwrite" id="overwriteInput" value="0">
+    </form>
+    <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
+
+    <script src="common.js?v=9"></script>
+    <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
+    <script>
+        const classId = '<?php echo $classId; ?>';
+
 
         // wordsArray is kept in sync with server state for edit/delete lookups
         let wordsArray = <?php echo json_encode($words, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;

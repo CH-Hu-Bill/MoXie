@@ -327,7 +327,7 @@ require 'inc/header.php';
     </div>
 </div>
 
-    <script src="common.js?v=9"></script>
+    <script src="common.js?v=10"></script>
     <script>
         // SVG 线条图标助手（代替 emoji，统一手绘线条风）
         function iconSvg(name, size) {

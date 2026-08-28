@@ -32,6 +32,31 @@ $settings = Database::getSettings();
 $highlightId = reqGet('highlight');
 $searchQ = trim(reqGet('search'));
 
+// 全球发音 — 拉取某单词的发音列表（只读，班级口令会话内）
+if (isset($_POST['action']) && $_POST['action'] === 'pron_list') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    $pronWordId = $_POST['word_id'] ?? '';
+    if (!is_string($pronWordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $pronWordId)) {
+        echo json_encode(['success' => false, 'error' => '参数无效']); exit;
+    }
+    $pron = Database::getClassData($classId, 'pronunciations');
+    $pronItems = [];
+    $pronWordData = (is_array($pron) && isset($pron[$pronWordId]) && is_array($pron[$pronWordId])) ? $pron[$pronWordId] : [];
+    foreach ($pronWordData as $pronUid => $p) {
+        if (!is_array($p) || empty($p['file'])) continue;
+        if (!is_file(Database::getClassDir($classId) . '/pronunciations/' . $pronWordId . '/' . $p['file'])) continue;
+        $pronItems[] = [
+            'name' => (string)($p['name'] ?? '同学'),
+            'duration' => (float)($p['duration'] ?? 0),
+            'uploaded_at' => (string)($p['uploaded_at'] ?? ''),
+            'url' => 'pronunciation.php?class_id=' . rawurlencode($classId) . '&word_id=' . rawurlencode($pronWordId) . '&file=' . rawurlencode($p['file']),
+        ];
+    }
+    echo json_encode(['success' => true, 'items' => $pronItems], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // Auto-cancel expired tasks
 $tasks = Database::autoCancelExpiredTasks($classId);
 $today = date('Y-m-d');
