@@ -529,6 +529,8 @@ function clearUpload() {
 async function uploadGallery() {
     var fileInput = document.getElementById('galleryImage');
     var desc = document.getElementById('galleryDesc').value.trim();
+    var hint = document.getElementById('uploadHint');
+    if (hint) hint.textContent = '';
     if (!fileInput.files || !fileInput.files[0]) { showToast('请选择文件'); return; }
     if (!desc) { showToast('请填写描述'); return; }
     var file = fileInput.files[0];
@@ -553,7 +555,9 @@ async function uploadGallery() {
         var txt = await resp.text();
         var r;
         try { r = JSON.parse(txt); } catch (e) {
-            showToast('服务器响应异常' + (resp.ok ? '' : '（HTTP ' + resp.status + '）') + '，请重试');
+            var msg = '服务器响应异常' + (resp.ok ? '' : '（HTTP ' + resp.status + '）') + '，请重试';
+            showToast(msg);
+            if (hint) hint.textContent = '上传失败：' + msg;
             return;
         }
         if (r.success) {
@@ -562,10 +566,15 @@ async function uploadGallery() {
             // 局部刷新网格（不整页跳转，保留滚动位置）
             var j = await (await fetch('gallery.php?id=' + classId + '&json=1', { cache: 'no-store' })).json();
             if (j.success) { galleryData = j.items || []; renderGallery(); }
-        } else { showToast(r.error || '上传失败，请重试'); }
+        } else {
+            var em = r.error || '上传失败，请重试';
+            showToast(em);
+            if (hint) hint.textContent = '上传失败：' + em;
+        }
     } catch(e) {
-        if (e.name === 'AbortError') { showToast('上传超时，请检查文件大小后重试'); }
-        else { showToast('网络错误，请重试'); }
+        var msg2 = e.name === 'AbortError' ? '上传超时（60 秒），请检查网络或换小一点的文件' : '网络错误，请重试';
+        showToast(msg2);
+        if (hint) hint.textContent = '上传失败：' + msg2;
     } finally { clearTimeout(timer); }
     btn.disabled = false; btn.textContent = '上传';
 }

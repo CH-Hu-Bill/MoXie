@@ -145,7 +145,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
 .hw-tools input[type=range]{width:80px}
 .hw-canvas-wrap{border:2px solid var(--pencil);border-radius:var(--wobbly);overflow:hidden;background:var(--white)}
 .hw-canvas-wrap canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
-.hw-canvas-wrap canvas{display:block;width:100%;cursor:crosshair}
+.hw-tools button,.hw-tools input[type=color],.hw-tools input[type=range]{touch-action:manipulation}
 .hw-btns{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
 .hw-btns button{padding:8px 20px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:14px;cursor:pointer;font-weight:600;font-family:var(--font-heading);box-shadow:var(--shadow-sm)}
 .hw-btns .hw-insert{background:var(--blue);color:var(--white)}
@@ -255,7 +255,7 @@ require 'inc/header.php';
 <button type="button" onclick="setPenColor('#000000')" id="clrBlack" class="active">黑</button>
 <button type="button" onclick="setPenColor('#e53935')" id="clrRed">红</button>
 <button type="button" onclick="setPenColor('#2d5da1')" id="clrBlue">蓝</button>
-<input type="color" value="#000000" onchange="setPenColor(this.value)" title="选色">
+<input type="color" value="#000000" onchange="setPenColor(this.value)" oninput="setPenColor(this.value)" title="选色">
 <input type="range" min="1" max="10" value="3" id="penWidth" oninput="hwCtx.lineWidth=this.value" title="粗细">
 <button type="button" onclick="clearHandwrite()">清屏</button>
 <button type="button" onclick="undoStroke()">撤销</button>
@@ -770,7 +770,7 @@ function setupEditorDrop() {
         var f = dt.files[0];
         if (f.type && f.type.indexOf('image/') !== 0) { showToast('仅支持拖入图片'); return; }
         try {
-            var url = await uploadHistoryImage(f);
+            var url = await uploadHistoryImage(await compressHistoryImage(f));
             var range = quill.getSelection(true);
             quill.insertEmbed(range.index, 'image', url);
             quill.setSelection(range.index + 1);
@@ -790,7 +790,7 @@ function chooseAndUploadImage() {
     input.onchange = async function() {
         if (!input.files || !input.files[0]) return;
         try {
-            var url = await uploadHistoryImage(input.files[0]);
+            var url = await uploadHistoryImage(await compressHistoryImage(input.files[0]));
             var range = quill.getSelection(true);
             quill.insertEmbed(range.index, 'image', url);
             quill.setSelection(range.index + 1);
@@ -823,7 +823,7 @@ function handlePaste(e) {
 
 async function pasteUploadImage(file) {
     try {
-        var url = await uploadHistoryImage(file);
+        var url = await uploadHistoryImage(await compressHistoryImage(file));
         var range = quill.getSelection(true);
         quill.insertEmbed(range.index, 'image', url);
         quill.setSelection(range.index + 1);
@@ -842,6 +842,38 @@ async function uploadHistoryImage(blob) {
     var r = await (await fetch('upload.php', { method: 'POST', body: fd })).json();
     if (!r.success) throw new Error(r.error || '图片上传失败');
     return r.url;
+}
+
+// 大图自动压缩：最长边 ≤1600px + JPEG 0.85（GIF 不压避免丢动画；未超限不处理）
+// 服务器 upload.php 图片上限 12MB，压缩后基本不会再被拒
+function compressHistoryImage(file) {
+    return new Promise(function(resolve, reject) {
+        var MAX_DIM = 1600, MAX_BYTES = 12 * 1024 * 1024;
+        if (file.type === 'image/gif' || file.size <= MAX_BYTES) { resolve(file); return; }
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        img.onload = function() {
+            URL.revokeObjectURL(url);
+            var w = img.naturalWidth, h = img.naturalHeight;
+            var scale = Math.min(1, MAX_DIM / Math.max(w, h));
+            var cv = document.createElement('canvas');
+            cv.width = Math.max(1, Math.round(w * scale));
+            cv.height = Math.max(1, Math.round(h * scale));
+            var ctx = cv.getContext('2d');
+            ctx.fillStyle = '#ffffff'; // JPEG 无透明通道，铺白底
+            ctx.fillRect(0, 0, cv.width, cv.height);
+            ctx.drawImage(img, 0, 0, cv.width, cv.height);
+            cv.toBlob(function(blob2) {
+                if (!blob2) { reject(new Error('图片压缩失败')); return; }
+                var name = (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg';
+                var out;
+                try { out = new File([blob2], name, { type: 'image/jpeg' }); } catch (e) { out = blob2; }
+                resolve(out);
+            }, 'image/jpeg', 0.85);
+        };
+        img.onerror = function() { URL.revokeObjectURL(url); reject(new Error('图片读取失败，可能不是有效图片')); };
+        img.src = url;
+    });
 }
 
 var hwCanvas, hwCtx, hwStrokes = [], hwRedoStrokes = [], hwDrawing = false, hwCurrentStroke = [];
@@ -870,6 +902,7 @@ function openHandwrite() {
     hwCanvas.onpointerdown = function(e) {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         e.preventDefault();
+        if (hwDrawing) hwEndStroke(); // 上一笔 up 丢失时先落笔，防状态卡死
         try { hwCanvas.setPointerCapture(e.pointerId); } catch (err) {}
         hwDrawing = true;
         var p = getHwPoint(e);

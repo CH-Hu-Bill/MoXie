@@ -563,6 +563,8 @@ body {
   transform: translate(1px, 1px);
   box-shadow: none;
 }
+/* 全球发音按钮：与 speaker 同款式，向右偏移一个按钮位（36px + 8px 间距），避免完全重叠盖住有道标准发音 */
+.word-card .pron-btn.speaker { left: 52px; }
 
 /* Follow-along word highlight */
 .word-card.follow-highlight {
