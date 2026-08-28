@@ -609,7 +609,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=9"></script>
+    <script src="common.js?v=10"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';

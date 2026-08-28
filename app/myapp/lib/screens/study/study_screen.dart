@@ -281,18 +281,23 @@ class StudyScreenState extends State<StudyScreen> {
           _wordsTotal = data['total'] ?? 0;
           _wordsHasMore = data['has_more'] ?? false;
         } else if (silent) {
-          // 静默刷新：仅更新已有数据，保留滚动位置（不重新赋列表避免跳变）
-          final existingById = {for (final w in _words) w.id: w};
-          final merged = <Word>[];
-          for (final w in words) {
-            existingById[w.id] = w;
-            merged.add(w);
+          // 静默刷新：原地更新已有词条的字段（错题/释义等），保持列表顺序与
+          // 滚动位置完全不变——旧逻辑把第 1 页 merge 到最前会打乱顺序、每次
+          // 重建 ListView，导致滚动监听失效、加载更多在长列表尾部失效
+          final byId = {for (final w in words) w.id: w};
+          var changed = false;
+          for (var i = 0; i < _words.length; i++) {
+            final u = byId[_words[i].id];
+            if (u != null &&
+                (u.isWrong != _words[i].isWrong ||
+                    u.word != _words[i].word ||
+                    u.meaning != _words[i].meaning ||
+                    u.pos != _words[i].pos)) {
+              _words[i] = u;
+              changed = true;
+            }
           }
-          for (final w in _words) {
-            if (!merged.any((m) => m.id == w.id)) merged.add(w);
-          }
-          // 内容无变化则不重建列表，避免定时刷新导致列表跳动/卡顿
-          if (!_sameWordList(_words, merged)) _words = merged;
+          if (changed) _words = List.of(_words);
           // 不动分页计数，保持加载更多状态一致
         } else {
           final existingIds = {for (final w in _words) w.id};

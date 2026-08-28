@@ -2,7 +2,7 @@ name: myapp
 description: "ListenWrite 閻濐厾楠囨妯哄晸 + 閻濐厾楠囬崣鑼额唶 APP"
 publish_to: 'none'
 
-version: 1.0.14+1
+version: 1.0.15+1
 
 environment:
   sdk: ^3.5.0
