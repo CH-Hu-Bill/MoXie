@@ -7,6 +7,9 @@ on:
       - 'app/myapp/**'
   workflow_dispatch:
 
+permissions:
+  contents: write # 发布 APK 到 GitHub Release 需要
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -67,10 +70,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: flutter build apk --release
 
-      - name: Upload release APK
-        uses: actions/upload-artifact@v4
+      - name: Release APK
+        # 发布到 GitHub Release 而非 Artifact：Release 资产不占 Actions 存储配额
+        # （私有仓库免费额度仅 500MB，Artifact 上传常被 "storage quota has been hit" 拦截；
+        #  固定 tag=apk-latest 覆盖式发布，保留最新一版 APK，下载入口 = Releases 页）
+        uses: softprops/action-gh-release@v2
         with:
-          name: listenwrite-release
-          path: app/myapp/build/app/outputs/flutter-apk/app-release.apk
-          # 旧包自动过期（私有仓库免费额度仅 500MB，APK 约 35MB/个，必须设保留期防打满）
-          retention-days: 14
+          tag_name: apk-latest
+          name: APK Latest
+          files: app/myapp/build/app/outputs/flutter-apk/app-release.apk
+          overwrite_files: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
