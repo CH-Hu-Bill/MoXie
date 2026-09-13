@@ -41,9 +41,9 @@ jobs:
             echo "Generating api_config.dart from secret"
             cat > lib/config/api_config.dart <<EOF
           class ApiConfig {
-            static const String baseUrl = '$API_BASE_URL';
-            static const String apiEndpoint = '\$baseUrl/app_api.php';
-            static const String appVersion = '1.0.16';
+            static String baseUrl = '$API_BASE_URL';
+            static String get apiEndpoint => '\$baseUrl/app_api.php';
+            static const String appVersion = '1.0.17';
           }
           EOF
           fi
@@ -78,6 +78,11 @@ jobs:
         with:
           tag_name: apk-latest
           name: APK Latest
+          body: |
+            ## v1.0.17
+            - 新增：首次启动可设置 / 修改「服务器端点」（支持 HTTP+HTTPS，自动容错地址格式）
+            - 适配本地运行：不再依赖固定线上服务器，改为用户填写自己电脑的服务地址
+            - 服务器已下线，APP 需指向本地运行的服务
           files: app/myapp/build/app/outputs/flutter-apk/app-release.apk
           overwrite_files: true
           make_latest: true

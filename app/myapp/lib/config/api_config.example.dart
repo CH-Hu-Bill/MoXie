@@ -1,15 +1,12 @@
 /// API configuration template.
 ///
-/// Copy this file to `api_config.dart` and adjust [baseUrl] for local testing.
-/// In CI, this file is used as fallback when the `API_BASE_URL` GitHub Secret
-/// is not set. When the secret is set, CI generates `api_config.dart`
-/// automatically — the secret value should be the server origin only
-/// (e.g. `https://example.com`), without a trailing slash or `/app_api.php`.
+/// [baseUrl] 现在可在运行时由用户在「服务器端点」页修改（保存在 SharedPreferences），
+/// 这里的值仅作为内置默认（CI 可用 `API_BASE_URL` Secret 覆盖）。
+/// 因此不再是 const：`ApiConfig.baseUrl = ...`。
 class ApiConfig {
-  /// Local development: run `php -S 0.0.0.0:8000 -t web` from the
-  /// repository root, then use `http://127.0.0.1:8000/web` as [baseUrl].
-  static const String baseUrl = 'http://127.0.0.1:8000/web';
+  /// 内置默认端点（仅首次启动前的占位；用户首次启动会自定义并覆盖）。
+  static String baseUrl = 'http://127.0.0.1:8000/web';
 
-  static const String apiEndpoint = '$baseUrl/app_api.php';
-  static const String appVersion = '1.0.16';
+  static String get apiEndpoint => '$baseUrl/app_api.php';
+  static const String appVersion = '1.0.17';
 }

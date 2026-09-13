@@ -19,6 +19,12 @@ class StorageService {
     return _prefs!;
   }
 
+  // ── Server endpoint（用户自定的请求端点，运行时生效）──
+  Future<void> saveServerBaseUrl(String url) =>
+      _p.setString('server_base_url', url);
+  String? getServerBaseUrl() => _p.getString('server_base_url');
+  Future<void> clearServerBaseUrl() => _p.remove('server_base_url');
+
   // ── Auth ──
 
   Future<void> saveToken(String token) => _p.setString('auth_token', token);
