@@ -30,10 +30,11 @@ PORT=8080 ./dev.sh  # 指定端口
 双击 `install.bat`（自动请求管理员权限），会：
 
 1. 安装便携 PHP 8.2（启用 zip/gd/curl/mbstring/openssl）与 ffmpeg 到 `runtime/`
-2. 从镜像下载（可用镜像）
-3. 生成 `web/inc/config.php`（随机密钥）
-4. 注册**开机自启计划任务**并启动服务
-5. 控制台打印内网访问地址
+   - **离线兜底**：若根目录存在 `offline/php.zip` 与 `offline/ffmpeg.zip`，脚本优先使用，**无需联网**（适合网络差的电脑）
+   - 否则从官方源下载（PHP：windows.php.net；ffmpeg：gyan.dev → GitHub BtbN 兜底）
+2. 生成 `web/inc/config.php`（随机密钥）
+3. 注册**开机自启计划任务**并启动服务
+4. 控制台打印内网访问地址
 
 `update.bat` 更新，`uninstall.bat` 卸载自启，`run.bat` 手动前台启动。
 
@@ -106,9 +107,12 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 
 ### 8.2 非 APP 待办
 
-- **视频缩略图跨平台化**：`web/inc/db.php` 的 `generateVideoThumb()` 目前依赖 Composer 的 php-ffmpeg
-  + `web/bin/ffmpeg`（Linux 包装脚本）。计划改为**直接调用 ffmpeg**（`proc_open`/`exec`），
-  从 `runtime/ffmpeg` 或 PATH 解析二进制，去掉 Composer 依赖，兼容 Windows。
+- ✅ **视频缩略图跨平台化（已完成）**：`web/inc/db.php` 的 `generateVideoThumb()` 已改为**直接调用 ffmpeg**
+  （`proc_open`，`resolveFfmpegBinary()` 依次查找 `LISTENWRITE_FFMPEG` → `runtime/ffmpeg/bin` →
+  `web/bin` → PATH），去掉 Composer/php-ffmpeg 依赖，兼容 Windows。
+- ✅ **Windows 脚本编码修复（已完成）**：`install.ps1` / `update.ps1` 必须是 **UTF-8 with BOM**
+  （否则中文版 PowerShell 5.1 按 GBK 读会解析失败）；`.bat` 加 `chcp 65001`；生成的 `config.php`
+  用 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` 写成**无 BOM**（避免 BOM 污染 PHP 输出）。
 - **CI（可选）**：`API_BASE_URL` 目前仍可覆盖内置默认；Release 已附固定版本日志，后续可改为自动读取。
 - **网页端视频媒体缓存优化（可选）**：图集视频偶发重复缓冲。
 

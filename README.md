@@ -45,6 +45,7 @@
 1. 获取本仓库代码（`git clone` 或下载 ZIP）
 2. 双击 **`install.bat`**（自动请求管理员权限）：
    - 自动安装便携 PHP 8.2 与 ffmpeg 到 `runtime/`
+   - **无网络也不怕**：若存在 `offline/php.zip` 与 `offline/ffmpeg.zip`，脚本会直接使用它们，无需联网下载（可用 U 盘携带）
    - 生成 `web/inc/config.php`
    - 注册**开机自启**计划任务并启动服务
    - 控制台会打印内网访问地址（如 `http://192.168.x.x:8000`）
