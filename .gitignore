@@ -65,3 +65,14 @@ id_ed25519.pub
 
 # ── MCP 第三方服务器 ──
 .mcp-server-sftp/
+
+# ── 本机 AI 编码工具 / 临时文件 ──
+opencode.json
+opencode.json.*
+.serena/
+
+# ── Windows 一键脚本下载的运行时（PHP/ffmpeg，体积大，不入库）──
+/runtime/
+
+# ── 离线安装包（PHP/ffmpeg 的 zip，用于无网络机器；体积大，不入库）──
+/offline/
