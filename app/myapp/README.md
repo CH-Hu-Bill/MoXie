@@ -132,7 +132,7 @@ main.dart
 ### 方式一：GitHub Actions（推荐）
 
 1. **设置 Secret**：仓库 Settings → Secrets → Actions → 添加 `API_BASE_URL`
-   - 值为后端地址（如 `http://moxie.billspace.top`）
+   - 值为后端地址（如 `http://<你的内网IP>:8000`）
    - 不带 `/app_api.php`，不带尾部斜杠
 2. **触发构建**：推送改动到 `main`（需改动 `app/myapp/**`），或手动 Run workflow
 3. **下载**：run 详情页 → Artifacts → `listenwrite-release.apk`
