@@ -1,6 +1,9 @@
 <?php
 
 date_default_timezone_set('Asia/Shanghai');
+// HTML/JSON 页面一律禁止浏览器缓存：定位/列表等数据是服务端渲染，
+// 缓存会导致"新建任务后定位仍是旧位置"等不刷新问题（图片等静态资源在各自端点单独设长缓存）。
+if (PHP_SAPI !== 'cli') { header('Cache-Control: no-store'); }
 require_once __DIR__ . '/input.php';
 /**
  * ============================================================
@@ -763,8 +766,35 @@ class Database {
     }
 
     /**
-     * 用 ffmpeg (php-ffmpeg) 生成 MP4 首帧缩略图（best-effort，失败返回 false 不影响视频本身）。
-     * 依赖: 系统 ffmpeg 4.x (/usr/bin/ffmpeg) + composer 的 php-ffmpeg (vendor/autoload.php)。
+     * 解析 ffmpeg 可执行文件路径（跨平台，无 Composer 依赖）。
+     * 查找顺序：环境变量 LISTENWRITE_FFMPEG > runtime/ffmpeg/bin > web/bin > PATH。
+     *
+     * @return string|null 可用时返回绝对/相对路径，否则 null
+     */
+    private static function resolveFfmpegBinary() {
+        $isWin   = (DIRECTORY_SEPARATOR === '\\');
+        $binName = $isWin ? 'ffmpeg.exe' : 'ffmpeg';
+        $root    = dirname(__DIR__, 2); // 项目根目录
+        $candidates = [];
+        $env = getenv('LISTENWRITE_FFMPEG');
+        if ($env !== false && $env !== '') $candidates[] = $env;
+        $candidates[] = $root . '/runtime/ffmpeg/bin/' . $binName;
+        $candidates[] = $root . '/web/bin/' . $binName;
+        $path = getenv('PATH');
+        if ($path !== false && $path !== '') {
+            foreach (explode(PATH_SEPARATOR, $path) as $p) {
+                if ($p !== '') $candidates[] = rtrim($p, '/\\') . DIRECTORY_SEPARATOR . $binName;
+            }
+        }
+        foreach ($candidates as $c) {
+            if ($c !== '' && @is_file($c) && @is_executable($c)) return $c;
+        }
+        return null;
+    }
+
+    /**
+     * 生成 MP4 首帧缩略图（best-effort，失败返回 false 不影响视频本身）。
+     * 直接调用 ffmpeg（proc_open），兼容 Windows 与 Linux，无 Composer 依赖。
      * 首帧取 0.1s（部分手机视频第 0 帧为黑场），缩放至最长边 480px。
      *
      * @param string $classId 班级ID
@@ -776,38 +806,33 @@ class Database {
         if ($videoPath === null || strtolower(pathinfo($filename, PATHINFO_EXTENSION)) !== 'mp4') return false;
         $dir = self::getThumbsDirectory($classId);
         if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) return false;
-        // 0755：目录可能由 root 的 CLI 计划任务创建，需保证 Web 进程 (www) 可遍历读取
         @chmod($dir, 0755);
         $stem = substr($filename, 0, -4);
         $out = $dir . DIRECTORY_SEPARATOR . $stem . '.jpg';
         if (is_file($out)) return true; // 已生成过
-        $autoload = __DIR__ . '/../vendor/autoload.php';
-        if (!file_exists($autoload)) return false;
+
+        $ffmpeg = self::resolveFfmpegBinary();
+        if ($ffmpeg === null) return false;
+
         $tmp = $dir . DIRECTORY_SEPARATOR . $stem . '.tmp.jpg';
-        try {
-            require_once $autoload;
-            // 用项目内 bin/ 包装脚本作为二进制路径：php-ffmpeg 的 BinaryDriver 会用
-            // file_exists() 探测二进制，直接指 /usr/bin/ffmpeg 会被 open_basedir 拦截
-            // （user.ini 仅放行项目目录与 /tmp）。包装脚本经 exec 代理到系统 ffmpeg，
-            // exec 不受 open_basedir 限制。
-            $ffmpeg = FFMpeg\FFMpeg::create([
-                'ffmpeg.binaries'  => __DIR__ . '/../bin/ffmpeg',
-                'ffprobe.binaries' => __DIR__ . '/../bin/ffprobe',
-                'timeout'          => 20,
-                'ffmpeg.threads'   => 1,
-            ]);
-            $frame = $ffmpeg->open($videoPath)->frame(FFMpeg\Coordinate\TimeCode::fromSeconds(0.1));
-            $frame->addFilter(new FFMpeg\Filters\Frame\CustomFrameFilter('scale=480:-2'));
-            $frame->save($tmp);
-            if (!is_file($tmp) || filesize($tmp) === 0) { @unlink($tmp); return false; }
-            if (!@rename($tmp, $out)) { @unlink($tmp); return false; }
-            // 0644：缩略图可能由 root 的 CLI 计划任务生成，需让 Web 进程 (www) 可读
-            @chmod($out, 0644);
-            return true;
-        } catch (Throwable $e) {
-            @unlink($tmp);
-            return false;
-        }
+        // -ss 放在 -i 前为快速定位；image2 单帧输出到临时文件后原子重命名
+        $cmd = escapeshellarg($ffmpeg)
+             . ' -hide_banner -loglevel error -y'
+             . ' -ss 0.1 -i ' . escapeshellarg($videoPath)
+             . ' -frames:v 1 -vf ' . escapeshellarg('scale=480:-2')
+             . ' -f image2 ' . escapeshellarg($tmp);
+        $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $proc = @proc_open($cmd, $descriptors, $pipes, null, null);
+        if (!is_resource($proc)) { @unlink($tmp); return false; }
+        fclose($pipes[0]);
+        if (isset($pipes[1])) { @stream_get_contents($pipes[1]); fclose($pipes[1]); }
+        if (isset($pipes[2])) { @stream_get_contents($pipes[2]); fclose($pipes[2]); }
+        $code = @proc_close($proc);
+        if ($code !== 0 || !is_file($tmp) || filesize($tmp) === 0) { @unlink($tmp); return false; }
+        if (!@rename($tmp, $out)) { @unlink($tmp); return false; }
+        // 0644：缩略图可能由 CLI 计划任务生成，需让 Web 进程可读
+        @chmod($out, 0644);
+        return true;
     }
 
     /**

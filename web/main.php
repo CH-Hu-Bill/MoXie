@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * ============================================================
  * 功能主界面
@@ -70,6 +70,12 @@ foreach ($tasks as $t) {
     }
 }
 $weekUniqueWords = array_values(array_unique($weekWordIds));
+// 周末大礼包仅取「单词」类型（句子/作文不参与）
+$mainWordMap = [];
+foreach ($words as $w) { $mainWordMap[(string)$w['id']] = $w; }
+$weekUniqueWords = array_values(array_filter($weekUniqueWords, function($wid) use ($mainWordMap) {
+    return isset($mainWordMap[$wid]) && (($mainWordMap[$wid]['type'] ?? 'word') === 'word');
+}));
 $weekWordCount = count($weekUniqueWords);
 
 // Determine weekend card state
@@ -152,7 +158,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
     foreach ($words as $w) {
         if (strpos(mb_strtolower($w['word']), $queryLower) !== false ||
             strpos(mb_strtolower($w['meaning']), $queryLower) !== false) {
-            $wordResults[] = ['id' => $w['id'], 'word' => $w['word'], 'meaning' => $w['meaning'], 'pos' => $w['pos'] ?? ''];
+            $wordResults[] = ['id' => $w['id'], 'word' => $w['word'], 'meaning' => $w['meaning'], 'pos' => $w['pos'] ?? '', 'type' => $w['type'] ?? 'word'];
         }
     }
 
@@ -168,7 +174,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
                 $mw = $wordMap[$wid];
                 if (strpos(mb_strtolower($mw['word']), $queryLower) !== false ||
                     strpos(mb_strtolower($mw['meaning']), $queryLower) !== false) {
-                    $matched[] = ['id' => $mw['id'], 'word' => $mw['word'], 'meaning' => $mw['meaning'], 'pos' => $mw['pos'] ?? ''];
+                    $matched[] = ['id' => $mw['id'], 'word' => $mw['word'], 'meaning' => $mw['meaning'], 'pos' => $mw['pos'] ?? '', 'type' => $mw['type'] ?? 'word'];
                 }
             }
         }
@@ -188,7 +194,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
                 $mw = $wordMap[$wid];
                 if (strpos(mb_strtolower($mw['word']), $queryLower) !== false ||
                     strpos(mb_strtolower($mw['meaning']), $queryLower) !== false) {
-                    $matched[] = ['id' => $mw['id'], 'word' => $mw['word'], 'meaning' => $mw['meaning'], 'pos' => $mw['pos'] ?? ''];
+                    $matched[] = ['id' => $mw['id'], 'word' => $mw['word'], 'meaning' => $mw['meaning'], 'pos' => $mw['pos'] ?? '', 'type' => $mw['type'] ?? 'word'];
                 }
             }
         }
@@ -212,7 +218,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'translate_quote') {
     $quote = trim(reqPost('quote'));
     if (!$quote) { echo json_encode(['success' => false, 'error' => '无内容']); exit; }
     require_once 'inc/api.php';
-    $result = DeepSeekAPI::call([
+    $result = AIClient::call($classId, [
         ['role' => 'system', 'content' => '将英文名言及作者名翻译成中文，保持原文风格。只返回中文译文（含作者名翻译），不要任何解释。'],
         ['role' => 'user', 'content' => $quote],
     ], 256, 15);
@@ -248,8 +254,8 @@ require 'inc/header.php';
     <div class="menu-grid">
         <div class="card menu-card" onclick="showOkOverlayThen('words.php?id=<?php echo $classId; ?>')">
             <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
-            <div class="title">单词库</div>
-            <div class="desc">管理班级单词</div>
+            <div class="title">知识库</div>
+            <div class="desc">管理单词 / 句子 / 作文</div>
         </div>
         <div class="card menu-card" onclick="showOkOverlayThen('task.php?id=<?php echo $classId; ?>')">
             <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
@@ -301,6 +307,11 @@ require 'inc/header.php';
             <div class="title">展示大屏</div>
             <div class="desc">壁纸投屏模式</div>
         </div>
+        <div class="card menu-card" onclick="showOkOverlayThen('export.php?id=<?php echo $classId; ?>')">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+            <div class="title">超级导出</div>
+            <div class="desc">打包班级数据</div>
+        </div>
         <div class="card menu-card" onclick="showOkOverlayThen('download_app.php')">
             <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
             <div class="title">下载 APP</div>
@@ -312,7 +323,7 @@ require 'inc/header.php';
         <div class="stats">
             <div style="text-align:center;">
                 <div class="stat-value"><?php echo $totalWords; ?></div>
-                <div class="stat-label">单词库总数</div>
+                <div class="stat-label">知识库总数</div>
             </div>
             <div style="text-align:center;">
                 <div class="stat-value"><?php echo $uniqueWordCount; ?></div>
@@ -327,7 +338,7 @@ require 'inc/header.php';
     </div>
 </div>
 
-    <script src="common.js?v=10"></script>
+    <script src="common.js?v=12"></script>
     <script>
         // SVG 线条图标助手（代替 emoji，统一手绘线条风）
         function iconSvg(name, size) {
@@ -402,7 +413,10 @@ require 'inc/header.php';
         var srWordsTotal = 0;
 
         function srWordItemHtml(w) {
-            return '<div class="sr-item" onclick="showOkOverlayThen(\'words.php?id='+classId+'&highlight='+encodeURIComponent(w.id)+'\')"><span><span class="word">'+escHtml2(w.word)+'</span><span class="meaning">'+escHtml2(w.meaning)+'</span></span><span class="arrow">›</span></div>';
+            const t = w.type || 'word';
+            const tag = t === 'sentence' ? '<span style="font-size:11px;color:var(--blue);margin-left:6px;">[句]</span>'
+                : (t === 'essay' ? '<span style="font-size:11px;color:var(--red);margin-left:6px;">[文]</span>' : '');
+            return '<div class="sr-item" onclick="showOkOverlayThen(\'words.php?id='+classId+'&highlight='+encodeURIComponent(w.id)+'\')"><span><span class="word">'+escHtml2(w.word)+'</span>'+tag+'<span class="meaning">'+escHtml2(w.meaning)+'</span></span><span class="arrow">›</span></div>';
         }
 
         function updateSrWordsMore() {
@@ -464,7 +478,7 @@ require 'inc/header.php';
                 const data = d.data;
                 srQuery = q; srWordsOffset = data.words.items.length; srWordsTotal = data.words.total;
                 let html = '';
-                html += '<div class="sr-group"><div class="sr-group-title">' + iconSvg('book') + ' 单词库 (' + data.words.total + '条)</div>';
+                html += '<div class="sr-group"><div class="sr-group-title">' + iconSvg('book') + ' 知识库 (' + data.words.total + '条)</div>';
                 if (data.words.total === 0) html += '<div class="sr-empty" style="padding:8px;">无匹配结果</div>';
                 else {
                     html += '<div id="srWordsList">' + data.words.items.map(srWordItemHtml).join('') + '</div>';
@@ -527,7 +541,7 @@ require 'inc/header.php';
             if (localStorage.getItem('guide_done')) return;
             const steps = [
                 { title: '欢迎使用 ListenWrite', desc: '这是一个班级单词学习工具，帮助您高效管理单词、进行默写练习。' },
-                { title: '单词库', desc: '管理班级所有单词。可以添加、编辑、批量导入单词，AI 智能补全释义。', icon: 'book' },
+                { title: '知识库', desc: '管理班级的单词、句子与作文。可添加、编辑、批量导入，AI 智能补全或直译。', icon: 'book' },
                 { title: '默写任务', desc: '选择单词创建默写任务，支持听写模式。完成任务后可在历史记录中查看。', icon: 'edit' },
                 { title: '默写记录', desc: '查看所有已完成和已取消的任务。可以重新创建任务或查看单词详情。', icon: 'clipboard' },
                 { title: '搜索功能', desc: '在上方搜索框输入单词或释义，可以快速查找词库、任务和历史中的内容。', icon: 'search' },

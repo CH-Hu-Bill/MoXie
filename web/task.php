@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * ============================================================
  * 默写任务页面 (重构版)
@@ -75,7 +75,7 @@ if (isset($_POST['action'])) {
     if ($_POST['action'] === 'pron_list') {
         header('Cache-Control: no-store');
         $pronWordId = $_POST['word_id'] ?? '';
-        if (!is_string($pronWordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $pronWordId)) {
+        if (!is_string($pronWordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $pronWordId)) {
             echo json_encode(['success' => false, 'error' => '参数无效']); exit;
         }
         $pron = Database::getClassData($classId, 'pronunciations');
@@ -136,6 +136,23 @@ if (isset($_POST['action'])) {
 
 $wordMap = [];
 foreach ($words as $w) { $wordMap[$w['id']] = $w; }
+
+// 选中任务按类型分组（旧数据缺省 word）
+$taskWordItems = []; $taskSentenceItems = []; $taskEssayItems = [];
+$taskTypeMap = [];
+if ($selectedTask) {
+    foreach (($selectedTask['word_ids'] ?? []) as $wid) {
+        if (!isset($wordMap[$wid])) continue;
+        $w = $wordMap[$wid];
+        $t = $w['type'] ?? 'word';
+        if (!in_array($t, ['word', 'sentence', 'essay'], true)) $t = 'word';
+        $taskTypeMap[$wid] = $t;
+        if ($t === 'sentence') $taskSentenceItems[] = $w;
+        elseif ($t === 'essay') $taskEssayItems[] = $w;
+        else $taskWordItems[] = $w;
+    }
+}
+$taskHasMixed = !empty($taskSentenceItems) || !empty($taskEssayItems);
 ?>
 <?php $pageTitle = '默写任务'; require 'inc/head.php'; ?>
 
@@ -153,7 +170,7 @@ if ($selectedTask):
         . '<div style="display:flex;background:var(--old-paper);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);overflow:hidden;">'
         . '<button id="showModeBtn" class="btn btn-sm mode-btn active" onclick="setMode(\'show\')">展示</button>'
         . '<button id="hideModeBtn" class="btn btn-sm mode-btn" onclick="setMode(\'hide\')">默写</button>'
-        . '<button id="dictModeBtn" class="btn btn-sm mode-btn" onclick="setMode(\'dict\')">听写</button>'
+        . ($taskHasMixed ? '' : '<button id="dictModeBtn" class="btn btn-sm mode-btn" onclick="setMode(\'dict\')">听写</button>')
         . '</div>';
 endif;
 require 'inc/header.php';
@@ -194,7 +211,19 @@ require 'inc/header.php';
             </div>
             <div class="tl-info">
                 <div class="tl-label"><?php echo htmlspecialchars($t['label'] ?? '任务'); ?></div>
-                <div class="tl-meta"><?php echo count($t['word_ids'] ?? []); ?> 个单词</div>
+                <div class="tl-meta"><?php
+                    $tc = ['word' => 0, 'sentence' => 0, 'essay' => 0];
+                    foreach (($t['word_ids'] ?? []) as $twid) {
+                        if (!isset($wordMap[$twid])) continue;
+                        $tt = $wordMap[$twid]['type'] ?? 'word';
+                        if (isset($tc[$tt])) $tc[$tt]++;
+                    }
+                    $metaParts = [];
+                    if ($tc['word']) $metaParts[] = $tc['word'] . ' 单词';
+                    if ($tc['sentence']) $metaParts[] = $tc['sentence'] . ' 句子';
+                    if ($tc['essay']) $metaParts[] = $tc['essay'] . ' 作文';
+                    echo $metaParts ? implode(' · ', $metaParts) : '0 项';
+                ?></div>
             </div>
             <span class="tl-arrow">›</span>
         </div>
@@ -214,23 +243,42 @@ require 'inc/header.php';
         <?php endif; ?>
     </div>
     <div class="word-grid" id="wordGrid">
-        <?php foreach ($selectedTask['word_ids'] as $wid): ?>
-            <?php if (isset($wordMap[$wid])): $w = $wordMap[$wid]; ?>
-                <div class="word-card" data-id="<?php echo htmlspecialchars($w['id']); ?>" data-word="<?php echo htmlspecialchars($w['word']); ?>">
-                    <div class="card-body">
-                        <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
-                        <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
-                        <div class="divider" style="width:45%;height:1.5px;background:#ddd;margin:10px 0;"></div>
-                        <?php if ($w['pos']): ?>
-                            <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
-                        <?php endif; ?>
-                    </div>
-                    <button class="speaker" onclick='speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
-                    <button class="speaker pron-btn" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
+        <?php foreach ($taskWordItems as $w): ?>
+            <div class="word-card" data-id="<?php echo htmlspecialchars($w['id']); ?>" data-word="<?php echo htmlspecialchars($w['word']); ?>">
+                <div class="card-body">
+                    <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
+                    <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
+                    <div class="divider" style="width:45%;height:1.5px;background:#ddd;margin:10px 0;"></div>
+                    <?php if ($w['pos']): ?>
+                        <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+                <button class="speaker" onclick='speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                <button class="speaker pron-btn" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
+            </div>
         <?php endforeach; ?>
     </div>
+    <?php if (!empty($taskSentenceItems)): ?>
+    <div class="task-extra" id="taskSentenceSection">
+        <?php foreach ($taskSentenceItems as $s): ?>
+            <div class="task-line-card" data-id="<?php echo htmlspecialchars($s['id']); ?>" data-type="sentence">
+                <div class="task-line-en" lang="en"><?php echo htmlspecialchars($s['word']); ?></div>
+                <div class="task-line-zh"><?php echo htmlspecialchars($s['meaning']); ?></div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <?php if (!empty($taskEssayItems)): ?>
+    <div class="task-extra" id="taskEssaySection">
+        <?php foreach ($taskEssayItems as $e): ?>
+            <div class="task-line-card" data-id="<?php echo htmlspecialchars($e['id']); ?>" data-type="essay">
+                <?php if (!empty($e['title'])): ?><div class="task-line-title"><?php echo htmlspecialchars($e['title']); ?></div><?php endif; ?>
+                <div class="task-line-en"><?php echo nl2br(htmlspecialchars($e['word'])); ?></div>
+                <div class="task-line-zh"><?php echo nl2br(htmlspecialchars($e['meaning'])); ?></div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
 
     <!-- Dictation UI (hidden by default) -->
     <div id="dictationUI" style="display:none;">
@@ -310,7 +358,7 @@ require 'inc/header.php';
     <input type="hidden" name="task_id" id="completeTaskId" value="<?php echo $selectedTask['id'] ?? ''; ?>">
 </form>
 
-<script src="common.js?v=10"></script>
+<script src="common.js?v=12"></script>
 <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
 <?php if ($selectedTask): ?>
 <script>
@@ -331,7 +379,10 @@ require 'inc/header.php';
         currentMode = mode;
         document.getElementById('showModeBtn').classList.toggle('active', mode === 'show');
         document.getElementById('hideModeBtn').classList.toggle('active', mode === 'hide');
-        document.getElementById('dictModeBtn').classList.toggle('active', mode === 'dict');
+        const dictBtn = document.getElementById('dictModeBtn');
+        if (dictBtn) dictBtn.classList.toggle('active', mode === 'dict');
+        const execView = document.getElementById('execView');
+        if (execView) execView.classList.toggle('hide-mode', mode === 'hide');
 
         const wordGrid = document.getElementById('wordGrid');
         const dictUI = document.getElementById('dictationUI');
@@ -360,7 +411,7 @@ require 'inc/header.php';
             if (followBtn) followBtn.style.display = (mode === 'show') ? '' : 'none';
             
             dictUI.style.display = 'none';
-            wordGrid.querySelectorAll('.word-card').forEach(card => card.classList.toggle('hide-word', mode === 'hide'));
+            if (wordGrid) wordGrid.querySelectorAll('.word-card').forEach(card => card.classList.toggle('hide-word', mode === 'hide'));
         }
 
         // 听写模式下隐藏顶栏 完成/取消 按钮（听写有自己的完成流程），其余模式显示
@@ -371,7 +422,7 @@ require 'inc/header.php';
         if (cancelBtn) cancelBtn.style.display = showActionBtns ? '' : 'none';
 
         // 默写模式下隐藏单词卡发音键（避免听音得到提示）
-        wordGrid.querySelectorAll('.word-card .speaker').forEach(btn => {
+        if (wordGrid) wordGrid.querySelectorAll('.word-card .speaker').forEach(btn => {
             btn.style.display = (mode === 'hide') ? 'none' : '';
         });
     }
@@ -695,7 +746,7 @@ require 'inc/header.php';
     // ==================== Task Follow-along ====================
     let taskFollowCtrl = null, taskFollowPaused = false, taskFollowCollapsed = false, taskFollowCollapseTimer = null, taskFollowSessionSeq = 0;
     const taskWords = [];
-    for (const wid of taskWordIds) { if (wordMapData[wid]) taskWords.push(wordMapData[wid].word); }
+    for (const wid of taskWordIds) { if (wordMapData[wid] && (wordMapData[wid].type || 'word') === 'word') taskWords.push(wordMapData[wid].word); }
 
     function showTaskFollow() { document.getElementById('taskFollowModal').classList.add('active'); }
     function closeTaskFollowModal() {
@@ -763,7 +814,9 @@ require 'inc/header.php';
                     // 显示完成态 N/N 片刻后再收尾
                     document.getElementById('taskFollowProgress').textContent = playWords.length + '/' + playWords.length;
                     document.getElementById('taskFollowWord').textContent = '完成';
-                    showToast('跟读完成', 'success');
+                    var _tfc = info.failedCount || 0;
+                    if (_tfc > 0) showToast('跟读完成，' + _tfc + ' 个单词无发音已跳过', '');
+                    else showToast('跟读完成', 'success');
                     setTimeout(function() {
                         if (mySeq === taskFollowSessionSeq) {
                             document.getElementById('taskFollowPlayer').style.display = 'none';
@@ -772,8 +825,8 @@ require 'inc/header.php';
                     }, 800);
                 }
             } else {
-                // Always update display text
-                document.getElementById('taskFollowWord').textContent = info.word;
+                // Always update display text（无发音的词加提示）
+                document.getElementById('taskFollowWord').textContent = info.failed ? (info.word + '（无发音）') : info.word;
                 document.getElementById('taskFollowProgress').textContent = info.index + '/' + info.total;
                 // Highlight and scroll to current word card
                 document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });

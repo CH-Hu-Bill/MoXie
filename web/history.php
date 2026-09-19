@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * ============================================================
  * 历史记录页面
@@ -37,7 +37,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'pron_list') {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store');
     $pronWordId = $_POST['word_id'] ?? '';
-    if (!is_string($pronWordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $pronWordId)) {
+    if (!is_string($pronWordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $pronWordId)) {
         echo json_encode(['success' => false, 'error' => '参数无效']); exit;
     }
     $pron = Database::getClassData($classId, 'pronunciations');
@@ -76,6 +76,20 @@ $selectedTask = null;
 if ($selectedTaskId && isset($tasks[$selectedTaskId])) { $selectedTask = $tasks[$selectedTaskId]; }
 $wordMap = [];
 foreach ($words as $w) { $wordMap[$w['id']] = $w; }
+
+// 选中任务按类型分组（旧数据缺省 word）
+$hWordItems = []; $hSentenceItems = []; $hEssayItems = [];
+if ($selectedTask) {
+    foreach (($selectedTask['word_ids'] ?? []) as $wid) {
+        if (!isset($wordMap[$wid])) continue;
+        $w = $wordMap[$wid];
+        $t = $w['type'] ?? 'word';
+        if (!in_array($t, ['word', 'sentence', 'essay'], true)) $t = 'word';
+        if ($t === 'sentence') $hSentenceItems[] = $w;
+        elseif ($t === 'essay') $hEssayItems[] = $w;
+        else $hWordItems[] = $w;
+    }
+}
 ?>
 <?php $pageTitle = '默写记录'; require 'inc/head.php'; ?>
 <body>
@@ -112,33 +126,54 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
                     <div class="status <?php echo $selectedTask['status']; ?>"><?php echo $selectedTask['status'] === 'completed' ? '已完成' : '已取消'; ?></div>
                 </div>
                 <div class="word-grid">
-                    <?php foreach ($selectedTask['word_ids'] as $wid): ?>
-                        <?php if (isset($wordMap[$wid])): $w = $wordMap[$wid]; ?>
-                            <div class="word-card <?php echo $selectedTask['status']; ?>" data-id="<?php echo htmlspecialchars($w['id']); ?>">
-                                <?php if ($selectedTask['status'] === 'cancelled'): ?>
-                                    <div class="cancel-badge">已取消</div>
+                    <?php foreach ($hWordItems as $w): ?>
+                        <div class="word-card <?php echo $selectedTask['status']; ?>" data-id="<?php echo htmlspecialchars($w['id']); ?>">
+                            <?php if ($selectedTask['status'] === 'cancelled'): ?>
+                                <div class="cancel-badge">已取消</div>
+                            <?php endif; ?>
+                            <div class="card-body">
+                                <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
+                                <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
+                                <?php if ($w['pos']): ?>
+                                    <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
                                 <?php endif; ?>
-                                <div class="card-body">
-                                    <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
-                                    <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
-                                    <?php if ($w['pos']): ?>
-                                        <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
-                                    <?php endif; ?>
-                                </div>
-                                <button class="speaker" onclick='speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
-                                <button class="speaker pron-btn" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
                             </div>
-                        <?php endif; ?>
+                            <button class="speaker" onclick='speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                            <button class="speaker pron-btn" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
+                        </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if (!empty($hSentenceItems)): ?>
+                <div class="task-extra">
+                    <?php foreach ($hSentenceItems as $s): ?>
+                        <div class="task-line-card <?php echo $selectedTask['status']; ?>" data-id="<?php echo htmlspecialchars($s['id']); ?>">
+                            <?php if ($selectedTask['status'] === 'cancelled'): ?><div class="cancel-badge">已取消</div><?php endif; ?>
+                            <div class="task-line-en" lang="en"><?php echo htmlspecialchars($s['word']); ?></div>
+                            <div class="task-line-zh"><?php echo htmlspecialchars($s['meaning']); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($hEssayItems)): ?>
+                <div class="task-extra">
+                    <?php foreach ($hEssayItems as $e): ?>
+                        <div class="task-line-card <?php echo $selectedTask['status']; ?>" data-id="<?php echo htmlspecialchars($e['id']); ?>">
+                            <?php if ($selectedTask['status'] === 'cancelled'): ?><div class="cancel-badge">已取消</div><?php endif; ?>
+                            <?php if (!empty($e['title'])): ?><div class="task-line-title"><?php echo htmlspecialchars($e['title']); ?></div><?php endif; ?>
+                            <div class="task-line-en"><?php echo nl2br(htmlspecialchars($e['word'])); ?></div>
+                            <div class="task-line-zh"><?php echo nl2br(htmlspecialchars($e['meaning'])); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
                 <?php if ($selectedTask['status'] === 'completed' || $selectedTask['status'] === 'cancelled'): ?>
-                    <button class="btn btn-primary mt-4" style="width:100%;" onclick="recreateTask()">用这些单词重新创建任务</button>
+                    <button class="btn btn-primary mt-4" style="width:100%;" onclick="recreateTask()">用这些内容重新创建任务</button>
                 <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
 
-    <script src="common.js?v=10"></script>
+    <script src="common.js?v=12"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
@@ -147,7 +182,7 @@ foreach ($words as $w) { $wordMap[$w['id']] = $w; }
         window.addEventListener('load', function() {
             initMarquee();
             const highlightId = <?php echo json_encode($highlightId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-            const card = document.querySelector('.word-card[data-id="' + CSS.escape(highlightId) + '"]');
+            const card = document.querySelector('.word-card[data-id="' + CSS.escape(highlightId) + '"], .task-line-card[data-id="' + CSS.escape(highlightId) + '"]');
             if (highlightId && card) { card.classList.add('follow-highlight'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
         });
 

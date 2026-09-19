@@ -70,6 +70,102 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_class') {
         $createError = '班级名或口令格式不正确';
     }
 }
+
+// ---- 从 zip 导入班级（不含任何用户账号信息）----
+if (isset($_POST['action']) && $_POST['action'] === 'import_class') {
+    header('Content-Type: application/json; charset=UTF-8');
+    requireCsrf();
+    $newName = trim(reqPost('class_name'));
+    $newPw = trim(reqPost('class_password'));
+    if ($newName === '' || mb_strlen($newName) > 30) { echo json_encode(['success' => false, 'error' => '班级名称格式不正确']); exit; }
+    if (mb_strlen($newPw) < 4 || !preg_match('/^[a-zA-Z0-9]+$/', $newPw)) { echo json_encode(['success' => false, 'error' => '口令需至少4位字母或数字']); exit; }
+    foreach ($classes as $c) {
+        if (mb_strtolower((string)($c['name'] ?? '')) === mb_strtolower($newName)) { echo json_encode(['success' => false, 'error' => '班级名已存在，请换一个名称']); exit; }
+    }
+    if (!isset($_FILES['zip_file']) || $_FILES['zip_file']['error'] !== UPLOAD_ERR_OK) { echo json_encode(['success' => false, 'error' => '请选择要导入的 zip 文件']); exit; }
+    if (!class_exists('ZipArchive')) { echo json_encode(['success' => false, 'error' => '服务器未启用 zip 扩展']); exit; }
+    if (filesize($_FILES['zip_file']['tmp_name']) > 300 * 1024 * 1024) { echo json_encode(['success' => false, 'error' => '文件过大（上限 300MB）']); exit; }
+
+    $zip = new ZipArchive();
+    if ($zip->open($_FILES['zip_file']['tmp_name']) !== true) { echo json_encode(['success' => false, 'error' => '无法读取 zip 文件']); exit; }
+    $manifestRaw = $zip->getFromName('manifest.json');
+    $manifest = $manifestRaw ? json_decode($manifestRaw, true) : null;
+    if (!is_array($manifest) || ($manifest['type'] ?? '') !== 'listenwrite-class-export') {
+        $zip->close(); echo json_encode(['success' => false, 'error' => '不是有效的班级导出文件']); exit;
+    }
+    if ($zip->numFiles > 20000) { $zip->close(); echo json_encode(['success' => false, 'error' => '文件条目过多']); exit; }
+    $totalUncompressed = 0;
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $st = $zip->statIndex($i);
+        $totalUncompressed += (int)($st['size'] ?? 0);
+        if ($totalUncompressed > 1024 * 1024 * 1024) break;
+    }
+    if ($totalUncompressed > 1024 * 1024 * 1024) { $zip->close(); echo json_encode(['success' => false, 'error' => '压缩包解压后过大']); exit; }
+
+    $newId = uniqid();
+    $destDir = Database::getClassDir($newId);
+    if (!is_dir($destDir) && !@mkdir($destDir, 0750, true) && !is_dir($destDir)) {
+        $zip->close(); echo json_encode(['success' => false, 'error' => '无法创建班级目录']); exit;
+    }
+    $words = []; $tasks = []; $history = []; $gallery = []; $pron = []; $settingsSub = null;
+    $uploadsDir = $destDir . '/uploads';
+    $pronDir = $destDir . '/pronunciations';
+    $badPath = false;
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        if ($name === false) continue;
+        $name = str_replace('\\', '/', $name);
+        if ($name === '' || $name[0] === '/' || strpos($name, '..') !== false) { $badPath = true; break; }
+        if ($name === 'words.json') { $d = json_decode($zip->getFromIndex($i), true); if (is_array($d)) $words = $d; }
+        elseif ($name === 'tasks.json') { $d = json_decode($zip->getFromIndex($i), true); if (is_array($d)) $tasks = $d; }
+        elseif ($name === 'history.json') { $d = json_decode($zip->getFromIndex($i), true); if (is_array($d)) $history = $d; }
+        elseif ($name === 'gallery.json') { $d = json_decode($zip->getFromIndex($i), true); if (is_array($d)) $gallery = $d; }
+        elseif ($name === 'pronunciations.json') { $d = json_decode($zip->getFromIndex($i), true); if (is_array($d)) $pron = $d; }
+        elseif ($name === 'settings_class.json') { $d = json_decode($zip->getFromIndex($i), true); if (is_array($d)) $settingsSub = $d; }
+        elseif (preg_match('#^uploads/([A-Za-z0-9._-]{1,128})$#', $name, $m)) {
+            if (!is_dir($uploadsDir)) @mkdir($uploadsDir, 0750, true);
+            @file_put_contents($uploadsDir . '/' . $m[1], $zip->getFromIndex($i));
+        }
+        elseif (preg_match('#^pronunciations/([A-Za-z0-9_-]{1,64})/([a-f0-9]{32}\.m4a)$#', $name, $m)) {
+            $d = $pronDir . '/' . $m[1];
+            if (!is_dir($d)) @mkdir($d, 0750, true);
+            @file_put_contents($d . '/' . $m[2], $zip->getFromIndex($i));
+        }
+        // 其它条目一律忽略（不导入任何用户数据）
+    }
+    $zip->close();
+    if ($badPath) {
+        Database::deleteClassDataDir($newId);
+        echo json_encode(['success' => false, 'error' => '压缩包内含非法路径，已终止导入']); exit;
+    }
+    if (!empty($words)) Database::saveWords($newId, array_values($words));
+    if (!empty($tasks)) {
+        // 导入的进行中任务若已超过任务日期，视为已完成
+        $importToday = date('Y-m-d');
+        foreach ($tasks as $tid => $tk) {
+            if (($tk['status'] ?? '') === 'pending' && ($tk['date'] ?? '') !== '' && $tk['date'] < $importToday) {
+                $tasks[$tid]['status'] = 'completed';
+            }
+        }
+        Database::saveTasks($newId, $tasks);
+    }
+    if (!empty($history)) Database::saveClassData($newId, 'history', $history);
+    if (!empty($gallery)) Database::saveClassData($newId, 'gallery', $gallery);
+    if (!empty($pron)) Database::saveClassData($newId, 'pronunciations', $pron);
+    if (is_array($settingsSub)) {
+        $allSettings = Database::getSettings();
+        foreach ($settingsSub as $k => $v) {
+            $allSettings[($k === 'ai' ? 'ai_' : $k . '_') . $newId] = $v;
+        }
+        Database::saveSettings($allSettings);
+    }
+    $classes[$newId] = ['id' => $newId, 'name' => $newName, 'created_at' => date('Y-m-d H:i:s'), 'password_hash' => password_hash($newPw, PASSWORD_DEFAULT), 'auth_version' => 1];
+    Database::saveClasses($classes);
+    setSecureCookie('current_class_id', $newId, time() + 86400 * 365);
+    setClassAuthCookie($newId, 1);
+    echo json_encode(['success' => true, 'class_id' => $newId]); exit;
+}
+
 $hasNoClass = empty($classes);
 $needAuth = reqGet('need_auth');
 if (!empty($createError)) {
@@ -106,8 +202,9 @@ require 'inc/head.php';
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
-            <div style="margin-top:16px;">
-                <button class="btn btn-primary" style="width:100%;" onclick="document.getElementById('modal').classList.add('active')">+ 新建班级</button>
+            <div style="margin-top:16px;display:flex;gap:10px;">
+                <button class="btn btn-primary" style="flex:1;" onclick="document.getElementById('modal').classList.add('active')">+ 新建班级</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('importModal').classList.add('active')">导入班级</button>
             </div>
         </div>
     </div>
@@ -128,6 +225,25 @@ require 'inc/head.php';
                         <button type="button" class="cancel" onclick="document.getElementById('modal').classList.remove('active')">取消</button>
                     <?php endif; ?>
                     <button type="submit" class="submit">确认创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="importModal">
+        <div class="modal-content">
+            <div class="modal-title">导入班级</div>
+            <div style="font-size:12px;color:#888;line-height:1.7;margin-bottom:12px;">
+                选择之前「超级导出」的 zip 文件。导入后需在 APP 重新注册账号（导出文件不含任何用户信息）。
+            </div>
+            <form id="importForm">
+                <div class="form-group"><input type="file" name="zip_file" accept=".zip" class="input" style="width:100%;"></div>
+                <input type="text" id="importClassName" class="input" placeholder="新班级名称" maxlength="30" style="margin-bottom:14px;">
+                <input type="password" id="importClassPw" class="input" placeholder="设置班级口令（至少4位字母或数字）" minlength="4" pattern="[a-zA-Z0-9]+" style="margin-bottom:14px;">
+                <div style="color:var(--red);font-size:13px;text-align:center;min-height:18px;" id="importError"></div>
+                <div class="modal-btns">
+                    <button type="button" class="cancel" onclick="document.getElementById('importModal').classList.remove('active')">取消</button>
+                    <button type="button" class="submit" onclick="importClass()">导入</button>
                 </div>
             </form>
         </div>
@@ -207,6 +323,31 @@ require 'inc/head.php';
 
         if (pendingAutoId) {
             setTimeout(function() { showPwModal(pendingAutoId); }, 300);
+        }
+
+        async function importClass() {
+            const fi = document.querySelector('#importForm input[name="zip_file"]');
+            const name = document.getElementById('importClassName').value.trim();
+            const pw = document.getElementById('importClassPw').value.trim();
+            const err = document.getElementById('importError');
+            err.textContent = '';
+            if (!fi.files[0]) { err.textContent = '请选择 zip 文件'; return; }
+            if (!name) { err.textContent = '请输入班级名称'; return; }
+            if (pw.length < 4 || !/^[a-zA-Z0-9]+$/.test(pw)) { err.textContent = '口令需至少4位字母或数字'; return; }
+            const btn = document.querySelector('#importModal .submit');
+            btn.disabled = true; btn.textContent = '导入中...';
+            const fd = new FormData();
+            fd.append('action', 'import_class');
+            fd.append('zip_file', fi.files[0]);
+            fd.append('class_name', name);
+            fd.append('class_password', pw);
+            fd.append('csrf_token', <?php echo json_encode($csrfToken); ?>);
+            try {
+                const d = await (await fetch('index.php?switch=1', { method: 'POST', body: fd })).json();
+                if (d.success) { location.href = 'main.php?id=' + d.class_id; }
+                else { err.textContent = d.error || '导入失败'; }
+            } catch(e) { err.textContent = '网络异常，请重试'; }
+            btn.disabled = false; btn.textContent = '导入';
         }
 
         function selectClass(id) {

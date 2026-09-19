@@ -28,7 +28,7 @@ $classes = Database::getClasses();
 if (!isset($classes[$classId])) pronError('班级不存在', 404);
 
 $wordId = reqGet('word_id');
-if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) pronError('单词参数无效', 400);
+if (!is_string($wordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $wordId)) pronError('单词参数无效', 400);
 
 $file = reqGet('file');
 if (!is_string($file) || !preg_match('/\A[a-f0-9]{32}\.m4a\z/D', $file)) pronError('文件参数无效', 400);

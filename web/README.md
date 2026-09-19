@@ -145,45 +145,44 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 
 ---
 
-## 部署指南
+## 部署 / 本地运行
 
-1. **上传代码**：将本目录内容上传到服务器网站根目录。
+本项目为**本地运行**设计，原线上服务器已下线。
 
-2. **创建配置文件**：复制模板并填入真实密钥
-   ```bash
-   cp inc/config.example.php inc/config.php
-   ```
-   编辑 `inc/config.php`，至少修改：
-   - `deepseek.api_key` — 你的 DeepSeek API 密钥
-   - `admin_password` — 管理后台密码
-   - `app_secret` — 至少 32 位随机字符串（用于 Cookie 签名和 token 校验）
-   - `allowed_origins` — 生产环境建议改为你的域名列表
+### 开发机（Linux / macOS）
 
-3. **权限**：确保 `data/` 目录可写（Web 进程用户可读写创建文件）。
-   ```bash
-   chmod -R 755 data/
-   ```
+```bash
+./dev.sh              # 监听 0.0.0.0:8000，自动打印内网地址，多进程
+PORT=8080 ./dev.sh    # 指定端口
+```
 
-4. **Web 服务器配置**：将文档根指向本目录，并**配置安全规则**（这是部署中最关键的一步，详见下方 [部署安全加固](#部署安全加固)）。最小 Nginx 示例：
-   ```nginx
-   server {
-       listen 443 ssl;
-       server_name example.com;
-       root /var/www/listenwrite;
-       index index.php;
+`web/router.php` 作为 PHP 内置服务器的路由脚本，会拦截 `/data/`、`/inc/`、`/bin/`、`/vendor/`、`*.json` 等敏感路径，并为 `/fonts/`、`/lib/` 输出长缓存。**不要**去掉它。
 
-       location ~ \.php$ {
-           fastcgi_pass unix:/run/php/php-fpm.sock;
-           include fastcgi_params;
-           fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-       }
-   }
-   ```
+### Windows 用户
 
-5. **访问**：
-   - Web 端：`https://你的域名/`
-   - 管理后台：`https://你的域名/admin.php`
-   - APP 接口：`https://你的域名/app_api.php`
+使用仓库根目录的一键脚本：`install.bat`（安装 PHP+ffmpeg、初始化配置、注册开机自启）、`update.bat`、`uninstall.bat`、`run.bat`。
+
+### 配置
+
+首次运行需 `inc/config.php`（不入库，由 `inc/config.example.php` 复制）：
+
+```bash
+cp inc/config.example.php inc/config.php
+```
+
+至少修改：
+
+- `admin_password` — 管理后台密码
+- `app_secret` — 至少 32 位随机字符串（Cookie 签名 / token 校验）
+- `allowed_origins` — 跨域来源；局域网使用可保持 `['*']`
+
+> **AI 接口不再使用全局配置**，改为在每个班级的「设置 → AI 设置」中配置（OpenAI 兼容 / Anthropic）。
+
+### 内网访问
+
+服务监听 `0.0.0.0`，其它设备连同一局域网后用 `http://<本机内网IP>:8000` 访问；APP 首次需填写该地址作为请求端点。
+
+> 若自行用 Nginx/Apache 对外部署，请务必参考下方「部署安全加固」，尤其要拦截 `data/`、`inc/` 与 `.json` 直链。
 
 ---
 
@@ -532,12 +531,7 @@ return [
     'upload_max_pixels' => 25000000,   // 2500 万像素
     'upload_max_edge'   => 1600,       // 最长边像素上限
 
-    // DeepSeek AI 配置（AI 导入单词、名言翻译）
-    'deepseek' => [
-        'api_key'  => 'sk-your-deepseek-api-key-here',
-        'endpoint' => 'https://api.deepseek.com/v1/chat/completions',
-        'model'    => 'deepseek-chat',
-    ],
+    // AI 接口已改为「按班级」配置（设置 → AI 设置），此处不再需要全局密钥。
 
     // 管理后台密码与 Session 有效期（秒）
     'admin_password'    => 'change-this-password',

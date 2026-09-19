@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * ============================================================
  * 单词库页面
@@ -43,18 +43,49 @@ $words = Database::getWords($classId);
 $tasks = Database::getTasks($classId);
 $settings = Database::getSettings();
 $searchQ = trim(reqGet('search'));
-$lastTaskId = $settings['last_task_id_' . $classId] ?? null;
-$lastWordIndex = -1;
-$lastWordId = null;
-if ($lastTaskId && isset($tasks[$lastTaskId])) {
-    $lastTask = $tasks[$lastTaskId];
-    if (!empty($lastTask['word_ids'])) {
-        $lastWordId = end($lastTask['word_ids']);
-        foreach ($words as $idx => $w) {
-            if ($w['id'] === $lastWordId) { $lastWordIndex = $idx; break; }
+
+// 知识库按类型分组（旧数据无 type → word）
+$wordItems = []; $sentenceItems = []; $essayItems = [];
+$idTypeMap = [];
+foreach ($words as $w) {
+    $t = $w['type'] ?? 'word';
+    if (!in_array($t, ['word', 'sentence', 'essay'], true)) $t = 'word';
+    $idTypeMap[$w['id']] = $t;
+    if ($t === 'sentence') $sentenceItems[] = $w;
+    elseif ($t === 'essay') $essayItems[] = $w;
+    else $wordItems[] = $w;
+}
+
+// 三种类型各自独立定位：找「最近一个包含该类型的任务」，取其中该类型最后一项
+// （例如最近任务只有作文，则作文更新位置，单词/句子仍指向各自最近的任务）
+$lastPos = ['word' => -1, 'sentence' => -1, 'essay' => -1];
+$lastId  = ['word' => null, 'sentence' => null, 'essay' => null];
+$orderedTasks = $tasks;
+uasort($orderedTasks, function($a, $b) {
+    $ca = $a['created_at'] ?? ($a['date'] ?? '');
+    $cb = $b['created_at'] ?? ($b['date'] ?? '');
+    if ($ca === $cb) return 0;
+    return strcmp((string)$cb, (string)$ca);
+});
+$foundType = ['word' => false, 'sentence' => false, 'essay' => false];
+foreach ($orderedTasks as $t) {
+    $lastOfType = ['word' => null, 'sentence' => null, 'essay' => null];
+    foreach (($t['word_ids'] ?? []) as $tid) {
+        $ty = $idTypeMap[$tid] ?? null;
+        if ($ty !== null) $lastOfType[$ty] = $tid; // 保留该任务内该类型的最后一项
+    }
+    foreach (['word', 'sentence', 'essay'] as $ty) {
+        if ($foundType[$ty] || $lastOfType[$ty] === null) continue;
+        $foundType[$ty] = true;
+        $lastId[$ty] = $lastOfType[$ty];
+        $list = $ty === 'sentence' ? $sentenceItems : ($ty === 'essay' ? $essayItems : $wordItems);
+        foreach ($list as $idx => $item) {
+            if ($item['id'] === $lastOfType[$ty]) { $lastPos[$ty] = $idx; break; }
         }
     }
+    if ($foundType['word'] && $foundType['sentence'] && $foundType['essay']) break;
 }
+$lastTaskId = $settings['last_task_id_' . $classId] ?? null;
 $pendingTasks = array_filter($tasks, function($t) { return $t['status'] === 'pending'; });
 $completedTasks = array_filter($tasks, function($t) { return $t['status'] === 'completed'; });
 $wordPendingInfo = [];
@@ -67,7 +98,7 @@ if (isset($_POST['action'])) {
         header('Content-Type: application/json; charset=UTF-8');
         header('Cache-Control: no-store');
         $pronWordId = $_POST['word_id'] ?? '';
-        if (!is_string($pronWordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $pronWordId)) {
+        if (!is_string($pronWordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $pronWordId)) {
             echo json_encode(['success' => false, 'error' => '参数无效']); exit;
         }
         $pron = Database::getClassData($classId, 'pronunciations');
@@ -88,45 +119,70 @@ if (isset($_POST['action'])) {
     }
     if ($_POST['action'] === 'add_word') {
         requireCsrf(); // CSRF校验
-        $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning')); $pos = sanitizePlainText(reqPost('pos'));
+        header('Content-Type: application/json');
+        $type = reqPost('type', 'word');
+        if (!in_array($type, ['word', 'sentence', 'essay'], true)) $type = 'word';
+        $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning'));
+        $pos = $type === 'word' ? sanitizePlainText(reqPost('pos')) : '';
+        $title = $type === 'essay' ? sanitizePlainText(reqPost('title')) : '';
         if (!$word || !$meaning) {
-            header('Content-Type: application/json'); echo json_encode(['success' => false, 'error' => '单词和释义不能为空']); exit;
+            echo json_encode(['success' => false, 'error' => '英文内容与释义不能为空']); exit;
         }
-        if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) {
-            header('Content-Type: application/json'); echo json_encode(['success' => false, 'error' => '输入内容过长']); exit;
+        $maxWord = $type === 'essay' ? 5000 : ($type === 'sentence' ? 500 : 100);
+        $maxMeaning = $type === 'essay' ? 5000 : 500;
+        if (mb_strlen($word) > $maxWord || mb_strlen($meaning) > $maxMeaning || mb_strlen($pos) > 50 || mb_strlen($title) > 200) {
+            echo json_encode(['success' => false, 'error' => '输入内容过长']); exit;
         }
         $exists = false;
-        foreach ($words as $w) { if (strtolower($w['word']) === strtolower($word)) { $exists = true; break; } }
+        foreach ($words as $w) {
+            if (($w['type'] ?? 'word') !== $type) continue;
+            if (mb_strtolower((string)$w['word']) === mb_strtolower($word)) { $exists = true; break; }
+        }
         $response = ['success' => false, 'exists' => $exists, 'word' => $word];
         if (!$exists) {
-            $newId = uniqid(); $words[] = ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => date('Y-m-d')];
+            $newId = uniqid();
+            $item = ['id' => $newId, 'type' => $type, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => date('Y-m-d')];
+            if ($type === 'essay') $item['title'] = $title;
+            $words[] = $item;
             Database::saveWords($classId, $words);
             $response['success'] = true;
             $response['new_id'] = $newId;
         }
-        header('Content-Type: application/json'); echo json_encode($response); exit;
+        echo json_encode($response); exit;
     }
     if ($_POST['action'] === 'update_word') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
-        $wordId = reqPost('word_id'); $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning')); $pos = sanitizePlainText(reqPost('pos'));
-        if (!$word || !$meaning) {
-            echo json_encode(['success' => false, 'error' => '单词和释义不能为空']); exit;
-        }
-        if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) {
-            echo json_encode(['success' => false, 'error' => '输入内容过长']); exit;
-        }
+        $wordId = reqPost('word_id');
+        $word = sanitizePlainText(reqPost('word')); $meaning = sanitizePlainText(reqPost('meaning'));
         $found = false;
         foreach ($words as $idx => $w) {
-            if ($w['id'] === $wordId) {
-                $found = true;
-                $exists = false;
-                foreach ($words as $w2) { if ($w2['id'] !== $wordId && strtolower($w2['word']) === strtolower($word)) { $exists = true; break; } }
-                if (!$exists) { $words[$idx] = ['id' => $wordId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => $w['created_at']]; Database::saveWords($classId, $words); echo json_encode(['success' => true]); } else { echo json_encode(['success' => false, 'exists' => true]); }
-                break;
+            if ($w['id'] !== $wordId) continue;
+            $found = true;
+            $dbType = $w['type'] ?? 'word';
+            if (!in_array($dbType, ['word', 'sentence', 'essay'], true)) $dbType = 'word';
+            $pos = $dbType === 'word' ? sanitizePlainText(reqPost('pos')) : '';
+            $title = $dbType === 'essay' ? sanitizePlainText(reqPost('title')) : '';
+            if (!$word || !$meaning) { echo json_encode(['success' => false, 'error' => '英文内容与释义不能为空']); break; }
+            $maxWord = $dbType === 'essay' ? 5000 : ($dbType === 'sentence' ? 500 : 100);
+            $maxMeaning = $dbType === 'essay' ? 5000 : 500;
+            if (mb_strlen($word) > $maxWord || mb_strlen($meaning) > $maxMeaning || mb_strlen($pos) > 50 || mb_strlen($title) > 200) {
+                echo json_encode(['success' => false, 'error' => '输入内容过长']); break;
             }
+            $exists = false;
+            foreach ($words as $w2) {
+                if ($w2['id'] === $wordId || ($w2['type'] ?? 'word') !== $dbType) continue;
+                if (mb_strtolower((string)$w2['word']) === mb_strtolower($word)) { $exists = true; break; }
+            }
+            if ($exists) { echo json_encode(['success' => false, 'exists' => true]); break; }
+            $updated = ['id' => $wordId, 'type' => $dbType, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => $w['created_at']];
+            if ($dbType === 'essay') $updated['title'] = $title;
+            $words[$idx] = $updated;
+            Database::saveWords($classId, $words);
+            echo json_encode(['success' => true]);
+            break;
         }
-        if (!$found) { echo json_encode(['success' => false, 'error' => '单词不存在']); }
+        if (!$found) { echo json_encode(['success' => false, 'error' => '内容不存在']); }
         exit;
     }
     if ($_POST['action'] === 'delete_word') {
@@ -135,7 +191,7 @@ if (isset($_POST['action'])) {
         $wordId = reqPost('word_id');
         $found = false;
         foreach ($words as $idx => $w) { if ($w['id'] === $wordId) { $found = true; array_splice($words, $idx, 1); Database::saveWords($classId, $words); echo json_encode(['success' => true]); break; } }
-        if (!$found) { echo json_encode(['success' => false, 'error' => '单词不存在']); }
+        if (!$found) { echo json_encode(['success' => false, 'error' => '内容不存在']); }
         exit;
     }
     if ($_POST['action'] === 'create_task') {
@@ -144,7 +200,18 @@ if (isset($_POST['action'])) {
         $selectedIdsRaw = reqPost('selected_ids', '[]'); $selectedIds = json_decode($selectedIdsRaw, true) ?? []; $taskDate = reqPost('task_date', date('Y-m-d'));
         $taskLabel = trim(reqPost('task_label'));
         $overwrite = reqPost('overwrite') === '1';
-        if (!empty($selectedIds) && count($selectedIds) <= 20) {
+        $typeRank = ['word' => 0, 'sentence' => 1, 'essay' => 2];
+        $validIds = []; $wordCount = 0;
+        foreach ($selectedIds as $sid) {
+            if (!is_string($sid) || !isset($idTypeMap[$sid])) continue;
+            $validIds[] = $sid;
+            if ($idTypeMap[$sid] === 'word') $wordCount++;
+        }
+        // 单词最多 20 个；句子/作文不限。任务内顺序：单词 → 句子 → 作文
+        if (!empty($validIds) && $wordCount <= 20) {
+            usort($validIds, function($a, $b) use ($idTypeMap, $typeRank) {
+                return $typeRank[$idTypeMap[$a]] - $typeRank[$idTypeMap[$b]];
+            });
             // Auto-generate label if empty
             if ($taskLabel === '') {
                 $sameDayCount = 0;
@@ -158,24 +225,24 @@ if (isset($_POST['action'])) {
                 }
             }
             $newTaskId = uniqid();
-            $tasks[$newTaskId] = ['id' => $newTaskId, 'date' => $taskDate, 'label' => $taskLabel, 'word_ids' => $selectedIds, 'status' => 'pending', 'created_at' => date('Y-m-d H:i:s')];
+            $tasks[$newTaskId] = ['id' => $newTaskId, 'date' => $taskDate, 'label' => $taskLabel, 'word_ids' => array_values($validIds), 'status' => 'pending', 'created_at' => date('Y-m-d H:i:s')];
             Database::saveTasks($classId, $tasks);
             $settings['last_task_id_' . $classId] = $newTaskId;
             Database::saveSettings($settings);
             echo json_encode(['success' => true, 'task_id' => $newTaskId]); exit;
-        } else { echo json_encode(['success' => false, 'error' => '最多选择20个单词']); }
+        } else { echo json_encode(['success' => false, 'error' => '单词最多选择20个（句子/作文不限）']); }
         exit;
     }
     if ($_POST['action'] === 'export_csv') {
         requireCsrf(); // CSRF校验
         header('Content-Type: text/csv; charset=UTF-8');
         $safeName = str_replace(['"', "\r", "\n", '\\', '/'], '', $class['name']);
-        header('Content-Disposition: attachment; filename="' . $safeName . '_单词导出.csv"');
+        header('Content-Disposition: attachment; filename="' . $safeName . '_知识库导出.csv"');
         $output = fopen('php://output', 'w');
         fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM
         $csvSafe = function($v) { $v = trim((string)$v); if ($v !== '' && preg_match('/^[=+\-@]/', $v)) $v = "'" . $v; return $v; };
         foreach ($words as $w) {
-            fputcsv($output, [$csvSafe($w['word']), $csvSafe($w['meaning']), $csvSafe($w['pos'] ?? '')]);
+            fputcsv($output, [$csvSafe($w['word']), $csvSafe($w['meaning']), $csvSafe($w['pos'] ?? ''), $csvSafe($w['type'] ?? 'word'), $csvSafe($w['title'] ?? '')]);
         }
         fclose($output);
         exit;
@@ -215,7 +282,7 @@ if (isset($_POST['action'])) {
 $wordListStr
 PROMPT;
 
-        $apiResult = DeepSeekAPI::call([
+        $apiResult = AIClient::call($classId, [
             ['role' => 'system', 'content' => '你是一个专业的英语词典助手，请严格按照JSON格式返回结果。'],
             ['role' => 'user', 'content' => $prompt],
         ]);
@@ -248,10 +315,13 @@ PROMPT;
     if ($_POST['action'] === 'ai_single_word') {
         requireCsrf(); // CSRF校验
         header('Content-Type: application/json');
+        $mode = reqPost('mode', 'word');
+        if (!in_array($mode, ['word', 'sentence', 'essay'], true)) $mode = 'word';
         $word = trim(reqPost('word'));
-        if ($word === '') { echo json_encode(['success' => false, 'error' => '请输入单词']); exit; }
+        if ($word === '') { echo json_encode(['success' => false, 'error' => '请输入英文内容']); exit; }
 
-        $prompt = <<<PROMPT
+        if ($mode === 'word') {
+            $prompt = <<<PROMPT
 你是一个英语词典助手。请为以下英文单词提供中文释义和词性。
 
 要求：
@@ -262,27 +332,34 @@ PROMPT;
 请严格返回JSON：
 {"word": "$word", "meaning": "中文释义", "pos": "词性", "uncertain": false}
 PROMPT;
-
-        $apiResult = DeepSeekAPI::call([
-            ['role' => 'system', 'content' => '你是一个专业的英语词典助手，请严格按JSON格式返回。'],
-            ['role' => 'user', 'content' => $prompt],
-        ], 512, 30);
-        if (!$apiResult['success']) {
-            echo json_encode($apiResult); exit;
+            $apiResult = AIClient::call($classId, [
+                ['role' => 'system', 'content' => '你是一个专业的英语词典助手，请严格按JSON格式返回。'],
+                ['role' => 'user', 'content' => $prompt],
+            ], 512, 30);
+        } else {
+            $label = $mode === 'essay' ? '英文作文' : '英文句子';
+            $prompt = "请将下面的{$label}直译成中文。要求：直译、不要意译、不要润色、保持原意，只返回JSON：\n{\"meaning\":\"中文直译\"}\n\n{$label}：\n" . $word;
+            $apiResult = AIClient::call($classId, [
+                ['role' => 'system', 'content' => '你是翻译助手，请直译，只返回JSON。'],
+                ['role' => 'user', 'content' => $prompt],
+            ], 2048, 60);
         }
+        if (!$apiResult['success']) { echo json_encode($apiResult); exit; }
         $parsed = json_decode($apiResult['content'], true);
         if (!is_array($parsed)) { echo json_encode(['success' => false, 'error' => 'AI返回格式解析失败']); exit; }
 
+        $resultWord = trim($parsed['word'] ?? $word);
         $existingIdx = -1;
         foreach ($words as $idx => $ew) {
-            if (strtolower($ew['word']) === strtolower(trim($parsed['word'] ?? ''))) { $existingIdx = $idx; break; }
+            if (($ew['type'] ?? 'word') !== $mode) continue;
+            if (mb_strtolower((string)$ew['word']) === mb_strtolower($resultWord)) { $existingIdx = $idx; break; }
         }
         echo json_encode([
             'success' => true,
-            'word' => trim($parsed['word'] ?? $word),
+            'word' => $resultWord,
             'meaning' => trim($parsed['meaning'] ?? ''),
-            'pos' => trim($parsed['pos'] ?? ''),
-            'uncertain' => !empty($parsed['uncertain']),
+            'pos' => $mode === 'word' ? trim($parsed['pos'] ?? '') : '',
+            'uncertain' => $mode === 'word' ? !empty($parsed['uncertain']) : false,
             'exists' => $existingIdx >= 0,
         ]); exit;
     }
@@ -296,11 +373,16 @@ PROMPT;
             $w = sanitizePlainText($item['word'] ?? '');
             $m = sanitizePlainText($item['meaning'] ?? '');
             $p = sanitizePlainText($item['pos'] ?? '');
+            $t = $item['type'] ?? 'word';
+            if (!in_array($t, ['word', 'sentence', 'essay'], true)) $t = 'word';
             if (!$w || !$m) continue;
             $exists = false;
-            foreach ($words as $ew) { if (strtolower($ew['word']) === strtolower($w)) { $exists = true; break; } }
+            foreach ($words as $ew) {
+                if (($ew['type'] ?? 'word') !== $t) continue;
+                if (mb_strtolower((string)$ew['word']) === mb_strtolower($w)) { $exists = true; break; }
+            }
             if ($exists) { $skipped++; continue; }
-            $newWord = ['id' => uniqid(), 'word' => $w, 'meaning' => $m, 'pos' => $p, 'created_at' => date('Y-m-d')];
+            $newWord = ['id' => uniqid(), 'type' => $t, 'word' => $w, 'meaning' => $m, 'pos' => $p, 'created_at' => date('Y-m-d')];
             $words[] = $newWord;
             $newWords[] = $newWord;
             $imported++;
@@ -315,21 +397,38 @@ PROMPT;
         $file = $_FILES['csv_file']['tmp_name']; $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if (!empty($lines)) { $lines[0] = ltrim($lines[0], "\xEF\xBB\xBF"); }
         $imported = 0; $skipped = 0; $skippedList = [];
+        $firstRow = true;
         foreach ($lines as $line) {
-            $parts = str_getcsv($line); if (count($parts) < 2) continue;
-            $word = sanitizePlainText($parts[0]); $meaning = sanitizePlainText($parts[1]); $pos = isset($parts[2]) ? sanitizePlainText($parts[2]) : '';
+            $parts = str_getcsv($line); if (count($parts) < 2) { $firstRow = false; continue; }
+            $word = sanitizePlainText($parts[0]); $meaning = sanitizePlainText($parts[1]);
+            $pos = isset($parts[2]) ? sanitizePlainText($parts[2]) : '';
+            $type = isset($parts[3]) ? strtolower(trim((string)$parts[3])) : 'word';
+            if (!in_array($type, ['word', 'sentence', 'essay'], true)) $type = 'word';
+            $title = ($type === 'essay' && isset($parts[4])) ? sanitizePlainText($parts[4]) : '';
+            if ($firstRow) {
+                $firstRow = false;
+                if (preg_match('/^(word|单词|英文)$/i', $word) && preg_match('/^(meaning|释义|中文)$/i', $meaning)) continue;
+            }
             if (!$word || !$meaning) continue;
             $existsIdx = -1;
-            foreach ($words as $idx => $w) { if (strtolower($w['word']) === strtolower($word)) { $existsIdx = $idx + 1; break; } }
+            foreach ($words as $idx => $w) {
+                if (($w['type'] ?? 'word') !== $type) continue;
+                if (mb_strtolower((string)$w['word']) === mb_strtolower($word)) { $existsIdx = $idx + 1; break; }
+            }
             if ($existsIdx > 0) { $skipped++; $skippedList[] = ['word' => $word, 'index' => $existsIdx]; }
-            else { $newId = uniqid(); $words[] = ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => date('Y-m-d')]; $imported++; }
+            else {
+                $newId = uniqid();
+                $item = ['id' => $newId, 'type' => $type, 'word' => $word, 'meaning' => $meaning, 'pos' => $type === 'word' ? $pos : '', 'created_at' => date('Y-m-d')];
+                if ($type === 'essay') $item['title'] = $title;
+                $words[] = $item; $imported++;
+            }
         }
         Database::saveWords($classId, $words); echo json_encode(['success' => true, 'imported' => $imported, 'skipped' => $skipped, 'skipped_list' => $skippedList]); exit;
     }
     exit;
 }
 ?>
-<?php $pageTitle = '单词库'; require 'inc/head.php'; ?>
+<?php $pageTitle = '知识库'; require 'inc/head.php'; ?>
 <style>
     body { height: 100vh; overflow: hidden; }
     .word-card { cursor: pointer; }
@@ -389,6 +488,39 @@ PROMPT;
         .toolbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
         .selection-info { margin-left: 0; width: 100%; text-align: right; }
     }
+    .icon-btn { display: inline-flex; align-items: center; gap: 5px; }
+    .icon-btn svg { display: block; }
+    .kb-tabs { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-bottom: 2px dashed var(--old-paper); flex-shrink: 0; overflow-x: auto; }
+    .kb-tab { font-family: var(--font-heading); font-size: 15px; color: var(--pencil); background: transparent; border: none; padding: 6px 10px; cursor: pointer; border-radius: var(--wobbly-sm); opacity: 0.6; white-space: nowrap; }
+    .kb-tab.active { opacity: 1; background: var(--post-it); box-shadow: var(--shadow-sm); }
+    .kb-count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 3px; font-size: 12px; background: var(--blue); color: #fff; border-radius: 999px; font-family: var(--font-body); }
+    .kb-tab.active .kb-count { background: var(--red); }
+    .kb-follow { margin-left: auto; white-space: nowrap; }
+    .kb-panel { padding-bottom: 90px; }
+    .kb-list { display: flex; flex-direction: column; gap: 14px; }
+    .kb-card { position: relative; background: var(--white); border: 2.5px solid var(--pencil); border-radius: var(--wobbly); box-shadow: 3px 3px 0 rgba(45,45,45,0.1); padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+    .kb-card.selected { border-color: var(--blue); background: #e8f0fb; box-shadow: 0 0 0 2px rgba(45,93,161,0.25); }
+    .kb-head { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
+    .kb-num { background: var(--old-paper); color: #777; font-size: 11px; padding: 2px 8px; border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); font-family: var(--font-heading); }
+    .kb-card .checkbox { width: 22px; height: 22px; border: 2px solid var(--pencil); border-radius: var(--wobbly-sm); display: flex; align-items: center; justify-content: center; background: var(--white); position: relative; cursor: pointer; }
+    .kb-card.selected .checkbox { background: var(--blue); border-color: var(--blue); }
+    .kb-card.selected .checkbox::after { content: ''; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px,-1px); }
+    .kb-body { flex: 1; min-width: 0; cursor: pointer; }
+    .kb-en { font-family: var(--font-heading); font-size: 22px; color: var(--pencil); line-height: 1.4; overflow: hidden; white-space: nowrap; }
+    .kb-en.scrollable { -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); }
+    .kb-en.scrollable span { display: inline-block; white-space: nowrap; animation: marquee var(--md,5s) ease-in-out infinite alternate; animation-delay: 0.6s; }
+    .kb-zh { font-family: var(--font-body); font-size: 17px; color: #555; margin-top: 4px; line-height: 1.5; overflow: hidden; white-space: nowrap; }
+    .kb-zh.scrollable { -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); }
+    .kb-zh.scrollable span { display: inline-block; white-space: nowrap; animation: marquee var(--md,4s) ease-in-out infinite alternate; animation-delay: 0.8s; }
+    .kb-title { font-family: var(--font-heading); font-size: 19px; color: var(--blue); margin-bottom: 6px; }
+    .kb-clamp { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+    .kb-clamp-dim { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #888; white-space: pre-wrap; }
+    .kb-more { font-size: 12px; color: var(--red); margin-top: 6px; }
+    .kb-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+    .kb-actions .edit-btn { width: 26px; height: 26px; background: rgba(0,0,0,0.05); border: 1.5px solid var(--pencil); border-radius: var(--wobbly-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.6; }
+    .kb-actions .edit-btn:hover { opacity: 1; }
+    .kb-detail-en { font-size: 18px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; font-family: var(--font-heading); color: var(--pencil); }
+    .kb-detail-zh { font-size: 17px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; font-family: var(--font-body); color: #555; margin-top: 12px; padding-top: 12px; border-top: 1.5px dashed var(--old-paper); }
 </style>
 </head>
 <body>
@@ -396,55 +528,122 @@ PROMPT;
     <?php
     $backUrl = 'main.php?id=' . $classId;
     $className = $class['name'];
-    $pageTitle = '单词库';
-    $rightContent = '<button class="btn btn-sm btn-primary" onclick="showFollowModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读</button>';
+    $pageTitle = '知识库';
+    $rightContent = '';
     require 'inc/header.php';
     ?>
     <div class="toolbar">
-        <button class="btn btn-sm btn-secondary" onclick="showImportModal()">导入CSV</button>
-        <button class="btn btn-sm btn-secondary" onclick="exportCsv()">导出CSV</button>
-        <button class="btn btn-sm btn-primary" onclick="createTask()">创建默写任务</button>
+        <button class="btn btn-sm btn-secondary icon-btn" onclick="showImportModal()" title="导入 CSV（单词/句子/作文）">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="icon-btn-label">导入</span>
+        </button>
+        <button class="btn btn-sm btn-secondary icon-btn" onclick="exportCsv()" title="导出 CSV（单词/句子/作文）">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span class="icon-btn-label">导出</span>
+        </button>
+        <button class="btn btn-sm btn-primary icon-btn" onclick="createTask()" title="创建默写任务">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span class="icon-btn-label">创建任务</span>
+        </button>
         <span class="selection-info" id="selectionInfo">已选 <span id="selectedCount">0</span> 个</span>
     </div>
-    <div class="content" id="contentWrap">
-        <?php if (empty($words)): ?>
-            <div class="empty-state"><div class="icon"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div><div>单词库为空，点击下方按钮添加单词</div></div>
-        <?php else: ?>
-            <div class="word-grid" id="wordGrid">
-                <?php foreach ($words as $idx => $w): ?>
-                    <div class="word-card" data-id="<?php echo $w['id']; ?>" data-index="<?php echo $idx; ?>" data-word-db="<?php echo htmlspecialchars($w['word']); ?>" data-meaning-db="<?php echo htmlspecialchars($w['meaning']); ?>" data-pos-db="<?php echo htmlspecialchars($w['pos'] ?? ''); ?>">
-                        <div class="corner-tl">
-                            <span class="number"><?php echo $idx + 1; ?></span>
-                            <?php if (isset($wordPendingInfo[$w['id']])): ?>
-                                <span class="pending-mark" title="即将于<?php echo $wordPendingInfo[$w['id']]; ?>默写"></span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="corner-tr">
-                            <span class="checkbox" onclick="toggleSelect(event, '<?php echo $w['id']; ?>')"></span>
-                        </div>
-                        <div class="card-body">
-                            <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
-                            <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
-                            <?php if ($w['pos']): ?>
-                                <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
-                            <?php endif; ?>
-                        </div>
-                        <div class="corner-bl">
-                            <button class="speaker" onclick='event.stopPropagation();speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
-                            <button class="pron-btn speaker" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
-                        </div>
-                        <div class="corner-br">
-                            <?php if (isset($wordCompletedInfo[$w['id']])): ?>
-                                <span class="completed-mark" title="已默写"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                            <?php endif; ?>
-                            <button class="edit-btn" onclick="event.stopPropagation();showEditModal('<?php echo $w['id']; ?>')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+    <div class="kb-tabs" id="kbTabs">
+        <button class="kb-tab active" data-tab="word" onclick="switchTab('word')">单词 <span class="kb-count" id="countWord">0</span></button>
+        <button class="kb-tab" data-tab="sentence" onclick="switchTab('sentence')">句子 <span class="kb-count" id="countSentence">0</span></button>
+        <button class="kb-tab" data-tab="essay" onclick="switchTab('essay')">作文 <span class="kb-count" id="countEssay">0</span></button>
+        <button class="btn btn-sm btn-primary kb-follow" id="followTabBtn" onclick="showFollowModal()" title="跟读单词">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>跟读
+        </button>
     </div>
-    <button class="fab" onclick="showBatchModal()" title="批量添加单词"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    <div class="content" id="contentWrap">
+        <div class="kb-panel" id="panelWord">
+            <?php if (empty($wordItems)): ?>
+                <div class="empty-state"><div class="icon"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div><div>还没有单词，点击右下角按钮添加</div></div>
+            <?php else: ?>
+                <div class="word-grid" id="wordGrid">
+                    <?php foreach ($wordItems as $idx => $w): ?>
+                        <div class="word-card" data-id="<?php echo $w['id']; ?>" data-type="word" data-index="<?php echo $idx; ?>" data-word-db="<?php echo htmlspecialchars($w['word']); ?>" data-meaning-db="<?php echo htmlspecialchars($w['meaning']); ?>" data-pos-db="<?php echo htmlspecialchars($w['pos'] ?? ''); ?>">
+                            <div class="corner-tl">
+                                <span class="number"><?php echo $idx + 1; ?></span>
+                                <?php if (isset($wordPendingInfo[$w['id']])): ?>
+                                    <span class="pending-mark" title="即将于<?php echo $wordPendingInfo[$w['id']]; ?>默写"></span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="corner-tr">
+                                <span class="checkbox" onclick="toggleSelect(event, '<?php echo $w['id']; ?>')"></span>
+                            </div>
+                            <div class="card-body">
+                                <div class="word" lang="en"><span><?php echo htmlspecialchars($w['word']); ?></span></div>
+                                <div class="meaning"><span><?php echo htmlspecialchars($w['meaning']); ?></span></div>
+                                <?php if ($w['pos']): ?>
+                                    <div class="pos"><?php echo htmlspecialchars($w['pos']); ?></div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="corner-bl">
+                                <button class="speaker" onclick='event.stopPropagation();speak(<?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg></button>
+                                <button class="pron-btn speaker" title="全球发音" onclick='event.stopPropagation();showPronList(<?php echo htmlspecialchars(json_encode($w['id'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($w['word'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)'><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></button>
+                            </div>
+                            <div class="corner-br">
+                                <?php if (isset($wordCompletedInfo[$w['id']])): ?>
+                                    <span class="completed-mark" title="已默写"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                <?php endif; ?>
+                                <button class="edit-btn" onclick="event.stopPropagation();showEditModal('<?php echo $w['id']; ?>')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+        <div class="kb-panel" id="panelSentence" style="display:none;">
+            <?php if (empty($sentenceItems)): ?>
+                <div class="empty-state"><div class="icon"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div><div>还没有句子，点击右下角按钮添加</div></div>
+            <?php else: ?>
+                <div class="kb-list" id="sentenceList">
+                    <?php foreach ($sentenceItems as $idx => $s): ?>
+                        <div class="kb-card sentence-card" data-id="<?php echo $s['id']; ?>" data-type="sentence" data-index="<?php echo $idx; ?>">
+                            <div class="kb-head">
+                                <span class="kb-num"><?php echo $idx + 1; ?></span>
+                                <span class="checkbox" onclick="toggleSelect(event, '<?php echo $s['id']; ?>')"></span>
+                            </div>
+                            <div class="kb-body" onclick="toggleSelect(event, '<?php echo $s['id']; ?>')">
+                                <div class="kb-en" lang="en"><span><?php echo htmlspecialchars($s['word']); ?></span></div>
+                                <div class="kb-zh"><span><?php echo htmlspecialchars($s['meaning']); ?></span></div>
+                            </div>
+                            <div class="kb-actions">
+                                <button class="edit-btn" onclick="event.stopPropagation();showEditModal('<?php echo $s['id']; ?>')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+        <div class="kb-panel" id="panelEssay" style="display:none;">
+            <?php if (empty($essayItems)): ?>
+                <div class="empty-state"><div class="icon"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></div><div>还没有作文，点击右下角按钮添加</div></div>
+            <?php else: ?>
+                <div class="kb-list" id="essayList">
+                    <?php foreach ($essayItems as $idx => $e): ?>
+                        <div class="kb-card essay-card" data-id="<?php echo $e['id']; ?>" data-type="essay" data-index="<?php echo $idx; ?>">
+                            <div class="kb-head">
+                                <span class="kb-num"><?php echo $idx + 1; ?></span>
+                                <span class="checkbox" onclick="toggleSelect(event, '<?php echo $e['id']; ?>')"></span>
+                            </div>
+                            <div class="kb-body" onclick="showEssayDetail('<?php echo $e['id']; ?>')">
+                                <?php if (!empty($e['title'])): ?><div class="kb-title"><?php echo htmlspecialchars($e['title']); ?></div><?php endif; ?>
+                                <div class="kb-en kb-clamp" lang="en"><?php echo nl2br(htmlspecialchars($e['word'])); ?></div>
+                                <div class="kb-zh kb-clamp-dim"><?php echo nl2br(htmlspecialchars($e['meaning'])); ?></div>
+                                <div class="kb-more">查看全文 →</div>
+                            </div>
+                            <div class="kb-actions">
+                                <button class="edit-btn" onclick="event.stopPropagation();showEditModal('<?php echo $e['id']; ?>')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <button class="fab" id="fabBtn" onclick="fabAction()" title="添加"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     <div class="toast" id="toast"></div>
 
     <div class="modal" id="addModal">
@@ -461,14 +660,46 @@ PROMPT;
 
     <div class="modal" id="editModal">
         <div class="modal-content">
-            <div class="modal-title">编辑单词</div>
+            <div class="modal-title" id="editModalTitle">编辑</div>
             <form id="editForm">
                 <input type="hidden" name="word_id" id="editWordId">
-                <div class="form-group"><label>单词</label><input type="text" name="word" id="editWord" required></div>
-                <div class="form-group"><label>释义</label><input type="text" name="meaning" id="editMeaning" required></div>
-                <div class="form-group"><label>词性</label><input type="text" name="pos" id="editPos" placeholder="如 n. v. adj."></div>
+                <input type="hidden" name="type" id="editType">
+                <div class="form-group" id="editTitleGroup" style="display:none;"><label>标题（作文，可选）</label><input type="text" name="title" id="editTitle" maxlength="200"></div>
+                <div class="form-group"><label id="editWordLabel">单词</label><input type="text" name="word" id="editWord" required></div>
+                <div class="form-group"><label id="editMeaningLabel">释义</label><textarea name="meaning" id="editMeaning" required rows="4" class="textarea"></textarea></div>
+                <div class="form-group" id="editPosGroup"><label>词性</label><input type="text" name="pos" id="editPos" placeholder="如 n. v. adj."></div>
                 <div class="modal-btns"><button type="button" class="delete" onclick="deleteWord()">删除</button><button type="button" class="cancel" onclick="closeModal('editModal')">取消</button><button type="submit" class="submit">保存</button></div>
             </form>
+        </div>
+    </div>
+
+    <div class="modal" id="addSentenceModal">
+        <div class="modal-content" style="max-width:560px;">
+            <div class="modal-title">添加句子</div>
+            <div class="form-group"><label>英文句子</label><textarea id="sentenceEn" rows="3" class="textarea" placeholder="输入英文句子"></textarea></div>
+            <div class="form-group"><label>中文释义</label><textarea id="sentenceZh" rows="3" class="textarea" placeholder="点击下方 AI 直译，或手动填写"></textarea></div>
+            <div style="margin-bottom:12px;"><button type="button" class="btn btn-sm btn-secondary" onclick="aiTranslate('sentence')" id="sentenceAiBtn">✨ AI 直译</button></div>
+            <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('addSentenceModal')">取消</button><button type="button" class="submit" onclick="addItem('sentence')">添加</button></div>
+        </div>
+    </div>
+
+    <div class="modal" id="addEssayModal">
+        <div class="modal-content" style="max-width:640px;">
+            <div class="modal-title">添加作文</div>
+            <div class="form-group"><label>标题（可选）</label><input type="text" id="essayTitle" class="input" maxlength="200" placeholder="作文标题"></div>
+            <div class="form-group"><label>英文作文</label><textarea id="essayEn" rows="6" class="textarea" placeholder="输入英文作文"></textarea></div>
+            <div class="form-group"><label>中文释义</label><textarea id="essayZh" rows="5" class="textarea" placeholder="点击下方 AI 直译，或手动填写"></textarea></div>
+            <div style="margin-bottom:12px;"><button type="button" class="btn btn-sm btn-secondary" onclick="aiTranslate('essay')" id="essayAiBtn">✨ AI 直译</button></div>
+            <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('addEssayModal')">取消</button><button type="button" class="submit" onclick="addItem('essay')">添加</button></div>
+        </div>
+    </div>
+
+    <div class="modal" id="essayDetailModal">
+        <div class="modal-content" style="max-width:680px;max-height:85vh;overflow-y:auto;">
+            <div class="modal-title" id="essayDetailTitle">作文</div>
+            <div class="kb-detail-en" id="essayDetailEn"></div>
+            <div class="kb-detail-zh" id="essayDetailZh"></div>
+            <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('essayDetailModal')">关闭</button></div>
         </div>
     </div>
 
@@ -476,10 +707,10 @@ PROMPT;
         <div class="modal-content">
             <div class="modal-title">导入CSV</div>
             <div class="csv-hint">
-                请上传 <code>.csv</code> 格式文件，每行一条单词，格式为：<br>
-                <code>单词,释义,词性</code><br>
-                示例：<code>apple,苹果,n.</code><br>
-                词性可省略，如：<code>apple,苹果</code>
+                请上传 <code>.csv</code> 格式文件，每行一条，列顺序为：<br>
+                <code>英文,中文,词性,类型,标题</code><br>
+                示例：<code>apple,苹果,n.,word,</code>　<code>I am fine.,我很好,,sentence,</code>　<code>My Day,我的一天,,essay,</code><br>
+                类型可省略（默认 <code>word</code>）；标题仅作文使用。
             </div>
             <form id="importForm" enctype="multipart/form-data">
                 <div class="form-group">
@@ -609,7 +840,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=10"></script>
+    <script src="common.js?v=12"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
@@ -620,14 +851,135 @@ PROMPT;
         const searchQuery = <?php echo json_encode($searchQ, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
         let selectedIds = new Set();
         let previewData = [];
+        let currentTab = 'word';
+        const lastPositions = <?php echo json_encode($lastPos, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        const lastIds = <?php echo json_encode($lastId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+        function itemById(id) { return wordsArray.find(w => w.id === id) || null; }
+        function itemType(item) { return (item && item.type) ? item.type : 'word'; }
+        function cardOf(id) { return document.querySelector('.word-card[data-id="' + id + '"], .kb-card[data-id="' + id + '"]'); }
+
+        function updateTabCounts() {
+            const c = { word: 0, sentence: 0, essay: 0 };
+            selectedIds.forEach(id => { const t = itemType(itemById(id)); if (c[t] !== undefined) c[t]++; });
+            document.getElementById('countWord').textContent = c.word;
+            document.getElementById('countSentence').textContent = c.sentence;
+            document.getElementById('countEssay').textContent = c.essay;
+        }
+
+        function selectedWordCount() {
+            let n = 0;
+            selectedIds.forEach(id => { if (itemType(itemById(id)) === 'word') n++; });
+            return n;
+        }
 
         function toggleSelect(event, id) {
             event.stopPropagation();
-            if (followController) { showToast('请先结束跟读后再选择单词', ''); return; }
-            const card = document.querySelector('.word-card[data-id="' + id + '"]');
+            if (followController) { showToast('请先结束跟读后再选择', ''); return; }
+            const card = cardOf(id);
             if (selectedIds.has(id)) { selectedIds.delete(id); if (card) card.classList.remove('selected'); }
-            else { if (selectedIds.size >= 20) { showToast('最多只能选择20个单词', 'error'); return; } selectedIds.add(id); if (card) card.classList.add('selected'); }
+            else {
+                if (itemType(itemById(id)) === 'word' && selectedWordCount() >= 20) {
+                    showToast('单词最多选择20个（句子/作文不限）', 'error'); return;
+                }
+                selectedIds.add(id); if (card) card.classList.add('selected');
+            }
             document.getElementById('selectedCount').textContent = selectedIds.size;
+            updateTabCounts();
+        }
+
+        // ==================== 分类 Tab ====================
+        function switchTab(tab, skipLocate) {
+            currentTab = tab;
+            document.querySelectorAll('.kb-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            document.querySelectorAll('.kb-panel').forEach(p => { p.style.display = 'none'; });
+            const panel = document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1));
+            if (panel) panel.style.display = '';
+            const fb = document.getElementById('followTabBtn');
+            if (fb) fb.style.display = (tab === 'word') ? '' : 'none';
+            const fab = document.getElementById('fabBtn');
+            fab.title = tab === 'word' ? '添加单词' : (tab === 'sentence' ? '添加句子' : '添加作文');
+            initKbMarquee();
+            if (!skipLocate) locateForTab(tab);
+        }
+        function fabAction() {
+            if (currentTab === 'sentence') showSentenceModal();
+            else if (currentTab === 'essay') showEssayModal();
+            else showBatchModal();
+        }
+
+        // 句子/作文跑马灯（仅对未折行的行内文本）
+        function initKbMarquee() {
+            document.querySelectorAll('.kb-en, .kb-zh').forEach(el => {
+                if (el.classList.contains('kb-clamp') || el.classList.contains('kb-clamp-dim')) return;
+                el.classList.remove('scrollable');
+                el.style.removeProperty('--mx');
+                el.style.removeProperty('--md');
+                const over = el.scrollWidth - el.clientWidth;
+                if (over > 4) {
+                    el.classList.add('scrollable');
+                    el.style.setProperty('--mx', '-' + (over + 10) + 'px');
+                    el.style.setProperty('--md', Math.max(3, over / 35) + 's');
+                }
+            });
+        }
+
+        // ==================== 句子 / 作文添加 ====================
+        function showSentenceModal() { document.getElementById('sentenceEn').value = ''; document.getElementById('sentenceZh').value = ''; document.getElementById('addSentenceModal').classList.add('active'); }
+        function showEssayModal() { document.getElementById('essayTitle').value = ''; document.getElementById('essayEn').value = ''; document.getElementById('essayZh').value = ''; document.getElementById('addEssayModal').classList.add('active'); }
+
+        async function aiTranslate(mode) {
+            const enId = mode === 'essay' ? 'essayEn' : 'sentenceEn';
+            const zhId = mode === 'essay' ? 'essayZh' : 'sentenceZh';
+            const btnId = mode === 'essay' ? 'essayAiBtn' : 'sentenceAiBtn';
+            const en = document.getElementById(enId).value.trim();
+            if (!en) { showToast('请先输入英文内容', 'error'); return; }
+            const btn = document.getElementById(btnId);
+            const old = btn.textContent;
+            btn.disabled = true; btn.textContent = '翻译中...';
+            const fd = new FormData();
+            fd.append('action', 'ai_single_word'); fd.append('word', en); fd.append('mode', mode); fd.append('csrf_token', CSRF_TOKEN);
+            try {
+                const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
+                if (d.success) { document.getElementById(zhId).value = d.meaning || ''; }
+                else showToast(d.error || 'AI 请求失败', 'error');
+            } catch (e) { showToast('网络错误', 'error'); }
+            btn.disabled = false; btn.textContent = old;
+        }
+
+        async function addItem(mode) {
+            const enId = mode === 'essay' ? 'essayEn' : 'sentenceEn';
+            const zhId = mode === 'essay' ? 'essayZh' : 'sentenceZh';
+            const en = document.getElementById(enId).value.trim();
+            const zh = document.getElementById(zhId).value.trim();
+            if (!en || !zh) { showToast('请填写英文内容和中文释义', 'error'); return; }
+            const fd = new FormData();
+            fd.append('action', 'add_word'); fd.append('type', mode); fd.append('word', en); fd.append('meaning', zh);
+            if (mode === 'essay') fd.append('title', document.getElementById('essayTitle').value.trim());
+            fd.append('csrf_token', CSRF_TOKEN);
+            try {
+                const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
+                if (d.error) { showToast(d.error, 'error'); return; }
+                if (d.exists) { showToast('该内容已存在', 'error'); return; }
+                if (d.success) {
+                    closeModal(mode === 'essay' ? 'addEssayModal' : 'addSentenceModal');
+                    const item = { id: d.new_id, type: mode, word: en, meaning: zh, pos: '', created_at: '' };
+                    if (mode === 'essay') item.title = document.getElementById('essayTitle').value.trim();
+                    wordsArray.push(item);
+                    if (currentTab !== mode) switchTab(mode, true);
+                    refreshPanel(mode);
+                    scrollToNew(d.new_id);
+                    showToast('添加成功', 'success');
+                }
+            } catch (e) { showToast('网络错误', 'error'); }
+        }
+
+        function showEssayDetail(id) {
+            const e = itemById(id); if (!e) return;
+            document.getElementById('essayDetailTitle').textContent = e.title || '作文';
+            document.getElementById('essayDetailEn').textContent = e.word || '';
+            document.getElementById('essayDetailZh').textContent = e.meaning || '';
+            document.getElementById('essayDetailModal').classList.add('active');
         }
 
         function showAddModal() { document.getElementById('addForm').reset(); document.getElementById('addModal').classList.add('active'); }
@@ -641,7 +993,8 @@ PROMPT;
         function scrollCardToCenter(card, persistent) {
             if (!card) return;
             var content = document.getElementById('contentWrap');
-            var scroller = content && content.scrollHeight > content.clientHeight ? content : document.scrollingElement;
+            // #contentWrap 是页面唯一滚动容器；无条件优先，避免首屏尚未溢出时误用 body（overflow:hidden → 定位无效）
+            var scroller = content || document.scrollingElement;
             // 已移除 content-visibility:auto → getBoundingClientRect 恒准确，无需强制布局。
             // 用 scroller 自身的坐标系计算居中目标（直接拿 card 的视口 top 计算会忽略
             // scroller 顶部偏移(header/工具栏)，导致多滚一段 → 滑过头）。
@@ -663,21 +1016,28 @@ PROMPT;
                 scroller.scrollTop = target;
             }
             if (persistent) {
-                clearLocateHighlight();
+                removeLocateHighlight();
                 card.classList.add('locate-highlight');
+                // 定位后短暂宽限：期间忽略误触，避免慢加载时用户一碰就清掉高亮
+                _locateGraceUntil = Date.now() + 1500;
             } else {
                 card.classList.add('highlight');
                 setTimeout(function() { card.classList.remove('highlight'); }, 1500);
             }
         }
 
-        // 清除持久定位高亮（用户操作时调用）
+        // 清除持久定位高亮（用户操作时调用）；一旦用户操作过，就不再自动补定位
+        let userInteracted = false;
+        let _locateGraceUntil = 0;
+        function removeLocateHighlight() {
+            document.querySelectorAll('.locate-highlight').forEach(function(c) { c.classList.remove('locate-highlight'); });
+        }
         function clearLocateHighlight() {
-            document.querySelectorAll('.word-card.locate-highlight').forEach(function(c) { c.classList.remove('locate-highlight'); });
+            if (Date.now() < _locateGraceUntil) return; // 初始定位后短暂宽限期：忽略误触
+            userInteracted = true;
+            removeLocateHighlight();
         }
         // 用户主动操作（滚动/点击/触摸/按键）→ 清除定位高亮。
-        // 程序 smooth 滚动不会触发这些手势，因此不会误清（不再用 scroll 兜底，
-        // 否则程序滚动结束后 scroll 事件会清掉高亮，违背"除非用户操作否则保留"）。
         ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function(evt) {
             document.addEventListener(evt, function() { clearLocateHighlight(); }, { passive: true });
         });
@@ -828,16 +1188,17 @@ PROMPT;
         function renderWordGrid() {
             const grid = document.getElementById('wordGrid');
             if (!grid) {
-                // Empty state → create grid
-                const cw = document.getElementById('contentWrap');
-                cw.innerHTML = '<div class="word-grid" id="wordGrid"></div>';
+                // Empty state → create grid inside word panel (避免清掉句子/作文面板)
+                const pw = document.getElementById('panelWord');
+                pw.innerHTML = '<div class="word-grid" id="wordGrid"></div>';
                 return renderWordGrid();
             }
             let html = '';
-            const list = searchQuery ? wordsArray.filter(w => {
+            const list = wordsArray.filter(w => itemType(w) === 'word').filter(w => {
+                if (!searchQuery) return true;
                 const q = searchQuery.toLowerCase();
-                return (w.word||'').toLowerCase().includes(q) || (w.meaning||'').toLowerCase().includes(q);
-            }) : wordsArray;
+                return (w.word || '').toLowerCase().includes(q) || (w.meaning || '').toLowerCase().includes(q);
+            });
             if (searchQuery) {
                 html += '<div style="padding:10px 14px;background:var(--white);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);margin-bottom:10px;font-size:14px;color:var(--blue);">搜索 "' + escHtml(searchQuery) + '" 匹配 ' + list.length + ' 个单词 <a href="words.php?id=' + classId + '" style="color:var(--red);margin-left:8px;text-decoration:none;">×清除</a></div>';
             }
@@ -849,7 +1210,7 @@ PROMPT;
                 const pendingDate = <?php echo json_encode($wordPendingInfo, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>[wid] || '';
                 const completed = <?php echo json_encode($wordCompletedInfo, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>[wid] || false;
                 const selClass = selectedIds.has(wid) ? ' selected' : '';
-                html += '<div class="word-card' + selClass + '" data-id="' + wid + '" data-index="' + idx + '"' +
+                html += '<div class="word-card' + selClass + '" data-id="' + wid + '" data-type="word" data-index="' + idx + '"' +
                     ' data-word-db="' + word + '" data-meaning-db="' + meaning + '" data-pos-db="' + pos + '">' +
                     '<div class="corner-tl">' +
                         '<span class="number">' + (idx + 1) + '</span>' +
@@ -889,6 +1250,71 @@ PROMPT;
             document.getElementById('selectedCount').textContent = selectedIds.size;
         }
 
+        // ==================== 句子 / 作文 静默渲染 ====================
+        function matchSearch(w) {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return (w.word || '').toLowerCase().includes(q)
+                || (w.meaning || '').toLowerCase().includes(q)
+                || (w.title || '').toLowerCase().includes(q);
+        }
+        function editSvg() {
+            return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+        }
+        function sentenceCardHtml(s, idx) {
+            const sel = selectedIds.has(s.id) ? ' selected' : '';
+            return '<div class="kb-card sentence-card' + sel + '" data-id="' + s.id + '" data-type="sentence" data-index="' + idx + '">' +
+                '<div class="kb-head"><span class="kb-num">' + (idx + 1) + '</span><span class="checkbox" onclick="toggleSelect(event, \'' + s.id + '\')"></span></div>' +
+                '<div class="kb-body" onclick="toggleSelect(event, \'' + s.id + '\')">' +
+                    '<div class="kb-en" lang="en"><span>' + escHtml(s.word || '') + '</span></div>' +
+                    '<div class="kb-zh"><span>' + escHtml(s.meaning || '') + '</span></div>' +
+                '</div>' +
+                '<div class="kb-actions"><button class="edit-btn" onclick="event.stopPropagation();showEditModal(\'' + s.id + '\')">' + editSvg() + '</button></div>' +
+                '</div>';
+        }
+        function essayCardHtml(e, idx) {
+            const sel = selectedIds.has(e.id) ? ' selected' : '';
+            return '<div class="kb-card essay-card' + sel + '" data-id="' + e.id + '" data-type="essay" data-index="' + idx + '">' +
+                '<div class="kb-head"><span class="kb-num">' + (idx + 1) + '</span><span class="checkbox" onclick="toggleSelect(event, \'' + e.id + '\')"></span></div>' +
+                '<div class="kb-body" onclick="showEssayDetail(\'' + e.id + '\')">' +
+                    (e.title ? '<div class="kb-title">' + escHtml(e.title) + '</div>' : '') +
+                    '<div class="kb-en kb-clamp" lang="en">' + escHtml(e.word || '').replace(/\n/g, '<br>') + '</div>' +
+                    '<div class="kb-zh kb-clamp-dim">' + escHtml(e.meaning || '').replace(/\n/g, '<br>') + '</div>' +
+                    '<div class="kb-more">查看全文 →</div>' +
+                '</div>' +
+                '<div class="kb-actions"><button class="edit-btn" onclick="event.stopPropagation();showEditModal(\'' + e.id + '\')">' + editSvg() + '</button></div>' +
+                '</div>';
+        }
+        function renderSentenceList() {
+            let list = document.getElementById('sentenceList');
+            if (!list) {
+                document.getElementById('panelSentence').innerHTML = '<div class="kb-list" id="sentenceList"></div>';
+                list = document.getElementById('sentenceList');
+            }
+            const items = wordsArray.filter(w => itemType(w) === 'sentence').filter(matchSearch);
+            list.innerHTML = items.map((s, idx) => sentenceCardHtml(s, idx)).join('');
+        }
+        function renderEssayList() {
+            let list = document.getElementById('essayList');
+            if (!list) {
+                document.getElementById('panelEssay').innerHTML = '<div class="kb-list" id="essayList"></div>';
+                list = document.getElementById('essayList');
+            }
+            const items = wordsArray.filter(w => itemType(w) === 'essay').filter(matchSearch);
+            list.innerHTML = items.map((e, idx) => essayCardHtml(e, idx)).join('');
+        }
+        function refreshPanel(type) {
+            if (type === 'sentence') renderSentenceList();
+            else if (type === 'essay') renderEssayList();
+            else renderWordGrid();
+            initKbMarquee();
+            updateTabCounts();
+        }
+        function scrollToNew(id) {
+            const c = cardOf(id);
+            if (c) setTimeout(() => scrollCardToCenter(c, true), 60);
+        }
+
         // ==================== CSV Export ====================
         function exportCsv() {
             const form = document.createElement('form');
@@ -907,14 +1333,21 @@ PROMPT;
 
         // ==================== Edit / Delete ====================
         function showEditModal(id) {
-            const w = wordsArray.find(w => w.id === id);
-            if (w) {
-                document.getElementById('editWordId').value = id;
-                document.getElementById('editWord').value = w.word;
-                document.getElementById('editMeaning').value = w.meaning;
-                document.getElementById('editPos').value = w.pos || '';
-                document.getElementById('editModal').classList.add('active');
-            }
+            const w = itemById(id);
+            if (!w) return;
+            const t = itemType(w);
+            document.getElementById('editWordId').value = id;
+            document.getElementById('editType').value = t;
+            document.getElementById('editModalTitle').textContent = t === 'word' ? '编辑单词' : (t === 'sentence' ? '编辑句子' : '编辑作文');
+            document.getElementById('editWordLabel').textContent = t === 'word' ? '单词' : (t === 'sentence' ? '英文句子' : '英文作文');
+            document.getElementById('editMeaningLabel').textContent = t === 'word' ? '释义' : '中文直译';
+            document.getElementById('editWord').value = w.word || '';
+            document.getElementById('editMeaning').value = w.meaning || '';
+            document.getElementById('editPos').value = w.pos || '';
+            document.getElementById('editTitle').value = w.title || '';
+            document.getElementById('editPosGroup').style.display = (t === 'word') ? '' : 'none';
+            document.getElementById('editTitleGroup').style.display = (t === 'essay') ? '' : 'none';
+            document.getElementById('editModal').classList.add('active');
         }
 
         function showImportModal() {
@@ -925,7 +1358,11 @@ PROMPT;
 
         // ==================== Add Word ====================
         document.getElementById('addForm').onsubmit = async function(e) {
-            e.preventDefault(); const fd = new FormData(this); fd.append('action', 'add_word'); fd.append('csrf_token', CSRF_TOKEN);
+            e.preventDefault();
+            const wordVal = this.word.value.trim();
+            const meaningVal = this.meaning.value.trim();
+            const posVal = this.pos ? this.pos.value.trim() : '';
+            const fd = new FormData(this); fd.append('action', 'add_word'); fd.append('type', 'word'); fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
             if (d.error) { showToast(d.error, 'error'); return; }
             if (d.exists) {
@@ -934,8 +1371,12 @@ PROMPT;
                 const card = document.querySelector('.word-card[data-word-db="' + d.word.toLowerCase() + '"]');
                 if (card) scrollCardToCenter(card, false);
             } else if (d.success) {
-                showToast('添加成功', 'success'); closeModal('addModal');
-                showOkOverlayThen('words.php?id=' + classId);
+                closeModal('addModal');
+                wordsArray.push({ id: d.new_id, type: 'word', word: wordVal, meaning: meaningVal, pos: posVal, created_at: '' });
+                if (currentTab !== 'word') switchTab('word', true);
+                refreshPanel('word');
+                scrollToNew(d.new_id);
+                showToast('添加成功', 'success');
             }
         };
 
@@ -944,18 +1385,41 @@ PROMPT;
             e.preventDefault(); const fd = new FormData(this); fd.append('action', 'update_word'); fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
             if (d.error) { showToast(d.error, 'error'); return; }
-            if (d.exists) showToast('单词已存在', 'error'); else if (d.success) { showToast('保存成功', 'success'); closeModal('editModal'); showOkOverlayThen('words.php?id=' + classId); }
+            if (d.exists) { showToast('内容已存在', 'error'); return; }
+            if (d.success) {
+                const id = document.getElementById('editWordId').value;
+                const it = itemById(id);
+                if (it) {
+                    it.word = document.getElementById('editWord').value.trim();
+                    it.meaning = document.getElementById('editMeaning').value.trim();
+                    it.pos = document.getElementById('editPos') ? document.getElementById('editPos').value.trim() : '';
+                    it.title = document.getElementById('editTitle') ? document.getElementById('editTitle').value.trim() : '';
+                }
+                closeModal('editModal');
+                refreshPanel(itemType(it));
+                showToast('保存成功', 'success');
+            }
         };
 
         // ==================== Delete Word ====================
         async function deleteWord() {
-            if (!(await customConfirm('确定要删除这个单词吗？', '删除确认'))) return;
+            const id = document.getElementById('editWordId').value;
+            const it = itemById(id);
+            if (!(await customConfirm('确定要删除这条内容吗？', '删除确认'))) return;
             const fd = new FormData(); fd.append('action', 'delete_word');
-            fd.append('word_id', document.getElementById('editWordId').value);
+            fd.append('word_id', id);
             fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
             if (d.error) { showToast(d.error, 'error'); return; }
-            if (d.success) { showToast('删除成功', 'success'); closeModal('editModal'); showOkOverlayThen('words.php?id=' + classId); }
+            if (d.success) {
+                const t = itemType(it);
+                wordsArray = wordsArray.filter(x => x.id !== id);
+                selectedIds.delete(id);
+                document.getElementById('selectedCount').textContent = selectedIds.size;
+                closeModal('editModal');
+                refreshPanel(t);
+                showToast('删除成功', 'success');
+            }
         }
 
         // ==================== CSV Import ====================
@@ -1032,10 +1496,11 @@ PROMPT;
             closeModal('followModal');
 
             let words;
+            // 只跟读「单词」类型：句子/作文的有道发音会失败，且需求明确为“跟读单词”
             if (scope === 'selected') {
-                words = wordsArray.filter(w => selectedIds.has(w.id)).map(w => w.word);
+                words = wordsArray.filter(w => selectedIds.has(w.id) && (w.type || 'word') === 'word').map(w => w.word);
             } else {
-                words = wordsArray.map(w => w.word);
+                words = wordsArray.filter(w => (w.type || 'word') === 'word').map(w => w.word);
             }
             if (words.length === 0) { showToast('没有可跟读的单词', 'error'); return; }
             if (shuffle) shuffleArray(words);   // 只打乱播放顺序，单词库卡片位置不动
@@ -1074,7 +1539,9 @@ PROMPT;
                         // 显示完成态 N/N 片刻后再收尾
                         document.getElementById('followProgress').textContent = words.length + '/' + words.length;
                         document.getElementById('followWordDisplay').textContent = '完成';
-                        showToast('跟读完成', 'success');
+                        var _fc = info.failedCount || 0;
+                        if (_fc > 0) showToast('跟读完成，' + _fc + ' 个单词无发音已跳过', '');
+                        else showToast('跟读完成', 'success');
                         setTimeout(function() {
                             if (mySeq === followSessionSeq) {
                                 document.getElementById('followPlayer').style.display = 'none';
@@ -1083,8 +1550,8 @@ PROMPT;
                         }, 800);
                     }
                 } else {
-                    // Always update display text
-                    document.getElementById('followWordDisplay').textContent = info.word;
+                    // Always update display text（无发音的词加提示，避免用户误以为卡住/乱跳）
+                    document.getElementById('followWordDisplay').textContent = info.failed ? (info.word + '（无发音）') : info.word;
                     document.getElementById('followProgress').textContent = info.index + '/' + info.total;
                     // Highlight and scroll to current word card
                     document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
@@ -1140,6 +1607,8 @@ PROMPT;
         // （window load 会等 Google Fonts/图片全部加载完——字体 CDN 慢或被墙时可能延迟
         //   数秒甚至一直不触发，这就是"加载完还要等 4-5 秒才开始定位 / 有的机器直接没定位"的根因。）
         initMarquee();
+        initKbMarquee();
+        updateTabCounts();
         if ('IntersectionObserver' in window) {
             try {
                 const io = new IntersectionObserver(function(entries) {
@@ -1150,7 +1619,7 @@ PROMPT;
                 document.querySelectorAll('.word-card').forEach(card => io.observe(card));
             } catch (e) {}
         }
-        // Click card body to toggle selection
+        // Click card body to toggle selection（单词卡片）
         document.querySelectorAll('.word-card').forEach(card => {
             card.addEventListener('click', function(e) {
                 if (e.target.closest('.speaker') || e.target.closest('.pron-btn') || e.target.closest('.edit-btn') || e.target.closest('.checkbox')) return;
@@ -1158,14 +1627,31 @@ PROMPT;
             });
         });
 
-        // 执行定位（高亮优先级：搜索参数 > 历史"用这些单词重新创建" > 最近创建任务的最后一个单词）
+        // 各 tab 定位到上一次默写的位置
+        function locateForTab(tab) {
+            const lid = lastIds[tab];
+            if (lid) {
+                const c = cardOf(lid);
+                if (c) { setTimeout(() => scrollCardToCenter(c, true), 50); return; }
+            }
+            const li = lastPositions[tab];
+            if (li >= 0) {
+                const sel = tab === 'word' ? '.word-card' : (tab === 'sentence' ? '.sentence-card' : '.essay-card');
+                const c = document.querySelector(sel + '[data-index="' + li + '"]');
+                if (c) setTimeout(() => scrollCardToCenter(c, true), 50);
+            }
+        }
+
+        // 定位优先级：搜索高亮 > 历史"用这些重新创建" > 批量导入恢复 > 最近任务最后一项
         function runInitialLocate() {
             const params = new URLSearchParams(location.search);
             const highlightId = params.get('highlight');
             if (highlightId) {
-                const hc = document.querySelector('.word-card[data-id="' + highlightId + '"]');
-                // 搜索定位：持久高亮，直到用户操作才清除（locate-highlight）
-                if (hc) setTimeout(() => { scrollCardToCenter(hc, true); }, 50);
+                const it = itemById(highlightId);
+                const t = it ? itemType(it) : 'word';
+                if (t !== currentTab) switchTab(t);
+                const hc = cardOf(highlightId);
+                if (hc) setTimeout(() => scrollCardToCenter(hc, true), 50);
                 return;
             }
             const ri = localStorage.getItem('recreate_word_ids');
@@ -1173,48 +1659,50 @@ PROMPT;
                 localStorage.removeItem('recreate_word_ids');
                 try {
                     const ids = JSON.parse(ri).slice(0, 20);
-                    ids.forEach(id => { const c = document.querySelector('.word-card[data-id="' + id + '"]'); if (c) { selectedIds.add(id); c.classList.add('selected'); } });
+                    ids.forEach(id => { const c = cardOf(id); if (c) { selectedIds.add(id); c.classList.add('selected'); } });
                     document.getElementById('selectedCount').textContent = selectedIds.size;
-                    // 定位到这批单词中的第一个并持久高亮，方便用户确认要重新创建任务的单词
-                    const first = document.querySelector('.word-card[data-id="' + ids[0] + '"]');
-                    if (first) setTimeout(() => { scrollCardToCenter(first, true); }, 50);
-                    if (selectedIds.size > 0) showToast('已选择 ' + selectedIds.size + ' 个单词，可直接创建任务', 'success');
-                } catch(e) {}
+                    updateTabCounts();
+                    const firstIt = itemById(ids[0]);
+                    if (firstIt && itemType(firstIt) !== currentTab) switchTab(itemType(firstIt), true);
+                    const first = cardOf(ids[0]);
+                    if (first) setTimeout(() => scrollCardToCenter(first, true), 50);
+                    if (selectedIds.size > 0) showToast('已选择 ' + selectedIds.size + ' 个，可直接创建任务', 'success');
+                } catch (e) {}
                 return;
             }
-            const li = <?php echo $lastWordIndex; ?>;
-            const lid = <?php echo $lastWordId === null ? 'null' : json_encode($lastWordId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-            if ((li >= 0 || lid) && wordsArray.length > 0) {
-                const c = document.querySelector(lid ? '.word-card[data-id="' + lid + '"]' : '.word-card[data-index="' + li + '"]');
-                if (c) setTimeout(() => { scrollCardToCenter(c, true); }, 50);
-            }
-        }
-        // 批量导入完成后跳回本页时恢复勾选状态（保持与 load 阶段一致，提前到定位前）
-        (function() {
             const bi = localStorage.getItem('batch_import_selected');
             if (bi) {
                 localStorage.removeItem('batch_import_selected');
                 try {
                     const ids = JSON.parse(bi).slice(0, 20);
-                    ids.forEach(id => { const c = document.querySelector('.word-card[data-id="' + id + '"]'); if (c) { selectedIds.add(id); c.classList.add('selected'); } });
+                    ids.forEach(id => { const c = cardOf(id); if (c) { selectedIds.add(id); c.classList.add('selected'); } });
                     document.getElementById('selectedCount').textContent = selectedIds.size;
-                } catch(e) {}
+                    updateTabCounts();
+                } catch (e) {}
             }
-        })();
+            locateForTab(currentTab);
+        }
         runInitialLocate();
 
-        // 字体/图片加载完后再做两件事：
-        // 1) 重测跑马灯（字体加载会改变文本宽度）
-        // 2) 若定位高亮仍在（用户尚未操作），字体加载可能改变卡片高度/换行 → 微调定位防漂移
-        window.addEventListener('load', () => {
-            initMarquee();
-            const hl = document.querySelector('.word-card.locate-highlight');
-            if (hl) setTimeout(() => { scrollCardToCenter(hl, true); }, 80);
-        });
-        document.fonts && document.fonts.ready && document.fonts.ready.then(function() {
-            initMarquee();
-            const hl = document.querySelector('.word-card.locate-highlight');
-            if (hl) setTimeout(() => { scrollCardToCenter(hl, true); }, 80);
+        // 字体/图片加载完后再重测跑马灯并微调定位防漂移
+        function relocalizeAfterLayout() {
+            initMarquee(); initKbMarquee();
+            const hl = document.querySelector('.locate-highlight');
+            if (hl) { setTimeout(() => { scrollCardToCenter(hl, true); }, 80); return; }
+            if (userInteracted) return;
+            // 首屏因未溢出/字体未就绪导致首次定位未生效时，补一次定位（搜索高亮场景不覆盖）
+            if (!new URLSearchParams(location.search).get('highlight')) locateForTab(currentTab);
+        }
+        window.addEventListener('load', relocalizeAfterLayout);
+        document.fonts && document.fonts.ready && document.fonts.ready.then(relocalizeAfterLayout);
+        // bfcache（前进/后退恢复）时重新定位，避免恢复旧页面导致定位停留在旧位置
+        window.addEventListener('pageshow', function(e) {
+            if (e.persisted) {
+                userInteracted = false;
+                _locateGraceUntil = Date.now() + 1500;
+                initMarquee(); initKbMarquee();
+                locateForTab(currentTab);
+            }
         });
     </script>
 </body>

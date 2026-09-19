@@ -5,11 +5,12 @@
  * ============================================================
  *
  * 展示最新版安装包信息 + 下载按钮 + 更新说明 + 历史发布记录。
- * APK 由后台 admin.php 上传，只保留最新一版（apk/listenwrite-release.apk）。
+ * 安装包由 GitHub Actions 构建并发布到 GitHub Release（tag apk-latest）。
  * 页面公开可访问（无需班级口令），供学生/家长直接下载安装。
  * ============================================================
  */
 require_once 'inc/db.php';
+$releaseUrl = 'https://github.com/CH-Hu-Bill/MoXie/releases/tag/apk-latest';
 $versionData = Database::read('app_versions.json');
 if (!is_array($versionData)) $versionData = ['latest' => '1.0', 'history' => []];
 $apkInfo = $versionData['apk'] ?? null;
@@ -51,18 +52,20 @@ require 'inc/head.php';
                         <?php endif; ?>
                     </div>
                 </div>
-                <a href="apk/listenwrite-release.apk" download="listenwrite-release.apk"
+                <a href="<?php echo htmlspecialchars($releaseUrl); ?>" target="_blank" rel="noopener"
                    class="btn btn-primary" style="font-size:17px;padding:14px 26px;text-decoration:none;display:inline-block;width:100%;box-sizing:border-box;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载最新版 APP
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 前往 GitHub Releases 下载
                 </a>
                 <div style="font-size:11px;color:var(--pencil);opacity:0.55;margin-top:10px;text-align:center;line-height:1.6;">
-                    安装包由 <a href="https://github.com/CH-Hu-Bill/MoXie/releases/tag/apk-latest" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;">GitHub Releases</a>（CH-Hu-Bill）构建提供
+                    安装包由 GitHub Actions 构建，发布在 <a href="<?php echo htmlspecialchars($releaseUrl); ?>" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;">Releases</a>（tag <code>apk-latest</code>）
                 </div>
             <?php else: ?>
                 <div style="background:var(--old-paper);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);padding:22px 16px;margin-bottom:18px;">
                     <div style="font-family:var(--font-heading);font-size:16px;color:var(--pencil);">安装包暂未上架</div>
-                    <p style="font-size:13px;color:var(--pencil);opacity:0.65;margin-top:8px;line-height:1.6;">请稍后再来，或联系老师获取安装包。</p>
+                    <p style="font-size:13px;color:var(--pencil);opacity:0.65;margin-top:8px;line-height:1.6;">请稍后再来，或直接前往 GitHub Releases 查看。</p>
                 </div>
+                <a href="<?php echo htmlspecialchars($releaseUrl); ?>" target="_blank" rel="noopener"
+                   class="btn btn-secondary" style="font-size:15px;padding:12px 22px;text-decoration:none;display:inline-block;width:100%;box-sizing:border-box;">前往 GitHub Releases</a>
             <?php endif; ?>
 
             <?php if (!empty($history)): ?>

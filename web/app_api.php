@@ -358,7 +358,7 @@ switch ($action) {
         $word = trim(reqPost('word'));
         if ($word === '' || mb_strlen($word) > 100) appError('请输入有效单词');
         $prompt = "你是一个英语词典助手。为英文单词提供简洁准确的中文释义和标准词性缩写，严格返回JSON：\n{\"word\":\"" . addslashes($word) . "\",\"meaning\":\"中文释义\",\"pos\":\"词性\"}";
-        $result = DeepSeekAPI::call([['role' => 'system', 'content' => '你是专业英语词典助手，只返回JSON。'], ['role' => 'user', 'content' => $prompt]], 512, 30);
+        $result = AIClient::call($classId, [['role' => 'system', 'content' => '你是专业英语词典助手，只返回JSON。'], ['role' => 'user', 'content' => $prompt]], 512, 30);
         if (!$result['success']) appJson($result);
         $parsed = json_decode($result['content'], true);
         if (!is_array($parsed)) appError('AI返回格式解析失败，请重试');
@@ -632,7 +632,7 @@ switch ($action) {
 
     case 'get_pronunciations':
         $wordId = reqPost('word_id');
-        if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) appError('单词参数无效');
+        if (!is_string($wordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $wordId)) appError('单词参数无效');
         $pron = Database::getClassData($classId, 'pronunciations');
         $wordPron = (is_array($pron) && isset($pron[$wordId]) && is_array($pron[$wordId])) ? $pron[$wordId] : [];
         $items = [];
@@ -653,7 +653,7 @@ switch ($action) {
     case 'upload_pronunciation':
         appRateLimit('pron_up', $userId, 20, 3600);
         $wordId = reqPost('word_id');
-        if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) appError('单词参数无效');
+        if (!is_string($wordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $wordId)) appError('单词参数无效');
         // 单词必须存在
         $wordExists = false;
         foreach (Database::getWords($classId) as $w) {
@@ -703,7 +703,7 @@ switch ($action) {
 
     case 'delete_pronunciation':
         $wordId = reqPost('word_id');
-        if (!is_string($wordId) || !preg_match('/\A[a-f0-9]{8,32}\z/D', $wordId)) appError('单词参数无效');
+        if (!is_string($wordId) || !preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D', $wordId)) appError('单词参数无效');
         $oldFile = null;
         $ok = Database::updateClassData($classId, 'pronunciations', function($latest) use ($wordId, $userId, &$oldFile) {
             if (!is_array($latest) || !isset($latest[$wordId][(string)$userId])) return null; // 无记录 → 保持原样

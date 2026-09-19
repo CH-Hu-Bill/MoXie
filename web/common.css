@@ -2,6 +2,22 @@
    全局共享样式 — Hand-Drawn Design System
    ========================================================= */
 
+/* ---- 本地字体（自托管，避免境外 CDN 被墙导致页面一直加载）---- */
+@font-face {
+  font-family: 'ZCOOL KuaiLe';
+  src: url('fonts/ZCOOLKuaiLe-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Ma Shan Zheng';
+  src: url('fonts/MaShanZheng-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ---- 设计令牌 (CSS 自定义属性) ---- */
 :root {
   /* 颜色 */
@@ -566,7 +582,7 @@ body {
 /* 全球发音按钮：与 speaker 同款式，向右偏移一个按钮位（36px + 8px 间距），避免完全重叠盖住有道标准发音 */
 .word-card .pron-btn.speaker { left: 52px; }
 
-/* Follow-along word highlight */
+/* Follow-along / 定位高亮（单词卡片） */
 .word-card.follow-highlight {
   border: 3px solid var(--red) !important;
   box-shadow: 6px 6px 0px 0px var(--red) !important;
@@ -574,6 +590,14 @@ body {
   z-index: 5;
   overflow: visible;
 }
+/* Follow-along / 定位高亮（句子·作文卡片） */
+.kb-card.follow-highlight, .kb-card.locate-highlight,
+.task-line-card.follow-highlight, .task-line-card.locate-highlight {
+  border: 3px solid var(--red) !important;
+  box-shadow: 6px 6px 0px 0px var(--red) !important;
+  z-index: 5;
+}
+.kb-card.locate-highlight, .task-line-card.locate-highlight { background: var(--post-it); }
 
 /* ======== 内容区 ======== */
 .content {
@@ -944,3 +968,13 @@ body.lb-open .gallery-card img[src$=".gif"] {
 .pron-empty{padding:26px 10px;text-align:center;color:#999;font-size:14px;line-height:1.8}
 .pron-close{margin-top:10px;align-self:center;padding:8px 28px;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);background:var(--white);cursor:pointer;font-family:var(--font-heading);box-shadow:2px 2px 0 var(--pencil)}
 .pron-close:hover{border-color:var(--blue);color:var(--blue)}
+
+/* ---- 任务/历史：句子·作文行内卡片（与知识库一致的手绘风） ---- */
+.task-extra{display:flex;flex-direction:column;gap:14px;margin-top:18px}
+.task-line-card{background:var(--white);border:2.5px solid var(--pencil);border-radius:var(--wobbly);box-shadow:3px 3px 0 rgba(45,45,45,0.1);padding:16px 18px}
+.task-line-title{font-family:var(--font-heading);font-size:20px;color:var(--blue);margin-bottom:6px}
+.task-line-en{font-family:var(--font-heading);font-size:22px;color:var(--pencil);line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.task-line-zh{font-family:var(--font-body);font-size:18px;color:#555;line-height:1.6;margin-top:8px;white-space:pre-wrap;word-break:break-word}
+.hide-mode .task-line-en{display:none}
+.hide-mode .task-line-zh{font-size:24px;color:var(--pencil);margin-top:0}
+.hide-mode .word-card .meaning{font-size:27px}

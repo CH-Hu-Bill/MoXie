@@ -8,7 +8,7 @@
  * 扫描各班级 gallery.json 中的 MP4，缺缩略图则调用 ffmpeg 生成。
  *
  * 调用（计划任务，每 1 分钟）：
- *   php /www/wwwroot/moxie.billspace.top/cron_gallery_thumbs.php
+ *   php cron_gallery_thumbs.php
  *
  * 特性：
  *   - 仅允许 CLI 运行（Web 请求一律 404，防止匿名触发全量扫描/生成）

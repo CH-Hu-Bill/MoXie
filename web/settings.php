@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * ============================================================
  * 设置页面
@@ -30,6 +30,52 @@ $class = $classes[$classId];
 // Check password protection
 requireClassAuth($classId, $class);
 $settings = Database::getSettings();
+
+// ===== AI 设置（按班级，Web + APP 共用）=====
+if (isset($_POST['action']) && $_POST['action'] === 'save_ai') {
+    requireCsrf();
+    header('Content-Type: application/json');
+    $aiProvider = reqPost('ai_provider');
+    if (!in_array($aiProvider, ['openai', 'anthropic'], true)) {
+        unset($settings['ai_' . $classId]);
+        Database::saveSettings($settings);
+        echo json_encode(['success' => true]); exit;
+    }
+    $aiEndpoint = trim(reqPost('ai_endpoint'));
+    $aiKey      = trim(reqPost('ai_api_key'));
+    $aiModel    = trim(reqPost('ai_model'));
+    if ($aiEndpoint === '' || $aiKey === '' || $aiModel === '') {
+        echo json_encode(['success' => false, 'error' => '请填写完整的接口地址、API 密钥和模型名']); exit;
+    }
+    if (strlen($aiEndpoint) > 500 || strlen($aiKey) > 500 || strlen($aiModel) > 200) {
+        echo json_encode(['success' => false, 'error' => '输入内容过长']); exit;
+    }
+    $settings['ai_' . $classId] = [
+        'provider' => $aiProvider,
+        'endpoint' => $aiEndpoint,
+        'api_key'  => $aiKey,
+        'model'    => $aiModel,
+    ];
+    Database::saveSettings($settings);
+    echo json_encode(['success' => true]); exit;
+}
+if (isset($_POST['action']) && $_POST['action'] === 'ai_test') {
+    requireCsrf();
+    header('Content-Type: application/json');
+    require_once 'inc/api.php';
+    $cfg = [
+        'provider' => reqPost('ai_provider'),
+        'endpoint' => trim(reqPost('ai_endpoint')),
+        'api_key'  => trim(reqPost('ai_api_key')),
+        'model'    => trim(reqPost('ai_model')),
+    ];
+    if (!in_array($cfg['provider'], ['openai', 'anthropic'], true)
+        || $cfg['endpoint'] === '' || $cfg['api_key'] === '' || $cfg['model'] === '') {
+        echo json_encode(['success' => false, 'error' => '请先完整填写格式、接口地址、密钥和模型名']); exit;
+    }
+    $cfg['endpoint'] = AIClient::normalizeEndpoint($cfg['provider'], $cfg['endpoint']);
+    echo json_encode(AIClient::testConfig($cfg)); exit;
+}
 
 // Handle save
 if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
@@ -78,6 +124,12 @@ $followBuffer = $settings['follow_buffer_' . $classId] ?? $settings['follow_buff
 $galleryApiKey = (string)($settings['gallery_api_key_' . $classId] ?? '');
 $galleryApiEnabled = $galleryApiKey !== '';
 $displayToken = (string)($settings['display_token_' . $classId] ?? '');
+// AI 配置（按班级）
+$aiCfg = $settings['ai_' . $classId] ?? null;
+$aiProvider = (is_array($aiCfg) && in_array(($aiCfg['provider'] ?? ''), ['openai', 'anthropic'], true)) ? $aiCfg['provider'] : 'none';
+$aiEndpoint = is_array($aiCfg) ? (string)($aiCfg['endpoint'] ?? '') : '';
+$aiApiKey   = is_array($aiCfg) ? (string)($aiCfg['api_key'] ?? '') : '';
+$aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
 ?>
 <?php $pageTitle = '设置'; require 'inc/head.php'; ?>
 </head>
@@ -89,6 +141,12 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
     $pageTitle = '设置';
     require 'inc/header.php';
     ?>
+    <style>
+        .ai-seg { display: flex; gap: 8px; flex-wrap: wrap; }
+        .ai-seg-btn { flex: 1; min-width: 92px; padding: 8px 10px; border: 2px solid var(--pencil); border-radius: var(--wobbly-sm); background: var(--white); cursor: pointer; font-family: var(--font-heading); font-size: 14px; color: var(--pencil); box-shadow: 2px 2px 0 var(--pencil); transition: transform .1s, box-shadow .1s; }
+        .ai-seg-btn:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--pencil); }
+        .ai-seg-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); box-shadow: 2px 2px 0 var(--pencil); }
+    </style>
     <div class="content">
         <div class="card mb-3">
             <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
@@ -182,6 +240,46 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
                 <div id="displayTokenHint" style="margin-top:6px;"><?php echo $displayToken !== '' ? '已配置：该链接可免口令打开壁纸页。' : '未配置：展示页仍需班级口令验证。'; ?></div>
             </div>
         </div>
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>AI 设置（本班级）
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.7;margin-bottom:12px;">
+                配置后本班级的 AI 功能（智能补全、翻译等）使用该接口，仅对本班级生效，Web 与 APP 共用。
+            </div>
+                <div class="mb-4">
+                    <div style="font-size:14px;color:var(--pencil);margin-bottom:8px;">端点格式</div>
+                    <div class="ai-seg" id="aiSeg">
+                        <button type="button" class="ai-seg-btn" data-value="none">未配置</button>
+                        <button type="button" class="ai-seg-btn" data-value="openai">OpenAI 兼容</button>
+                        <button type="button" class="ai-seg-btn" data-value="anthropic">Anthropic</button>
+                    </div>
+                    <input type="hidden" id="aiProvider" value="<?php echo htmlspecialchars($aiProvider, ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+            <div id="aiFields">
+                <div class="mb-4">
+                    <div style="font-size:14px;color:var(--pencil);margin-bottom:8px;">接口地址</div>
+                    <input type="text" id="aiEndpoint" class="input" value="<?php echo htmlspecialchars($aiEndpoint, ENT_QUOTES, 'UTF-8'); ?>" placeholder="如 https://api.deepseek.com" style="width:100%;">
+                    <div style="font-size:12px;color:#888;margin-top:6px;line-height:1.6;">可只填域名，自动补全 <code class="tag">/v1/chat/completions</code>；Anthropic 可填 <code class="tag">https://api.anthropic.com</code></div>
+                </div>
+                <div class="mb-4">
+                    <div style="font-size:14px;color:var(--pencil);margin-bottom:8px;">API 密钥</div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="password" id="aiApiKey" class="input" value="<?php echo htmlspecialchars($aiApiKey, ENT_QUOTES, 'UTF-8'); ?>" placeholder="sk-..." style="flex:1;">
+                        <button type="button" class="btn btn-sm" onclick="toggleAiKey()" id="aiKeyToggle" style="white-space:nowrap;">显示</button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <div style="font-size:14px;color:var(--pencil);margin-bottom:8px;">模型名</div>
+                    <input type="text" id="aiModel" class="input" value="<?php echo htmlspecialchars($aiModel, ENT_QUOTES, 'UTF-8'); ?>" placeholder="如 deepseek-chat / claude-3-5-sonnet-latest / gpt-4o-mini" style="width:100%;">
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary" onclick="testAiConnection()" id="aiTestBtn" style="font-size:14px;">测试连接</button>
+                <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="aiSaveBtn" style="font-size:14px;">保存 AI 设置</button>
+            </div>
+            <div id="aiHint" style="font-size:12px;color:#888;margin-top:10px;line-height:1.7;"></div>
+        </div>
         <div class="card mb-3" style="text-align:center;padding:18px;">
             <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
                 <button onclick="try{localStorage.removeItem('guide_done')}catch(e){};showOkOverlayThen('main.php?id=<?php echo rawurlencode($classId); ?>')" class="btn btn-secondary" style="font-size:14px;">重新查看引导弹窗</button>
@@ -192,7 +290,7 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=10"></script>
+    <script src="common.js?v=12"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {
@@ -268,6 +366,70 @@ $displayToken = (string)($settings['display_token_' . $classId] ?? '');
                 showToast(d.error || '保存失败', 'error');
             }
         }
+        // ===== AI 设置 =====
+        function updateAiHint() {
+            const p = document.getElementById('aiProvider').value;
+            const fields = document.getElementById('aiFields');
+            fields.style.opacity = (p === 'none') ? '0.45' : '1';
+            fields.style.pointerEvents = (p === 'none') ? 'none' : '';
+            const hint = document.getElementById('aiHint');
+            if (p === 'none') hint.textContent = '未配置：AI 相关功能将提示「AI 服务不可用」。';
+            else if (p === 'openai') hint.textContent = 'OpenAI 兼容：请求发往 {接口地址}/v1/chat/completions，使用 Bearer 鉴权。';
+            else hint.textContent = 'Anthropic：请求发往 {接口地址}/v1/messages，使用 x-api-key 鉴权。';
+        }
+        function toggleAiKey() {
+            const inp = document.getElementById('aiApiKey');
+            const btn = document.getElementById('aiKeyToggle');
+            const show = inp.type === 'password';
+            inp.type = show ? 'text' : 'password';
+            btn.textContent = show ? '隐藏' : '显示';
+        }
+        function aiPayload() {
+            const fd = new FormData();
+            fd.append('ai_provider', document.getElementById('aiProvider').value);
+            fd.append('ai_endpoint', document.getElementById('aiEndpoint').value.trim());
+            fd.append('ai_api_key', document.getElementById('aiApiKey').value.trim());
+            fd.append('ai_model', document.getElementById('aiModel').value.trim());
+            fd.append('csrf_token', CSRF_TOKEN);
+            return fd;
+        }
+        async function saveAiSettings() {
+            const btn = document.getElementById('aiSaveBtn');
+            btn.disabled = true; btn.textContent = '保存中...';
+            try {
+                const fd = aiPayload(); fd.append('action', 'save_ai');
+                const d = await (await fetch('settings.php?id=<?php echo $classId; ?>', { method: 'POST', body: fd })).json();
+                if (d.success) showToast('AI 设置已保存', 'success');
+                else showToast(d.error || '保存失败', 'error');
+            } catch(e) { showToast('网络异常，请重试', 'error'); }
+            btn.disabled = false; btn.textContent = '保存 AI 设置';
+        }
+        async function testAiConnection() {
+            const btn = document.getElementById('aiTestBtn');
+            btn.disabled = true; btn.textContent = '测试中...';
+            try {
+                const fd = aiPayload(); fd.append('action', 'ai_test');
+                const d = await (await fetch('settings.php?id=<?php echo $classId; ?>', { method: 'POST', body: fd })).json();
+                if (d.success) showToast(d.message || '连接成功', 'success');
+                else showToast(d.error || '连接失败', 'error');
+            } catch(e) { showToast('网络异常，请重试', 'error'); }
+            btn.disabled = false; btn.textContent = '测试连接';
+        }
+        function syncAiSeg() {
+            const p = document.getElementById('aiProvider').value;
+            document.querySelectorAll('#aiSeg .ai-seg-btn').forEach(function(b) {
+                b.classList.toggle('active', b.dataset.value === p);
+            });
+        }
+        document.querySelectorAll('#aiSeg .ai-seg-btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+                document.getElementById('aiProvider').value = this.dataset.value;
+                syncAiSeg();
+                updateAiHint();
+            });
+        });
+        syncAiSeg();
+        updateAiHint();
     </script>
 </body>
 </html>

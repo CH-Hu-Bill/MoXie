@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * 班级史记 — Vlog 日记
  * 左侧月历 + 用户列表 / 右侧完整 Vlog 编辑器
@@ -47,8 +47,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
 }
 ?>
 <?php $pageTitle = '班级史记'; require 'inc/head.php'; ?>
-<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.min.js"></script>
+<link href="lib/quill/quill.snow.css" rel="stylesheet">
+<script src="lib/quill/quill.min.js"></script>
 <style>
 /* ======== 班级史记布局 (Hand-Drawn) ======== */
 .app { flex:1; width:100%; max-width:1200px; margin:20px auto; display:flex; gap:24px; align-items:flex-start; padding:0 20px 24px; }
@@ -270,7 +270,7 @@ require 'inc/header.php';
 </div>
 </div>
 
-<script src="common.js?v=10"></script>
+<script src="common.js?v=12"></script>
 <script>
 var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var today = (function() { var n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); })();

@@ -37,8 +37,23 @@ function speak(word, times) {
         if (n <= 0 || mySeq !== _speakSeq) return;
         const a = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(word) + '&type=1');
         _currentAudio = a;
-        a.play().catch(() => {});
-        a.onended = () => { if (_currentAudio === a) _currentAudio = null; if (n > 1 && mySeq === _speakSeq) setTimeout(() => play(n - 1), 400); };
+        let settled = false;
+        const watchdog = setTimeout(function() { fail(); }, 5000);
+        const fail = function() {
+            if (settled) return;
+            settled = true;
+            clearTimeout(watchdog);
+            if (_currentAudio === a) _currentAudio = null;
+            if (mySeq === _speakSeq && typeof showToast === 'function') showToast('有道词典暂无该发音', 'error');
+        };
+        a.onerror = fail;
+        a.onended = () => {
+            settled = true;
+            clearTimeout(watchdog);
+            if (_currentAudio === a) _currentAudio = null;
+            if (n > 1 && mySeq === _speakSeq) setTimeout(() => play(n - 1), 400);
+        };
+        a.play().catch(fail);
     };
     play(times);
 }
@@ -326,6 +341,7 @@ function startFollowAlong(words, opts, onUpdate) {
         playStartAt: 0,             // 本次播放 'playing' 时刻（ms）
         playedMs: 0,                // 当前遍已累计播放时长（ms）
         failed: false,              // 当前遍失败：跳过剩余重复直接下一词
+        failedCount: 0,             // 整个会话中无发音（失败）的词数
         onUpdate: onUpdate
     };
     _followState = st;
@@ -334,7 +350,7 @@ function startFollowAlong(words, opts, onUpdate) {
         if (!st.playing || st.paused) return;
         if (st.index >= st.words.length) {
             st.playing = false;
-            if (onUpdate) onUpdate({ done: true });
+            if (onUpdate) onUpdate({ done: true, failedCount: st.failedCount });
             return;
         }
         st.currentRepeat = 0;
@@ -362,7 +378,7 @@ function startFollowAlong(words, opts, onUpdate) {
             st.index++;
             if (st.index >= st.words.length) {
                 st.playing = false;
-                if (onUpdate) onUpdate({ done: true });
+                if (onUpdate) onUpdate({ done: true, failedCount: st.failedCount });
                 return;
             }
             playNext();
@@ -383,6 +399,7 @@ function startFollowAlong(words, opts, onUpdate) {
             st.currentAudio = null;
             if (done) return;
             done = true;
+            if (wd) clearTimeout(wd);
             // 实测播放时长；无 playing 事件时回退 audio.duration
             st.playedMs += st.playStartAt
                 ? (performance.now() - st.playStartAt)
@@ -395,11 +412,25 @@ function startFollowAlong(words, opts, onUpdate) {
             if (st.currentAudio === audio) st.currentAudio = null;
             if (done) return;
             done = true;
+            if (wd) clearTimeout(wd);
             st.failed = true;
             if (!st.playing || st.paused) return;
-            st.currentRepeat = st.repeat; // 失败：跳过剩余重复，直接下一词（无停顿）
-            playWordRepeat();
+            st.currentRepeat = st.repeat;   // 失败：跳过剩余重复
+            st.failedCount++;
+            // 通知页面：该词无发音（用于显示「无发音」提示）
+            if (onUpdate) onUpdate({ failed: true, word: st.words[st.index], index: st.index + 1, total: st.words.length });
+            // 关键：不能「零延迟」跳到下一词，否则整列表会瞬间掠过、视角乱跳。
+            // 原地停留一小段（至少 800ms），让用户看清并跳过当前词。
+            var waitMs = Math.max(800, st.buffer > 0 ? st.buffer : 0);
+            st.timerDeadline = performance.now() + waitMs;
+            st.timer = setTimeout(function() {
+                st.timer = null;
+                st.timerDeadline = 0;
+                playWordRepeat();           // currentRepeat 已 = repeat，会推进到下一词
+            }, waitMs);
         };
+        // 有道词典无该词发音时不会触发 ended/error，加超时保护避免一直等待
+        var wd = setTimeout(function() { if (st.currentAudio === audio && !done) fail(); }, 6000);
         audio.onerror = fail;
         audio.play().catch(fail);
     }
