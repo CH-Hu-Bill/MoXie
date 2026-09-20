@@ -39,7 +39,8 @@ PORT=8080 ./scripts/dev.sh  # 指定端口
 > 防火墙：服务以隐藏窗口监听 `0.0.0.0`，脚本会按端口创建入站放行规则（卸载时移除），
 > 否则防火墙弹窗被忽略时手机 APP 连不上。
 
-`scripts\update.bat` 更新，`scripts\uninstall.bat` 卸载自启，`scripts\run.bat` 手动前台启动。
+`scripts\update.bat` 更新（git 仓库走 `git pull`；非 git 解压版自动从 GitHub 下载最新源码覆盖，
+两者都保留 `web\data\` 与 `web\inc\config.php`），`scripts\uninstall.bat` 卸载自启，`scripts\run.bat` 手动前台启动。
 
 > 说明：Windows 下 PHP 内置服务器为单进程，暂不支持 `PHP_CLI_SERVER_WORKERS`。
 

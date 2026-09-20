@@ -52,6 +52,8 @@
    - 控制台会打印内网访问地址（如 `http://192.168.x.x:8000`）
 3. 其它设备连同一局域网，用该地址访问即可（防火墙已自动放行，无需手动确认弹窗）
 4. 更新代码：双击 `scripts\update.bat`；卸载自启：`scripts\uninstall.bat`
+   - git 仓库：自动 `git pull`；非 git（离线解压版）：自动从 GitHub 下载最新源码覆盖
+   - 只更新代码，`web\data\`（数据）与 `web\inc\config.php`（配置）始终保留
 
 > 部署、安全、数据存储、API 文档详见 [web/README.md](web/README.md)。
 
