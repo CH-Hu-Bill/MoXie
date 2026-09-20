@@ -1,0 +1,159 @@
+name: Test Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'install.ps1'
+      - 'install.bat'
+      - 'update.ps1'
+      - 'run.bat'
+      - 'run-hidden.vbs'
+      - 'uninstall.bat'
+      - 'web/inc/config.example.php'
+      - 'web/router.php'
+      - '.github/workflows/install-windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  online:
+    name: Install (online download)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show PowerShell version
+        shell: pwsh
+        run: $PSVersionTable.PSVersion
+
+      - name: Run install.ps1 (Windows PowerShell 5.1)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Port 8099 2>&1 |
+            Tee-Object -FilePath install.log
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited with $LASTEXITCODE" }
+
+      - name: Verify PHP runtime and extensions
+        shell: pwsh
+        run: |
+          if (-not (Test-Path runtime/php/php.exe)) { throw 'runtime/php/php.exe missing' }
+          if (-not (Test-Path runtime/php/php.ini)) { throw 'runtime/php/php.ini missing' }
+          & runtime/php/php.exe -v
+          $mods = & runtime/php/php.exe -m
+          "extensions: " + ($mods -join ',')
+          foreach ($e in 'curl','gd','mbstring','openssl','fileinfo','zip','exif') {
+            if ($mods -notcontains $e) { throw "missing PHP extension: $e" }
+          }
+
+      - name: Verify ffmpeg runtime
+        shell: pwsh
+        run: |
+          if (-not (Test-Path runtime/ffmpeg/bin/ffmpeg.exe)) { throw 'runtime/ffmpeg/bin/ffmpeg.exe missing' }
+          & runtime/ffmpeg/bin/ffmpeg.exe -version | Select-Object -First 1
+
+      - name: Verify config.php (no BOM, valid, secret replaced)
+        shell: pwsh
+        run: |
+          $p = 'web/inc/config.php'
+          if (-not (Test-Path $p)) { throw 'config.php not generated' }
+          $b = [IO.File]::ReadAllBytes($p)
+          if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { throw 'config.php has UTF-8 BOM' }
+          & runtime/php/php.exe -l $p
+          if (Select-String -Path $p -Pattern 'replace-with-at-least-32-random-characters' -Quiet) { throw 'app_secret placeholder not replaced' }
+          if (Select-String -Path $p -Pattern 'change-this-password' -Quiet) { throw 'admin_password placeholder not replaced' }
+
+      - name: Wait for HTTP 200
+        shell: pwsh
+        run: |
+          $ok = $false
+          for ($i = 0; $i -lt 45; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8099/index.php' -UseBasicParsing -TimeoutSec 3
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) {
+            Write-Host '--- diagnostics ---'
+            Get-Process php -ErrorAction SilentlyContinue | Format-Table Id, Path
+            netstat -ano | Select-String ':8099'
+            Get-Content install.log -Tail 50
+            throw 'server did not respond on http://127.0.0.1:8099'
+          }
+
+      - name: Verify protected paths return 403
+        shell: pwsh
+        run: |
+          foreach ($u in '/inc/config.php', '/data/classes.json') {
+            try {
+              $r = Invoke-WebRequest -Uri ("http://127.0.0.1:8099" + $u) -UseBasicParsing -TimeoutSec 5
+              $code = $r.StatusCode
+            } catch {
+              $code = [int]$_.Exception.Response.StatusCode
+            }
+            Write-Host "GET $u -> $code"
+            if ($code -ne 403) { throw "$u expected 403, got $code" }
+          }
+
+      - name: Verify scheduled task registered
+        shell: pwsh
+        run: |
+          $t = Get-ScheduledTask -TaskName 'ListenWrite Local Server' -ErrorAction SilentlyContinue
+          if (-not $t) { throw 'scheduled task not registered' }
+          Write-Host "task: $($t.TaskName) state=$($t.State)"
+
+      - name: Uninstall and verify stopped
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+          if (Get-ScheduledTask -TaskName 'ListenWrite Local Server' -ErrorAction SilentlyContinue) { throw 'scheduled task still present after uninstall' }
+          Start-Sleep -Seconds 3
+          if (Get-Process php -ErrorAction SilentlyContinue) { throw 'php.exe still running after uninstall' }
+
+  offline:
+    name: Install (offline bundle)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Seed offline bundle (real PHP + dummy ffmpeg)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force offline | Out-Null
+          Invoke-WebRequest -Uri 'https://windows.php.net/downloads/releases/latest/php-8.2-nts-Win32-vs16-x64-latest.zip' -OutFile offline/php.zip -UseBasicParsing
+          New-Item -ItemType Directory -Force ffmpeg-9.0/bin | Out-Null
+          Set-Content -Path ffmpeg-9.0/bin/ffmpeg.exe -Value 'dummy'
+          Compress-Archive -Path ffmpeg-9.0 -DestinationPath offline/ffmpeg.zip -Force
+
+      - name: Run install.ps1 with offline bundle
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Port 8098 2>&1 |
+            Tee-Object -FilePath install.log
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited with $LASTEXITCODE" }
+          if (-not (Select-String -Path install.log -Pattern '使用随包离线 PHP' -Quiet))     { throw 'offline PHP branch was not used' }
+          if (-not (Select-String -Path install.log -Pattern '使用随包离线 ffmpeg' -Quiet))  { throw 'offline ffmpeg branch was not used' }
+
+      - name: Wait for HTTP 200 (offline)
+        shell: pwsh
+        run: |
+          $ok = $false
+          for ($i = 0; $i -lt 45; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8098/index.php' -UseBasicParsing -TimeoutSec 3
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { Get-Content install.log -Tail 50; throw 'offline install server did not respond on :8098' }
+
+      - name: Uninstall (offline)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+          if (Get-ScheduledTask -TaskName 'ListenWrite Local Server' -ErrorAction SilentlyContinue) { throw 'scheduled task still present after uninstall' }
