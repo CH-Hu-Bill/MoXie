@@ -211,7 +211,19 @@ jobs:
             } catch {}
             Start-Sleep -Seconds 2
           }
-          if (-not $ok) { Get-Content update_nongit.log -Tail 50; throw 'non-git update did not bring server up' }
+          if (-not $ok) {
+            Write-Host '--- diagnostics ---'
+            Get-Process php, wscript, cmd -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, Path
+            netstat -ano | Select-String ':8000'
+            if (Test-Path scripts/run.bat) {
+              $b = [IO.File]::ReadAllBytes('scripts/run.bat')
+              $crlf = 0
+              for ($k = 0; $k -lt $b.Length - 1; $k++) { if ($b[$k] -eq 13 -and $b[$k+1] -eq 10) { $crlf++ } }
+              Write-Host ("run.bat CRLF count: " + $crlf)
+            }
+            Get-Content update_nongit.log -Tail 50
+            throw 'non-git update did not bring server up'
+          }
 
       - name: Uninstall and verify stopped
         shell: pwsh

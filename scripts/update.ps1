@@ -60,6 +60,14 @@ function Update-FromGitHub {
     } else {
         Copy-Item -Path (Join-Path $src '*') -Destination $Root -Recurse -Force
     }
+    # GitHub 归档中的 .bat/.vbs 为 LF 换行；Windows 下批处理需 CRLF，覆盖后统一转换
+    Get-ChildItem -Path $Root -Recurse -Include '*.bat', '*.vbs' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $t = [System.IO.File]::ReadAllText($_.FullName)
+            $t = ($t -replace "`r`n", "`n") -replace "`n", "`r`n"
+            [System.IO.File]::WriteAllText($_.FullName, $t)
+        } catch {}
+    }
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host '    代码已更新（web\data、config.php、offline、runtime 均保留）' -ForegroundColor Green
 }
