@@ -106,11 +106,19 @@ jobs:
           if (-not $t) { throw 'scheduled task not registered' }
           Write-Host "task: $($t.TaskName) state=$($t.State)"
 
+      - name: Verify firewall rule created
+        shell: pwsh
+        run: |
+          $r = Get-NetFirewallRule -DisplayName 'ListenWrite Local Server*' -ErrorAction SilentlyContinue
+          if (-not $r) { throw 'firewall rule not created' }
+          foreach ($x in $r) { Write-Host "firewall rule: $($x.DisplayName)" }
+
       - name: Uninstall and verify stopped
         shell: pwsh
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Uninstall
           if (Get-ScheduledTask -TaskName 'ListenWrite Local Server' -ErrorAction SilentlyContinue) { throw 'scheduled task still present after uninstall' }
+          if (Get-NetFirewallRule -DisplayName 'ListenWrite Local Server*' -ErrorAction SilentlyContinue) { throw 'firewall rule still present after uninstall' }
           Start-Sleep -Seconds 3
           if (Get-Process php -ErrorAction SilentlyContinue) { throw 'php.exe still running after uninstall' }
 

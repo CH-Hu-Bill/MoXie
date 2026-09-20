@@ -32,6 +32,7 @@ $FfmpegDir = Join-Path $Runtime 'ffmpeg'
 $WebDir    = Join-Path $Root 'web'
 $PortFile  = Join-Path $Runtime 'server-port.txt'
 $TaskName  = 'ListenWrite Local Server'
+$FwRuleName = 'ListenWrite Local Server'
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "    [OK] $m" -ForegroundColor Green }
@@ -71,8 +72,10 @@ if ($Uninstall) {
     Step '移除开机自启任务'
     schtasks /Delete /TN "$TaskName" /F 2>$null | Out-Null
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Get-NetFirewallRule -DisplayName "$FwRuleName*" -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
     Stop-Server
-    Ok '已移除计划任务并停止服务（runtime/ 与班级数据保持不变）'
+    Ok '已移除计划任务、防火墙规则并停止服务（runtime/ 与班级数据保持不变）'
     return
 }
 
@@ -93,6 +96,19 @@ if ($Port -le 0) {
 }
 Set-Content -Path $PortFile -Value $Port -Encoding ASCII
 Ok "端口：$Port"
+
+# ---------------- 防火墙（放行局域网，供手机 APP 访问）----------------
+# 服务以隐藏窗口监听 0.0.0.0，若不预置规则，Windows 防火墙弹窗被忽略时手机会连不上。
+Step '配置防火墙入站规则'
+try {
+    Get-NetFirewallRule -DisplayName "$FwRuleName*" -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName "$FwRuleName (TCP $Port)" -Direction Inbound `
+        -Action Allow -Protocol TCP -LocalPort $Port -Profile Any -ErrorAction Stop | Out-Null
+    Ok "已放行入站 TCP $Port（局域网设备/手机 APP 可访问）"
+} catch {
+    Warn "防火墙规则设置失败（本机 127.0.0.1 仍可用，但手机可能连不上）：$($_.Exception.Message)"
+}
 
 # ---------------- 更新代码（若是 git 仓库）----------------
 if (Test-Path (Join-Path $Root '.git')) {
