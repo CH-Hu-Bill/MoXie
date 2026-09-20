@@ -13,7 +13,7 @@ import '../study/essay_detail_screen.dart';
 class SearchScreen extends StatefulWidget {
   final String? initialQuery;
   final String? highlightWord;
-  final ValueChanged<String>? onWordFound;
+  final ValueChanged<WordMatch>? onWordFound;
 
   const SearchScreen(
       {super.key, this.initialQuery, this.highlightWord, this.onWordFound});
@@ -177,7 +177,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildWordMatchCard(WordMatch w) {
     final auth = context.read<AuthProvider>();
     final onTap =
-        widget.onWordFound != null ? () => widget.onWordFound!(w.word) : null;
+        widget.onWordFound != null ? () => widget.onWordFound!(w) : null;
     if (w.type == 'sentence') {
       return SentenceCard(
         english: w.word,

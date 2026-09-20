@@ -80,6 +80,7 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -141,6 +142,7 @@ class _ClassSelectionScreenState extends State<ClassSelectionScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,

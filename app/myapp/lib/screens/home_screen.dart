@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/vlog_entry.dart';
 import '../providers/auth_provider.dart';
 import '../services/announcement_service.dart';
 import '../theme/app_theme.dart';
@@ -26,11 +27,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final _studyKey = GlobalKey<StudyScreenState>();
   final _lifeKey = GlobalKey<LifeScreenState>();
 
-  void _onWordFound(String word) {
+  void _onWordFound(WordMatch word) {
     setState(() => _currentIndex = 0);
-    // 等 tab 切换完成渲染后再定位单词，避免 IndexedStack 中滚动上下文未就绪
+    // 等 tab 切换完成渲染后再定位，避免 IndexedStack 中滚动上下文未就绪
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _studyKey.currentState?.scrollToWord(word);
+      _studyKey.currentState?.locateWord(word.type, word.id, word.word);
     });
   }
 
@@ -85,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: AppColors.paper,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,

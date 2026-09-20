@@ -19,44 +19,97 @@ class StudyScreen extends StatefulWidget {
   State<StudyScreen> createState() => StudyScreenState();
 }
 
-class StudyScreenState extends State<StudyScreen> {
+class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
   int _mainTab = 0;
   int _taskTab = 0;
-  final _wordListScrollController = ScrollController();
-  final Map<String, GlobalKey> _wordCardKeys = {};
-  String? _highlightWord;
-  bool _isLocating = false;
+  int _kbTab = 0;
+
+  static const List<String> _kbTypes = ['word', 'sentence', 'essay'];
+  static const List<String> _kbLabels = ['单词', '句子', '作文'];
 
   final _api = ApiService();
   final _storage = StorageService();
 
-  List<Word> _words = [];
+  // 三个板块各自独立的数据/分页/滚动，互不影响
+  final Map<String, List<Word>> _kb = {
+    'word': [],
+    'sentence': [],
+    'essay': [],
+  };
+  final Map<String, int> _kbPage = {'word': 1, 'sentence': 1, 'essay': 1};
+  final Map<String, bool> _kbHasMore = {
+    'word': false,
+    'sentence': false,
+    'essay': false,
+  };
+  final Map<String, bool> _kbLoading = {
+    'word': false,
+    'sentence': false,
+    'essay': false,
+  };
+  final Map<String, bool> _kbLoaded = {
+    'word': false,
+    'sentence': false,
+    'essay': false,
+  };
+  final Map<String, ScrollController> _kbScroll = {};
+  final Map<String, GlobalKey> _cardKeys = {};
+  final Set<String> _autoLocated = {};
+
+  final Map<String, int> _counts = {'word': 0, 'sentence': 0, 'essay': 0};
+  final Map<String, String?> _lastIds = {
+    'word': null,
+    'sentence': null,
+    'essay': null,
+  };
+  String _libraryRev = '';
+  String? _highlightId;
+  bool _isLocating = false;
+
   List<Word> _wrongWords = [];
   List<Task> _pendingTasks = [];
   List<Task> _historyTasks = [];
-  bool _loading = false;
-  int _wordsPage = 1;
-  int _wordsTotal = 0;
-  bool _wordsHasMore = false;
 
-  void scrollToWord(String word) {
-    _isLocating = true;
-    setState(() {
-      _mainTab = 0;
-      _highlightWord = word;
+  Timer? _refreshTimer;
+  String? _lastLoadedClassId;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final t in _kbTypes) {
+      _kbScroll[t] = ScrollController();
+    }
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll(initial: true));
+    // 后台每 30s 拉一次「内容指纹」，有变化才静默重载（解决新增内容不出现）
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _pollMeta();
     });
-    _showLocateHint('正在定位…');
-    final found = _words.any((w) => w.word.toLowerCase() == word.toLowerCase());
-    if (found) {
-      _scrollToHighlight(word);
-    } else {
-      final auth = context.read<AuthProvider>();
-      final classId = auth.currentClassId;
-      if (classId != null && classId.isNotEmpty) {
-        _loadWordsForSearch(classId, word);
-      } else {
-        _isLocating = false;
-      }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    for (final c in _kbScroll.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _pollMeta();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId != null && classId.isNotEmpty && classId != _lastLoadedClassId) {
+      _lastLoadedClassId = classId;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll(initial: true));
     }
   }
 
@@ -74,39 +127,229 @@ class StudyScreenState extends State<StudyScreen> {
       );
   }
 
-  /// 定位并高亮单词。
-  ///
-  /// 单词库是分页懒加载 + 卡片高度不一，`index * 固定高度` 估算只能粗定位。
-  /// 因此采用「扫描式定位」：
-  ///   1. 先跳到估算位置（低估单卡高度 → 落在目标之前）；
-  ///   2. 若目标卡尚未构建，则每帧前进约一屏继续扫描（ListView 在 jumpTo 后的
-  ///      下一帧构建可视区卡片，确保 key 的 context 会更新）；
-  ///   3. 一旦目标卡构建完成，用 `ensureVisible` 精确对齐并高亮；
-  ///   4. 高亮持续到用户手动滚动列表（由列表 NotificationListener 清除）。
-  void _scrollToHighlight(String word) {
-    final targetWord = word.toLowerCase();
-    final index = _words.indexWhere((w) => w.word.toLowerCase() == targetWord);
-    if (index < 0) {
+  // ── 对外：搜索命中后由 home_screen 调用 ──
+  Future<void> locateWord(String type, String id, String word) async {
+    final t = _kbTypes.contains(type) ? type : 'word';
+    setState(() {
+      _mainTab = 0;
+      _kbTab = _kbTypes.indexOf(t);
+      _isLocating = true;
+      _highlightId = null;
+    });
+    _showLocateHint('正在定位…');
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) {
       _isLocating = false;
-      _showLocateHint('未找到该单词');
       return;
     }
+    if (!_kbLoaded[t]!) {
+      await _loadKb(classId, t, reset: true);
+    }
+    final found = await _ensureContains(classId, t, id);
+    if (!mounted) return;
+    if (found) {
+      _locate(t, id, highlight: true);
+    } else {
+      _isLocating = false;
+      _showLocateHint('未找到该内容');
+    }
+  }
 
-    void attempt({int round = 0}) {
+  // ── 数据加载 ──
+
+  Future<void> _loadAll({bool initial = false}) async {
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+
+    if (initial) {
+      // 缓存只用于「单词」板块首屏秒开；句子/作文量小，直接取网络
+      final cached = _storage.getCachedWords(classId);
+      if (cached != null && cached.isNotEmpty) {
+        setState(() {
+          _kb['word'] = cached.map((e) => Word.fromJson(e)).toList();
+          _kbLoaded['word'] = true;
+        });
+      }
+    }
+    _loadMeta(classId);
+    _loadKb(classId, _kbTypes[_kbTab], reset: true);
+    _loadWrongWords(classId);
+    _loadTasks(classId);
+  }
+
+  Future<void> _loadMeta(String classId, {bool locate = true}) async {
+    try {
+      final res = await _api.getLibraryMeta(classId);
       if (!mounted) return;
-      if (!_wordListScrollController.hasClients) {
+      final data = res['data'] as Map<String, dynamic>;
+      final rev = (data['rev'] ?? '').toString();
+      setState(() {
+        _applyMetaData(data);
+        if (rev.isNotEmpty) _libraryRev = rev;
+      });
+      if (locate) _maybeAutoLocateCurrent();
+    } catch (_) {}
+  }
+
+  void _applyMetaData(Map<String, dynamic> data) {
+    final c = data['counts'];
+    if (c is Map) {
+      for (final t in _kbTypes) {
+        _counts[t] = (c[t] as num?)?.toInt() ?? (_counts[t] ?? 0);
+      }
+    }
+    final li = data['last_ids'];
+    if (li is Map) {
+      for (final t in _kbTypes) {
+        _lastIds[t] = li[t]?.toString();
+      }
+    }
+  }
+
+  Future<void> _loadKb(String classId, String type, {bool reset = false}) async {
+    if (_kbLoading[type] == true) return;
+    setState(() => _kbLoading[type] = true);
+    try {
+      final page = reset ? 1 : _kbPage[type]! + 1;
+      final res = await _api.getWords(classId,
+          page: page, perPage: 20, type: type);
+      if (!mounted) return;
+      final data = res['data'] as Map<String, dynamic>;
+      final words = (data['words'] as List)
+          .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .toList();
+      setState(() {
+        if (reset) {
+          _kb[type] = words;
+          _kbPage[type] = 1;
+        } else {
+          final ids = {for (final w in _kb[type]!) w.id};
+          for (final w in words) {
+            if (!ids.contains(w.id)) {
+              ids.add(w.id);
+              _kb[type]!.add(w);
+            }
+          }
+          _kbPage[type] = page;
+        }
+        _kbHasMore[type] = data['has_more'] ?? false;
+        _kbLoaded[type] = true;
+        _kbLoading[type] = false;
+        _applyMetaData(data);
+        final rev = (data['rev'] ?? '').toString();
+        if (rev.isNotEmpty) _libraryRev = rev;
+      });
+      if (reset && type == 'word') {
+        _storage.cacheWords(
+            classId,
+            _kb['word']!
+                .map((w) => {
+                      'id': w.id,
+                      'word': w.word,
+                      'meaning': w.meaning,
+                      'pos': w.pos,
+                      'type': w.type,
+                      'title': w.title,
+                    })
+                .toList());
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _kbLoading[type] = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载失败: $e')),
+      );
+    }
+  }
+
+  /// 后台轮询：仅当内容指纹变化时才重载，尽量保持滚动位置
+  Future<void> _pollMeta() async {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+    final type = _kbTypes[_kbTab];
+    if (_isLocating || _kbLoading[type] == true) return;
+    try {
+      final res = await _api.getLibraryMeta(classId);
+      if (!mounted) return;
+      final data = res['data'] as Map<String, dynamic>;
+      final rev = (data['rev'] ?? '').toString();
+      final changed = rev.isNotEmpty && rev != _libraryRev;
+      setState(() => _applyMetaData(data));
+      if (!changed) return;
+      _libraryRev = rev;
+      final offset =
+          _kbScroll[type]!.hasClients ? _kbScroll[type]!.offset : 0.0;
+      await _loadKb(classId, type, reset: true);
+      if (mounted && _kbScroll[type]!.hasClients) {
+        final max = _kbScroll[type]!.position.maxScrollExtent;
+        _kbScroll[type]!.jumpTo(offset.clamp(0.0, max));
+      }
+      _loadWrongWords(classId);
+    } catch (_) {}
+  }
+
+  Future<bool> _ensureContains(String classId, String type, String id) async {
+    if (_kb[type]!.any((w) => w.id == id)) return true;
+    var page = _kbPage[type]!;
+    var hasMore = _kbHasMore[type]!;
+    var guard = 0;
+    try {
+      while (hasMore && guard < 50) {
+        guard++;
+        page++;
+        final res =
+            await _api.getWords(classId, page: page, perPage: 100, type: type);
+        if (!mounted) return false;
+        final data = res['data'] as Map<String, dynamic>;
+        final words = (data['words'] as List)
+            .map((w) => Word.fromJson(w as Map<String, dynamic>))
+            .toList();
+        setState(() {
+          final ids = {for (final w in _kb[type]!) w.id};
+          for (final w in words) {
+            if (!ids.contains(w.id)) {
+              ids.add(w.id);
+              _kb[type]!.add(w);
+            }
+          }
+          _kbPage[type] = page;
+          _kbHasMore[type] = data['has_more'] ?? false;
+        });
+        if (_kb[type]!.any((w) => w.id == id)) return true;
+        hasMore = _kbHasMore[type]!;
+      }
+    } catch (_) {}
+    return _kb[type]!.any((w) => w.id == id);
+  }
+
+  /// 扫描式定位（与旧版单词定位算法一致），作用于指定板块。
+  void _locate(String type, String id, {required bool highlight}) {
+    final list = _kb[type]!;
+    final index = list.indexWhere((w) => w.id == id);
+    if (index < 0) {
+      _isLocating = false;
+      return;
+    }
+    if (highlight) setState(() => _highlightId = id);
+    final controller = _kbScroll[type]!;
+
+    void attempt(int round) {
+      if (!mounted) return;
+      if (!controller.hasClients) {
         if (round < 30) {
           Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) attempt(round: round + 1);
+            if (mounted) attempt(round + 1);
           });
         } else {
           _isLocating = false;
-          _showLocateHint('未找到该单词');
         }
         return;
       }
-
-      final key = _wordCardKeys[targetWord];
+      final key = _cardKeys[id];
       if (key?.currentContext != null) {
         Scrollable.ensureVisible(
           key!.currentContext!,
@@ -117,231 +360,48 @@ class StudyScreenState extends State<StudyScreen> {
         _isLocating = false;
         return;
       }
-
-      // 旧算法 base=index*90 低估卡高，向前扫描上限仅 ~21 个视口：
-      // 长列表（千词级）尾部累计偏差远超扫描范围，导致"后面的词永远未找到"。
-      // 新算法：先触底校准真实列表总高 → 按平均卡高精确跳转 → 小步兜底扫描。
-      final max = _wordListScrollController.position.maxScrollExtent;
+      final max = controller.position.maxScrollExtent;
       if (max <= 0) {
-        // 列表还没算出可滚动范围（内容不足一屏 = 目标必在首屏）
         _isLocating = false;
         return;
       }
-      final n = _words.length;
-      final avg = n > 0 ? max / n : 100.0; // 触底后 maxScrollExtent 为真实值
+      final n = list.length;
+      final avg = n > 0 ? max / n : 100.0;
       final est = (index * avg).clamp(0.0, max);
       double target;
       if (round == 0) {
-        target = max; // 一跳到底：逼 ListView 构建尾区，校准真实 maxScrollExtent
+        target = max;
       } else if (round == 1) {
         target = est;
       } else if (round <= 9) {
-        // 目标附近 ± 交错小步扫（卡高差异通常 ±100px，cacheExtent 250px 大概率第 2 轮即命中）
-        final delta = (round - 1) * 500.0 * ((round.isOdd) ? 1 : -1);
+        final delta = (round - 1) * 500.0 * (round.isOdd ? 1 : -1);
         target = (est + delta).clamp(0.0, max);
       } else {
         _isLocating = false;
-        _showLocateHint('未找到该单词');
         return;
       }
-      _wordListScrollController.jumpTo(target);
-
-      // jumpTo 后等两帧：一帧构建可视区、一帧挂载 key，再检查
+      controller.jumpTo(target);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) attempt(round: round + 1);
+          if (mounted) attempt(round + 1);
         });
       });
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
   }
 
-  Future<void> _loadWordsForSearch(String classId, String targetWord) async {
-    // 服务器 per_page 上限 100，需分页拉取直到覆盖目标单词
-    final all = <Word>[];
-    var page = 1;
-    var hasMore = true;
-    var found = false;
-    try {
-      while (hasMore && page <= 30) {
-        final res = await _api.getWords(classId, page: page, perPage: 100);
-        final data = res['data'] as Map<String, dynamic>;
-        final words = (data['words'] as List)
-            .map((w) => Word.fromJson(w as Map<String, dynamic>))
-            .toList();
-        all.addAll(words);
-        if (words
-            .any((w) => w.word.toLowerCase() == targetWord.toLowerCase())) {
-          found = true;
-          hasMore = false;
-        } else {
-          hasMore = data['has_more'] ?? false;
-          page++;
-        }
-      }
-      if (!mounted) return;
-      setState(() {
-        _words = all;
-        _wordsPage = page;
-        _wordsTotal = all.length;
-        _wordsHasMore = false;
-      });
-      if (found) {
-        _scrollToHighlight(targetWord);
-      } else {
-        _isLocating = false;
-        _showLocateHint('未找到该单词');
-      }
-    } catch (_) {
-      if (mounted) {
-        _isLocating = false;
-        _showLocateHint('定位失败，请重试');
-      }
-    }
+  void _maybeAutoLocateCurrent() {
+    final type = _kbTypes[_kbTab];
+    final id = _lastIds[type];
+    if (id == null || _autoLocated.contains(type)) return;
+    if (!_kbLoaded[type]!) return;
+    _autoLocated.add(type);
+    Future.microtask(() => _locate(type, id, highlight: false));
   }
 
-  Timer? _refreshTimer;
-
-  @override
-  void dispose() {
-    _wordListScrollController.dispose();
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_isLocating) return;
-      final auth = context.read<AuthProvider>();
-      final classId = auth.currentClassId;
-      if (classId != null && classId.isNotEmpty) {
-        _loadData(silent: true);
-      }
-    });
-  }
-
-  String? _lastLoadedClassId;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final auth = context.read<AuthProvider>();
-    final classId = auth.currentClassId;
-    if (classId != null &&
-        classId.isNotEmpty &&
-        classId != _lastLoadedClassId) {
-      _lastLoadedClassId = classId;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
-    }
-  }
-
-  Future<void> _loadData({bool silent = false}) async {
-    final auth = context.read<AuthProvider>();
-    final classId = auth.currentClassId;
-    if (classId == null || classId.isEmpty) return;
-
-    if (!silent) {
-      final cachedWords = _storage.getCachedWords(classId);
-      if (cachedWords != null) {
-        setState(
-            () => _words = cachedWords.map((w) => Word.fromJson(w)).toList());
-      }
-    }
-
-    // 静默刷新 / 进入时有新鲜缓存 → 静默合并（保留滚动位置、不弹 loading）
-    // 无缓存首次进入 → 全量加载
-    final useSilentMerge = silent || _hasFreshCache(classId);
-    _loadWords(classId, reset: !useSilentMerge, silent: useSilentMerge);
-    _loadWrongWords(classId);
-    _loadTasks(classId);
-  }
-
-  bool _hasFreshCache(String classId) =>
-      _storage.getCachedWords(classId) != null;
-
-  Future<void> _loadWords(String classId,
-      {bool reset = true, bool silent = false}) async {
-    if (reset) setState(() => _loading = true);
-    try {
-      // 静默刷新固定拉第 1 页并合并到现有列表，避免列表越长、重建越多
-      final page = (reset || silent) ? 1 : _wordsPage + 1;
-      final res = await _api.getWords(classId, page: page, perPage: 20);
-      final data = res['data'] as Map<String, dynamic>;
-      final words = (data['words'] as List)
-          .map((w) => Word.fromJson(w as Map<String, dynamic>))
-          .toList();
-      setState(() {
-        if (reset) {
-          _words = words;
-          _wordsPage = page;
-          _wordsTotal = data['total'] ?? 0;
-          _wordsHasMore = data['has_more'] ?? false;
-        } else if (silent) {
-          // 静默刷新：原地更新已有词条的字段（错题/释义等），保持列表顺序与
-          // 滚动位置完全不变——旧逻辑把第 1 页 merge 到最前会打乱顺序、每次
-          // 重建 ListView，导致滚动监听失效、加载更多在长列表尾部失效
-          final byId = {for (final w in words) w.id: w};
-          var changed = false;
-          for (var i = 0; i < _words.length; i++) {
-            final u = byId[_words[i].id];
-            if (u != null &&
-                (u.isWrong != _words[i].isWrong ||
-                    u.word != _words[i].word ||
-                    u.meaning != _words[i].meaning ||
-                    u.pos != _words[i].pos ||
-                    u.type != _words[i].type ||
-                    u.title != _words[i].title)) {
-              _words[i] = u;
-              changed = true;
-            }
-          }
-          if (changed) _words = List.of(_words);
-          // 不动分页计数，保持加载更多状态一致
-        } else {
-          _loading = true; // 加载更多：标记 loading，防止滚动到底并发触发多个请求
-          final existingIds = {for (final w in _words) w.id};
-          for (final w in words) {
-            if (!existingIds.contains(w.id)) {
-              existingIds.add(w.id);
-              _words.add(w);
-            }
-          }
-          _wordsPage = page;
-          _wordsTotal = data['total'] ?? 0;
-          _wordsHasMore = data['has_more'] ?? false;
-        }
-        _loading = false;
-      });
-      // 缓存全量写盘只在首次加载/下拉刷新时做——"加载更多"高频触发，
-      // 千词级列表每次全量序列化写 SharedPreferences 是滚动卡顿来源之一
-      if (reset) {
-        _storage.cacheWords(
-            classId,
-            _words
-                .map((w) => {
-                    'id': w.id,
-                    'word': w.word,
-                    'meaning': w.meaning,
-                    'pos': w.pos,
-                    'type': w.type,
-                    'title': w.title,
-                  })
-              .toList());
-      }
-    } catch (e) {
-      setState(() => _loading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载单词失败: $e')),
-        );
-      }
-    }
-  }
+  // ── 错题本 / 任务 ──
 
   static bool _sameWordList(List<Word> a, List<Word> b) {
     if (a.length != b.length) return false;
@@ -374,6 +434,7 @@ class StudyScreenState extends State<StudyScreen> {
       final words = (data['words'] as List)
           .map((w) => Word.fromJson(w as Map<String, dynamic>))
           .toList();
+      if (!mounted) return;
       if (!_sameWordList(_wrongWords, words)) {
         setState(() => _wrongWords = words);
       }
@@ -387,6 +448,7 @@ class StudyScreenState extends State<StudyScreen> {
       final pending = (pendingData['tasks'] as List)
           .map((t) => Task.fromJson(t as Map<String, dynamic>))
           .toList();
+      if (!mounted) return;
       if (!_sameTaskList(_pendingTasks, pending)) {
         setState(() => _pendingTasks = pending);
       }
@@ -395,6 +457,7 @@ class StudyScreenState extends State<StudyScreen> {
       final history = (historyData['tasks'] as List)
           .map((t) => Task.fromJson(t as Map<String, dynamic>))
           .toList();
+      if (!mounted) return;
       if (!_sameTaskList(_historyTasks, history)) {
         setState(() => _historyTasks = history);
       }
@@ -410,12 +473,13 @@ class StudyScreenState extends State<StudyScreen> {
         await _api.markWrong(classId, word.id, true);
       }
       if (!mounted) return;
-      // 本地即时更新状态，避免整列表重载导致滚动跳动
       setState(() {
-        _words = [
-          for (final w in _words)
-            if (w.id == word.id) w.copyWith(isWrong: newWrong) else w,
-        ];
+        for (final t in _kbTypes) {
+          _kb[t] = [
+            for (final w in _kb[t]!)
+              if (w.id == word.id) w.copyWith(isWrong: newWrong) else w,
+          ];
+        }
         if (newWrong) {
           if (!_wrongWords.any((w) => w.id == word.id)) {
             _wrongWords = [word.copyWith(isWrong: true), ..._wrongWords];
@@ -424,7 +488,6 @@ class StudyScreenState extends State<StudyScreen> {
           _wrongWords = _wrongWords.where((w) => w.id != word.id).toList();
         }
       });
-      // 清除班级缓存，避免其他页面/下次进入读到旧错题状态
       await _storage.clearClassCaches(classId);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -446,7 +509,7 @@ class StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _showAddDialog(String classId) async {
-    String type = 'word';
+    String type = _kbTypes[_kbTab];
     final contentCtrl = TextEditingController();
     final meaningCtrl = TextEditingController();
     final posCtrl = TextEditingController();
@@ -456,21 +519,26 @@ class StudyScreenState extends State<StudyScreen> {
 
     await showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          final isWord = type == 'word';
-          final isEssay = type == 'essay';
-          return AlertDialog(
-            backgroundColor: AppColors.paper,
-            shape: RoundedRectangleBorder(
-              borderRadius: AppTheme.wobblyRadius,
-              side: const BorderSide(color: AppColors.pencil, width: 2),
-            ),
-            title: Text('添加到知识库',
-                style: TextStyle(
-                    fontFamily: AppTheme.fontHeading, fontSize: 22)),
-            content: SingleChildScrollView(
-              child: Form(
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final isWord = type == 'word';
+            final isEssay = type == 'essay';
+            return AlertDialog(
+              scrollable: true,
+              backgroundColor: AppColors.paper,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: AppTheme.wobblyRadius,
+                side: const BorderSide(color: AppColors.pencil, width: 2),
+              ),
+              title: Text('添加到知识库',
+                  style: TextStyle(
+                      fontFamily: AppTheme.fontHeading, fontSize: 22)),
+              content: Form(
                 key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -479,7 +547,7 @@ class StudyScreenState extends State<StudyScreen> {
                     Wrap(
                       spacing: 8,
                       children: [
-                        for (final t in const ['word', 'sentence', 'essay'])
+                        for (final t in _kbTypes)
                           ChoiceChip(
                             label: Text(
                               t == 'word'
@@ -496,6 +564,7 @@ class StudyScreenState extends State<StudyScreen> {
                     if (isEssay)
                       TextFormField(
                         controller: titleCtrl,
+                        textInputAction: TextInputAction.next,
                         decoration:
                             const InputDecoration(labelText: '标题（可选）'),
                       ),
@@ -503,7 +572,8 @@ class StudyScreenState extends State<StudyScreen> {
                     TextFormField(
                       controller: contentCtrl,
                       minLines: isWord ? 1 : 2,
-                      maxLines: isWord ? 1 : (isEssay ? 6 : 3),
+                      maxLines: isWord ? 1 : (isEssay ? 5 : 3),
+                      textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: isWord
                             ? '单词'
@@ -515,8 +585,8 @@ class StudyScreenState extends State<StudyScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: meaningCtrl,
-                      minLines: isWord ? 1 : 2,
-                      maxLines: isWord ? 2 : (isEssay ? 8 : 4),
+                      minLines: 1,
+                      maxLines: isWord ? 2 : 5,
                       decoration: InputDecoration(
                         labelText: isWord ? '释义' : '中文（直译）',
                       ),
@@ -534,83 +604,84 @@ class StudyScreenState extends State<StudyScreen> {
                   ],
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: aiLoading
-                    ? null
-                    : () async {
-                        final text = contentCtrl.text.trim();
-                        if (text.isEmpty) return;
-                        setLocal(() => aiLoading = true);
-                        try {
-                          final res =
-                              await _api.aiWord(classId, text, type: type);
-                          final data = res['data'] as Map<String, dynamic>;
-                          meaningCtrl.text =
-                              (data['meaning'] ?? '').toString();
-                          if (isWord) {
-                            posCtrl.text = (data['pos'] ?? '').toString();
+              actions: [
+                TextButton(
+                  onPressed: aiLoading
+                      ? null
+                      : () async {
+                          final text = contentCtrl.text.trim();
+                          if (text.isEmpty) return;
+                          setLocal(() => aiLoading = true);
+                          try {
+                            final res =
+                                await _api.aiWord(classId, text, type: type);
+                            final data = res['data'] as Map<String, dynamic>;
+                            meaningCtrl.text =
+                                (data['meaning'] ?? '').toString();
+                            if (isWord) {
+                              posCtrl.text = (data['pos'] ?? '').toString();
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(content: Text('AI 补全失败: $e')),
+                              );
+                            }
+                          } finally {
+                            setLocal(() => aiLoading = false);
                           }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('AI 补全失败: $e')),
-                            );
-                          }
-                        } finally {
-                          setLocal(() => aiLoading = false);
-                        }
-                      },
-                child: aiLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(isWord ? 'AI 补全' : 'AI 直译',
-                        style: TextStyle(
-                            fontFamily: AppTheme.fontBody,
-                            color: AppColors.blue)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child:
-                    Text('取消', style: TextStyle(fontFamily: AppTheme.fontBody)),
-              ),
-              TextButton(
-                onPressed: () async {
-                  if (!formKey.currentState!.validate()) return;
-                  try {
-                    await _api.addWord(
-                      classId,
-                      contentCtrl.text.trim(),
-                      meaningCtrl.text.trim(),
-                      pos: posCtrl.text.trim(),
-                      type: type,
-                      title: titleCtrl.text.trim(),
-                    );
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    _loadWords(classId);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('添加成功')),
+                        },
+                  child: aiLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(isWord ? 'AI 补全' : 'AI 直译',
+                          style: TextStyle(
+                              fontFamily: AppTheme.fontBody,
+                              color: AppColors.blue)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('取消',
+                      style: TextStyle(fontFamily: AppTheme.fontBody)),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    try {
+                      await _api.addWord(
+                        classId,
+                        contentCtrl.text.trim(),
+                        meaningCtrl.text.trim(),
+                        pos: posCtrl.text.trim(),
+                        type: type,
+                        title: titleCtrl.text.trim(),
                       );
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _loadMeta(classId);
+                      _loadKb(classId, type, reset: true);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('添加成功')),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('添加失败: $e')),
+                        );
+                      }
                     }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('添加失败: $e')),
-                      );
-                    }
-                  }
-                },
-                child:
-                    Text('添加', style: TextStyle(fontFamily: AppTheme.fontBody)),
-              ),
-            ],
-          );
-        },
+                  },
+                  child: Text('添加',
+                      style: TextStyle(fontFamily: AppTheme.fontBody)),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -634,6 +705,7 @@ class StudyScreenState extends State<StudyScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: AppColors.paper,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.wobblyRadius,
@@ -696,7 +768,7 @@ class StudyScreenState extends State<StudyScreen> {
             ),
             Expanded(
               child: _mainTab == 0
-                  ? _buildWordLibrary(classId)
+                  ? _buildLibrary(classId)
                   : _mainTab == 1
                       ? _buildWrongWords(classId)
                       : _buildTasks(classId),
@@ -718,72 +790,89 @@ class StudyScreenState extends State<StudyScreen> {
     );
   }
 
-  Widget _buildWordLibrary(String classId) {
-    if (_loading && _words.isEmpty) {
+  void _switchKbTab(int i) {
+    if (i == _kbTab) return;
+    setState(() {
+      _kbTab = i;
+      _highlightId = null;
+    });
+    final classId = context.read<AuthProvider>().currentClassId;
+    final type = _kbTypes[i];
+    if (classId != null && classId.isNotEmpty && !_kbLoaded[type]!) {
+      _loadKb(classId, type, reset: true);
+    }
+    _maybeAutoLocateCurrent();
+  }
+
+  Widget _buildLibrary(String classId) {
+    return Column(
+      children: [
+        WobblyTabBar(
+          tabs: [
+            '单词 ${_counts['word']}',
+            '句子 ${_counts['sentence']}',
+            '作文 ${_counts['essay']}',
+          ],
+          selectedIndex: _kbTab,
+          onTap: _switchKbTab,
+        ),
+        Expanded(child: _buildKbList(classId, _kbTypes[_kbTab])),
+      ],
+    );
+  }
+
+  Widget _buildKbList(String classId, String type) {
+    final list = _kb[type]!;
+    final loading = _kbLoading[type]!;
+    if (loading && list.isEmpty) {
       return const Center(
           child: CircularProgressIndicator(color: AppColors.red));
     }
-    if (_words.isEmpty) {
-      return const EmptyState(message: '还没有单词，点击右下角添加');
+    if (list.isEmpty) {
+      return EmptyState(
+        message: type == 'word'
+            ? '还没有单词，点击右下角添加'
+            : (type == 'sentence' ? '还没有句子，点击右下角添加' : '还没有作文，点击右下角添加'),
+      );
     }
     return RefreshIndicator(
-      onRefresh: () => _loadWords(classId, reset: true),
+      onRefresh: () => _loadKb(classId, type, reset: true),
       color: AppColors.red,
       child: NotificationListener<ScrollNotification>(
         onNotification: (notif) {
-          // 用户主动拖动滚动 → 清除定位高亮（ensureVisible 为程序滚动，dragDetails 为空，不会误清）
           if (notif is ScrollStartNotification && notif.dragDetails != null) {
-            if (_highlightWord != null) {
-              setState(() => _highlightWord = null);
+            if (_highlightId != null) {
+              setState(() => _highlightId = null);
             }
             _isLocating = false;
           }
           if (notif is ScrollEndNotification &&
               notif.metrics.pixels >= notif.metrics.maxScrollExtent - 100 &&
-              _wordsHasMore &&
-              !_loading) {
-            _loadWords(classId, reset: false);
+              _kbHasMore[type]! &&
+              !_kbLoading[type]!) {
+            _loadKb(classId, type, reset: false);
           }
           return false;
         },
         child: ListView.builder(
-          controller: _wordListScrollController,
+          controller: _kbScroll[type],
           padding: const EdgeInsets.all(16),
-          itemCount: _words.length + (_wordsHasMore ? 1 : 0),
+          itemCount: list.length + (_kbHasMore[type]! ? 1 : 0),
           itemBuilder: (ctx, i) {
-            if (i >= _words.length) {
+            if (i >= list.length) {
               return const Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(
                     child: CircularProgressIndicator(color: AppColors.red)),
               );
             }
-            final w = _words[i];
-            final showHeader = i == 0 || _words[i - 1].type != w.type;
-            final isHighlighted =
-                _highlightWord?.toLowerCase() == w.word.toLowerCase();
-            final key = _wordCardKeys.putIfAbsent(
-              w.word.toLowerCase(),
-              () => GlobalKey(),
-            );
+            final w = list[i];
+            final key = _cardKeys.putIfAbsent(w.id, () => GlobalKey());
             return Container(
               key: key,
               padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (showHeader)
-                    Padding(
-                      padding:
-                          EdgeInsets.only(top: i == 0 ? 0 : 12, bottom: 8),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: StickyNote(text: _typeLabel(w.type)),
-                      ),
-                    ),
-                  _buildItemCard(classId, w, highlighted: isHighlighted),
-                ],
-              ),
+              child: _buildItemCard(classId, w,
+                  highlighted: _highlightId == w.id),
             );
           },
         ),

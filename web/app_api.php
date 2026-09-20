@@ -75,6 +75,64 @@ function appStableSortByType($list) {
     return $out;
 }
 
+/** 知识库各类型条目数量 */
+function appLibraryCounts($words) {
+    $c = ['word' => 0, 'sentence' => 0, 'essay' => 0];
+    foreach ($words as $w) {
+        $t = $w['type'] ?? 'word';
+        if ($t !== 'sentence' && $t !== 'essay') $t = 'word';
+        $c[$t]++;
+    }
+    return $c;
+}
+
+/** 知识库内容指纹：APP 轮询它判断是否需要后台刷新 */
+function appLibraryRev($words) {
+    $sig = [];
+    foreach ($words as $w) {
+        $sig[] = ($w['id'] ?? '') . '|' . ($w['type'] ?? 'word') . '|' . ($w['word'] ?? '')
+            . '|' . ($w['meaning'] ?? '') . '|' . ($w['pos'] ?? '') . '|' . ($w['title'] ?? '');
+    }
+    return substr(md5(implode("\n", $sig)), 0, 16);
+}
+
+/**
+ * 三种类型各自「最近一个包含该类型的任务」中、该类型的最后一项 id。
+ * 与网页端 words.php 的定位逻辑一致（例如最近任务只有作文，则作文更新，
+ * 单词/句子仍指向各自最近的任务）。
+ */
+function appComputeLastIds($classId, $words = null) {
+    if ($words === null) $words = Database::getWords($classId);
+    $idType = [];
+    foreach ($words as $w) {
+        $t = $w['type'] ?? 'word';
+        if ($t !== 'sentence' && $t !== 'essay') $t = 'word';
+        $idType[(string)$w['id']] = $t;
+    }
+    $lastId = ['word' => null, 'sentence' => null, 'essay' => null];
+    $found = ['word' => false, 'sentence' => false, 'essay' => false];
+    $ordered = Database::getTasks($classId);
+    uasort($ordered, function($a, $b) {
+        $ca = $a['created_at'] ?? ($a['date'] ?? '');
+        $cb = $b['created_at'] ?? ($b['date'] ?? '');
+        return strcmp((string)$cb, (string)$ca);
+    });
+    foreach ($ordered as $t) {
+        $lastOf = ['word' => null, 'sentence' => null, 'essay' => null];
+        foreach (($t['word_ids'] ?? []) as $tid) {
+            $ty = $idType[(string)$tid] ?? null;
+            if ($ty !== null) $lastOf[$ty] = $tid;
+        }
+        foreach (['word', 'sentence', 'essay'] as $ty) {
+            if ($found[$ty] || $lastOf[$ty] === null) continue;
+            $found[$ty] = true;
+            $lastId[$ty] = $lastOf[$ty];
+        }
+        if ($found['word'] && $found['sentence'] && $found['essay']) break;
+    }
+    return $lastId;
+}
+
 if ($action === 'register' || $action === 'claim_legacy') {
     appRateLimit('login', $clientIp, 10, 300);
     $name = appUsername();
@@ -343,7 +401,7 @@ if ($action === 'unbind_class') {
     appJson(['success' => true]);
 }
 
-$classActions = ['verify_class_password', 'get_words', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent', 'get_pronunciations', 'upload_pronunciation', 'delete_pronunciation'];
+$classActions = ['verify_class_password', 'get_words', 'get_library_meta', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent', 'get_pronunciations', 'upload_pronunciation', 'delete_pronunciation'];
 $classId = null;
 if (in_array($action, $classActions, true)) {
     $classId = appStrictId($_POST['class_id'] ?? '', 'class_id');
@@ -359,26 +417,44 @@ switch ($action) {
         $words = Database::getWords($classId);
         $query = trim(reqPost('query'));
         if ($action === 'search_word' && $query === '') appError('参数不全');
+        $typeFilter = trim(reqPost('type'));
+        if (!in_array($typeFilter, ['word', 'sentence', 'essay'], true)) $typeFilter = '';
         $user = Database::getUser($userId);
         $wrong = $user['wrong_words'][$classId] ?? [];
         $favIds = $user['favorites'] ?? [];
         $list = [];
         foreach ($words as $word) {
+            $wType = (($word['type'] ?? 'word') === 'sentence' || ($word['type'] ?? '') === 'essay') ? $word['type'] : 'word';
+            if ($typeFilter !== '' && $wType !== $typeFilter) continue;
             if ($action === 'search_word' && mb_stripos((string)$word['word'], $query) === false && mb_stripos((string)$word['meaning'], $query) === false) continue;
             $list[] = array_merge(appWordOut($word), [
                 'is_wrong' => isset($wrong[$word['id']]),
                 'is_favorite' => in_array($word['id'], $favIds, true),
             ]);
         }
-        // 知识库列表按 单词 → 句子 → 作文 顺序（组内保持原序），便于 APP 单页顺序展示
-        if ($action === 'get_words') {
+        // 未指定类型时按 单词 → 句子 → 作文 顺序（组内保持原序）
+        if ($action === 'get_words' && $typeFilter === '') {
             $list = appStableSortByType($list);
         }
         $total = count($list);
         $page = max(1, (int)($_POST['page'] ?? 1));
         $perPage = min(100, max(1, (int)($_POST['per_page'] ?? 20)));
         $paged = array_slice($list, ($page - 1) * $perPage, $perPage);
-        appJson(['success' => true, 'data' => ['words' => $paged, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
+        $data = ['words' => $paged, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total];
+        if ($action === 'get_words') {
+            $data['counts'] = appLibraryCounts($words);
+            $data['last_ids'] = appComputeLastIds($classId, $words);
+            $data['rev'] = appLibraryRev($words);
+        }
+        appJson(['success' => true, 'data' => $data]);
+
+    case 'get_library_meta':
+        $words = Database::getWords($classId);
+        appJson(['success' => true, 'data' => [
+            'counts' => appLibraryCounts($words),
+            'last_ids' => appComputeLastIds($classId, $words),
+            'rev' => appLibraryRev($words),
+        ]]);
 
     case 'add_word':
         $type = reqPost('type', 'word');

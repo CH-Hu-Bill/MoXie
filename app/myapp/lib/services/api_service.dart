@@ -215,12 +215,18 @@ class ApiService {
   // ── Words ──
 
   Future<Map<String, dynamic>> getWords(String classId,
-      {int page = 1, int perPage = 20}) {
+      {int page = 1, int perPage = 20, String? type}) {
     return _post('get_words', fields: {
       'class_id': classId,
       'page': page.toString(),
       'per_page': perPage.toString(),
+      if (type != null && type.isNotEmpty) 'type': type,
     });
+  }
+
+  /// 知识库元信息：各类型数量 + 各类型定位 id + 内容指纹（用于后台刷新判断）
+  Future<Map<String, dynamic>> getLibraryMeta(String classId) {
+    return _post('get_library_meta', fields: {'class_id': classId});
   }
 
   Future<Map<String, dynamic>> searchWord(String classId, String query) {

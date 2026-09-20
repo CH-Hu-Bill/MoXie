@@ -141,6 +141,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
+          scrollable: true,
           backgroundColor: AppColors.paper,
           shape: RoundedRectangleBorder(
             borderRadius: AppTheme.wobblyRadius,

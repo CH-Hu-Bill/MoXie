@@ -43,7 +43,7 @@ jobs:
           class ApiConfig {
             static String baseUrl = '$API_BASE_URL';
             static String get apiEndpoint => '\$baseUrl/app_api.php';
-            static const String appVersion = '1.0.18';
+            static const String appVersion = '1.2.0';
           }
           EOF
           fi
@@ -79,13 +79,12 @@ jobs:
           tag_name: apk-latest
           name: APK Latest
           body: |
-            ## v1.0.18
-            - 知识库升级：APP 支持 单词 / 句子 / 作文 混合展示与添加
-            - 添加句子、作文时可用「AI 直译」自动补全中文（服务端按班级配置的 AI）
-            - 知识库列表按 单词 → 句子 → 作文 顺序展示并分组
-            - 作文卡片显示标题与摘要，点击进入全文详情
+            ## v1.2.0
+            - 知识库拆分为 单词 / 句子 / 作文 三个板块，带数量角标（与网页端一致）
+            - 每个板块独立定位到该类型最近一次默写位置；搜索命中自动切到对应板块并定位
+            - 修复静默刷新：其他设备新增 / 删改的内容会自动刷新出来
+            - 添加弹窗支持选择类型与「AI 补全 / AI 直译」，并修复键盘遮挡问题
             - 错题本、任务详情、搜索均支持句子与作文
-            - 服务端 APP 接口补全 type/title 字段（旧数据缺省仍视为单词）
           files: app/myapp/build/app/outputs/flutter-apk/app-release.apk
           overwrite_files: true
           make_latest: true
