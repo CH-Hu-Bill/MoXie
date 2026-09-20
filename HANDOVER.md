@@ -90,25 +90,30 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 > 需求源头：根目录 `最终优化.md`（原始优化需求，含 Web/APP 全部细节，务必先读）。
 > 本轮已完成 Web 端绝大部分 + APP 的「服务器端点设置」。以下主要是 **APP 端（Phase F）**，约需一周后继续。
 
-### 8.1 APP 端（重点，尚未做）
+### 8.1 APP 端（Phase F，已完成，待随版本发布）
 
-1. **端点设置**：✅ 已在 1.0.17 完成（首次启动手输、HTTP/HTTPS、运行时覆盖 `ApiConfig.baseUrl`）。
+> 已完成（**1.0.18**）：知识库句子/作文支持、服务端 `type/title` 暴露、AI 直译补全。
+> 发布：改 APP 需 bump 版本四处一致（`.github/workflows/build.yml` / `pubspec.yaml` /
+> `lib/config/api_config.example.dart` / 根 `README.md`），CI 自动出包到 Release `apk-latest`。
+
+1. **端点设置**：✅ 1.0.17 完成（首次启动手输、HTTP/HTTPS、运行时覆盖 `ApiConfig.baseUrl`）。
    - 可继续增强：端点不可用时提示「服务器未开机 / 更换端点」；可选多端点记忆与探活。
-2. **知识库合并展示**：在原「单词库」页把 **单词 → 句子 → 作文** 顺序排列（单页展示，不再分 tab）。
-   - 句子卡片：上面英文、下面中文释义；溢出用跑马灯，**支持用户手动拖动**。
-   - 作文卡片：显示标题（如有）+ 部分英文内容；**点击卡片进详情页看全文**。
-3. **错题本**：支持句子与作文（当前仅单词）。
-4. **搜索 / 刷新 / 定位优化**（重点，历史踩坑多）：
-   - 搜索命中后增加「**正在定位**」loading 提示。
-   - 修复「手动刷新一段时间后就滑不动」的问题。
-5. **数据模型对齐**：服务端 `words.json` 每条已含 `type`(word/sentence/essay) + `title`；
-   需同步改造 `models/word.dart`、`services/api_service.dart`（`get_words` / `add_word` / `ai_word` / `get_task_detail` 等）、
-   `screens/study/study_screen.dart`、`screens/study/task_detail_screen.dart`、搜索与错题相关页面。
-6. **展示 / 默写 / 听写**：混合含句子/作文时**无听写**（服务端已按类型隐藏听写按钮并拼接展示）；
-   APP 需按类型渲染，默写时字号适当放大。
-7. **AI**：已改为服务端按班级配置（APP 无需改动即可用），未配置时服务端返回「AI 服务不可用」。
-8. **发布**：改 APP 必须 bump 版本**四处一致**（`.github/workflows/build.yml` / `pubspec.yaml` /
-   `lib/config/api_config.example.dart` / 根 `README.md`），并让 Release 带上版本更新日志。当前版本 **1.0.17**。
+2. **知识库合并展示**：✅ APP 单词库单页按 **单词 → 句子 → 作文** 顺序分组展示；
+   句子卡片上英下中（`MarqueeText` 跑马灯，可手动拖动），作文卡片显示标题+摘要、点击进入
+   `EssayDetailScreen` 全文。分组标题用 `StickyNote`。
+3. **错题本**：✅ 支持句子与作文（按类型渲染、可增删）。
+4. **搜索 / 刷新 / 定位**：定位沿用「扫描式定位」并在命中时提示「正在定位…」；
+   静默刷新就地合并、保持滚动位置（长列表不重建）。
+   - 仍可加强：更显性的全屏 loading 遮罩；跨类型长列表的定位精度。
+5. **数据模型对齐**：✅ `models/word.dart` 增加 `type/title`；`WordMatch` 同步；
+   `ApiService.addWord` 支持 `type/title`，新增 `aiWord`。服务端 `app_api.php` 的
+   `get_words`（按类型排序）/`add_word`/`ai_word`/`get_task_detail`/`get_wrong_words`/
+   `search_all`/`get_completed_tasks` 全部输出 `type/title`。
+6. **展示 / 默写 / 听写**：APP 任务详情按类型渲染（作文点击进详情）。
+   APP 端**暂无独立「默写 / 听写」模式**（该模式目前仅 Web 端）。
+7. **AI**：✅ 服务端按班级配置；`ai_word` 对句子/作文走「直译」提示词（不意译），
+   APP 添加弹窗提供「AI 补全 / AI 直译」按钮。
+8. **发布**：见上。当前版本 **1.0.18**。
 
 ### 8.2 非 APP 待办
 

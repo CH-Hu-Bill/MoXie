@@ -39,6 +39,42 @@ function appRateLimit($bucket, $identity, $max, $windowSec) {
     }
 }
 
+/**
+ * 知识库条目统一序列化（单词/句子/作文）。旧数据缺省视为 word。
+ */
+function appWordOut($w) {
+    $type = $w['type'] ?? 'word';
+    if (!in_array($type, ['word', 'sentence', 'essay'], true)) $type = 'word';
+    return [
+        'id' => $w['id'],
+        'word' => $w['word'],
+        'meaning' => $w['meaning'],
+        'pos' => $w['pos'] ?? '',
+        'type' => $type,
+        'title' => $w['title'] ?? '',
+    ];
+}
+
+/** 类型排序权重：单词 → 句子 → 作文 */
+function appTypeRank($w) {
+    $t = $w['type'] ?? 'word';
+    return $t === 'sentence' ? 1 : ($t === 'essay' ? 2 : 0);
+}
+
+/** 按类型稳定排序（PHP 7.4 的 usort 不稳定，用原下标兜底） */
+function appStableSortByType($list) {
+    $decorated = [];
+    foreach ($list as $i => $item) $decorated[] = [$i, $item];
+    usort($decorated, function($a, $b) {
+        $ra = appTypeRank($a[1]); $rb = appTypeRank($b[1]);
+        if ($ra !== $rb) return $ra <=> $rb;
+        return $a[0] <=> $b[0];
+    });
+    $out = [];
+    foreach ($decorated as $d) $out[] = $d[1];
+    return $out;
+}
+
 if ($action === 'register' || $action === 'claim_legacy') {
     appRateLimit('login', $clientIp, 10, 300);
     $name = appUsername();
@@ -329,7 +365,14 @@ switch ($action) {
         $list = [];
         foreach ($words as $word) {
             if ($action === 'search_word' && mb_stripos((string)$word['word'], $query) === false && mb_stripos((string)$word['meaning'], $query) === false) continue;
-            $list[] = ['id' => $word['id'], 'word' => $word['word'], 'meaning' => $word['meaning'], 'pos' => $word['pos'] ?? '', 'is_wrong' => isset($wrong[$word['id']]), 'is_favorite' => in_array($word['id'], $favIds, true)];
+            $list[] = array_merge(appWordOut($word), [
+                'is_wrong' => isset($wrong[$word['id']]),
+                'is_favorite' => in_array($word['id'], $favIds, true),
+            ]);
+        }
+        // 知识库列表按 单词 → 句子 → 作文 顺序（组内保持原序），便于 APP 单页顺序展示
+        if ($action === 'get_words') {
+            $list = appStableSortByType($list);
         }
         $total = count($list);
         $page = max(1, (int)($_POST['page'] ?? 1));
@@ -338,31 +381,58 @@ switch ($action) {
         appJson(['success' => true, 'data' => ['words' => $paged, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
 
     case 'add_word':
+        $type = reqPost('type', 'word');
+        if (!in_array($type, ['word', 'sentence', 'essay'], true)) appError('类型无效');
         $word = sanitizePlainText(reqPost('word'));
         $meaning = sanitizePlainText(reqPost('meaning'));
-        $pos = sanitizePlainText(reqPost('pos'));
-        if ($word === '' || $meaning === '') appError('单词和释义不能为空');
-        if (mb_strlen($word) > 100 || mb_strlen($meaning) > 500 || mb_strlen($pos) > 50) appError('输入内容过长');
+        $pos = $type === 'word' ? sanitizePlainText(reqPost('pos')) : '';
+        $title = $type === 'essay' ? sanitizePlainText(reqPost('title')) : '';
+        if ($word === '' || $meaning === '') appError('内容和释义不能为空');
+        $maxContent = $type === 'essay' ? 10000 : ($type === 'sentence' ? 1000 : 100);
+        $maxMeaning = $type === 'word' ? 500 : 20000;
+        if (mb_strlen($word) > $maxContent || mb_strlen($meaning) > $maxMeaning || mb_strlen($pos) > 50 || mb_strlen($title) > 100) appError('输入内容过长');
         $newId = bin2hex(random_bytes(8));
         $duplicate = false;
-        Database::updateClassData($classId, 'words', function($words) use ($word, $meaning, $pos, $newId, &$duplicate) {
-            foreach ($words as $existing) if (mb_strtolower($existing['word']) === mb_strtolower($word)) { $duplicate = true; return null; }
-            $words[] = ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => date('Y-m-d')];
+        Database::updateClassData($classId, 'words', function($words) use ($word, $meaning, $pos, $title, $type, $newId, &$duplicate) {
+            foreach ($words as $existing) if ((($existing['type'] ?? 'word') === $type) && mb_strtolower((string)$existing['word']) === mb_strtolower($word)) { $duplicate = true; return null; }
+            $item = ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'type' => $type, 'created_at' => date('Y-m-d')];
+            if ($title !== '') $item['title'] = $title;
+            $words[] = $item;
             return $words;
         });
-        if ($duplicate) appError('单词已存在: ' . $word);
-        appJson(['success' => true, 'data' => ['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos]]);
+        if ($duplicate) appError('内容已存在');
+        appJson(['success' => true, 'data' => appWordOut(['id' => $newId, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'type' => $type, 'title' => $title])]);
 
     case 'ai_word':
         appRateLimit('ai', $userId, 40, 3600);
+        $type = reqPost('type', 'word');
+        if (!in_array($type, ['word', 'sentence', 'essay'], true)) $type = 'word';
         $word = trim(reqPost('word'));
-        if ($word === '' || mb_strlen($word) > 100) appError('请输入有效单词');
-        $prompt = "你是一个英语词典助手。为英文单词提供简洁准确的中文释义和标准词性缩写，严格返回JSON：\n{\"word\":\"" . addslashes($word) . "\",\"meaning\":\"中文释义\",\"pos\":\"词性\"}";
-        $result = AIClient::call($classId, [['role' => 'system', 'content' => '你是专业英语词典助手，只返回JSON。'], ['role' => 'user', 'content' => $prompt]], 512, 30);
+        $maxLen = $type === 'essay' ? 10000 : ($type === 'sentence' ? 1000 : 100);
+        if ($word === '' || mb_strlen($word) > $maxLen) appError('请输入有效内容');
+        if ($type === 'word') {
+            $prompt = "你是一个英语词典助手。为英文单词提供简洁准确的中文释义和标准词性缩写，严格返回JSON：\n{\"word\":\"" . addslashes($word) . "\",\"meaning\":\"中文释义\",\"pos\":\"词性\"}";
+            $sys = '你是专业英语词典助手，只返回JSON。';
+            $maxTokens = 512;
+        } elseif ($type === 'sentence') {
+            $prompt = "把下面的英文句子直译成中文，尽量逐词对应、不要意译、不要润色，只返回中文译文本身，不要任何解释：\n" . $word;
+            $sys = '你是英语句子直译助手，只输出中文译文。';
+            $maxTokens = 1024;
+        } else {
+            $prompt = "把下面的英文逐句直译成中文，尽量逐词对应、不要意译、不要润色，保留原有换行与段落，只返回中文译文本身，不要任何解释：\n" . $word;
+            $sys = '你是英语直译助手，只输出中文译文。';
+            $maxTokens = 4096;
+        }
+        $result = AIClient::call($classId, [['role' => 'system', 'content' => $sys], ['role' => 'user', 'content' => $prompt]], $maxTokens, 60);
         if (!$result['success']) appJson($result);
-        $parsed = json_decode($result['content'], true);
-        if (!is_array($parsed)) appError('AI返回格式解析失败，请重试');
-        appJson(['success' => true, 'data' => ['word' => trim($parsed['word'] ?? $word), 'meaning' => trim($parsed['meaning'] ?? ''), 'pos' => trim($parsed['pos'] ?? '')]]);
+        $content = trim((string)$result['content']);
+        if ($type === 'word') {
+            $parsed = json_decode($content, true);
+            if (!is_array($parsed)) appError('AI返回格式解析失败，请重试');
+            appJson(['success' => true, 'data' => ['word' => trim($parsed['word'] ?? $word), 'meaning' => trim($parsed['meaning'] ?? ''), 'pos' => trim($parsed['pos'] ?? ''), 'type' => 'word']]);
+        } else {
+            appJson(['success' => true, 'data' => ['word' => $word, 'meaning' => $content, 'pos' => '', 'type' => $type]]);
+        }
 
     case 'mark_wrong':
         $wordId = appStrictId($_POST['word_id'] ?? '', 'word_id');
@@ -422,7 +492,7 @@ switch ($action) {
         $wrongMap = $user['wrong_words'][$classId] ?? [];
         $list = [];
         foreach ($wrongMap as $wid => $info) if (isset($map[$wid])) {
-            $list[] = ['word_id' => $wid, 'word' => $map[$wid]['word'], 'meaning' => $map[$wid]['meaning'], 'pos' => $map[$wid]['pos'] ?? '', 'marked_at' => $info['marked_at'] ?? ''];
+            $list[] = array_merge(appWordOut($map[$wid]), ['word_id' => $wid, 'marked_at' => $info['marked_at'] ?? '']);
         }
         $total = count($list);
         $page = max(1, (int)($_POST['page'] ?? 1));
@@ -437,7 +507,7 @@ switch ($action) {
         foreach (Database::getTasks($classId) as $tid => $task) {
             if (($task['status'] ?? '') !== 'completed') continue;
             $taskWords = [];
-            foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid])) $taskWords[] = ['id' => $wid, 'word' => $map[$wid]['word'], 'meaning' => $map[$wid]['meaning'], 'pos' => $map[$wid]['pos'] ?? ''];
+            foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid])) $taskWords[] = appWordOut($map[$wid]);
             $list[] = ['id' => $task['id'] ?? $tid, 'date' => $task['date'], 'label' => $task['label'] ?? '', 'words' => $taskWords];
         }
         usort($list, function($a, $b) { return $b['date'] <=> $a['date']; });
@@ -449,12 +519,12 @@ switch ($action) {
         $words = Database::getWords($classId); $map = []; $wordMatches = [];
         foreach ($words as $word) {
             $map[(string)$word['id']] = $word;
-            if (mb_stripos($word['word'], $query) !== false || mb_stripos($word['meaning'], $query) !== false) $wordMatches[] = ['id' => $word['id'], 'word' => $word['word'], 'meaning' => $word['meaning'], 'pos' => $word['pos'] ?? '', 'matched' => 'word', 'type' => 'word'];
+            if (mb_stripos($word['word'], $query) !== false || mb_stripos($word['meaning'], $query) !== false) $wordMatches[] = array_merge(appWordOut($word), ['matched' => 'word']);
         }
         $pending = []; $history = [];
         foreach (Database::getTasks($classId) as $tid => $task) {
             $matched = [];
-            foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid]) && (mb_stripos($map[$wid]['word'], $query) !== false || mb_stripos($map[$wid]['meaning'], $query) !== false)) $matched[] = ['id' => $wid, 'word' => $map[$wid]['word'], 'meaning' => $map[$wid]['meaning'], 'pos' => $map[$wid]['pos'] ?? '', 'matched' => 'word'];
+            foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid]) && (mb_stripos($map[$wid]['word'], $query) !== false || mb_stripos($map[$wid]['meaning'], $query) !== false)) $matched[] = array_merge(appWordOut($map[$wid]), ['matched' => 'word']);
             if (!$matched) continue;
             $item = ['id' => $task['id'] ?? $tid, 'date' => $task['date'], 'label' => $task['label'] ?? '', 'status' => $task['status'] ?? '', 'matched_words' => $matched, 'matched' => 'word'];
             if (($task['status'] ?? '') === 'pending') { $item['type'] = 'pending_task'; $pending[] = $item; }
@@ -785,14 +855,10 @@ switch ($action) {
         $wrongMap = $user['wrong_words'][$classId] ?? [];
         $words = [];
         foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid])) {
-            $words[] = [
-                'id' => $wid,
-                'word' => $map[$wid]['word'],
-                'meaning' => $map[$wid]['meaning'],
-                'pos' => $map[$wid]['pos'] ?? '',
+            $words[] = array_merge(appWordOut($map[$wid]), [
                 'is_favorite' => in_array($wid, $favIds, true),
                 'is_wrong' => isset($wrongMap[$wid]),
-            ];
+            ]);
         }
         appJson(['success' => true, 'data' => [
             'id' => $task['id'] ?? $taskId, 'date' => $task['date'] ?? '', 'label' => $task['label'] ?? '',

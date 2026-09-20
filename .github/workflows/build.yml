@@ -43,7 +43,7 @@ jobs:
           class ApiConfig {
             static String baseUrl = '$API_BASE_URL';
             static String get apiEndpoint => '\$baseUrl/app_api.php';
-            static const String appVersion = '1.0.17';
+            static const String appVersion = '1.0.18';
           }
           EOF
           fi
@@ -79,10 +79,13 @@ jobs:
           tag_name: apk-latest
           name: APK Latest
           body: |
-            ## v1.0.17
-            - 新增：首次启动可设置 / 修改「服务器端点」（支持 HTTP+HTTPS，自动容错地址格式）
-            - 适配本地运行：不再依赖固定线上服务器，改为用户填写自己电脑的服务地址
-            - 服务器已下线，APP 需指向本地运行的服务
+            ## v1.0.18
+            - 知识库升级：APP 支持 单词 / 句子 / 作文 混合展示与添加
+            - 添加句子、作文时可用「AI 直译」自动补全中文（服务端按班级配置的 AI）
+            - 知识库列表按 单词 → 句子 → 作文 顺序展示并分组
+            - 作文卡片显示标题与摘要，点击进入全文详情
+            - 错题本、任务详情、搜索均支持句子与作文
+            - 服务端 APP 接口补全 type/title 字段（旧数据缺省仍视为单词）
           files: app/myapp/build/app/outputs/flutter-apk/app-release.apk
           overwrite_files: true
           make_latest: true

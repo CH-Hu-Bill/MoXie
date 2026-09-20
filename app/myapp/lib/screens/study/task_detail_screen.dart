@@ -5,6 +5,7 @@ import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
+import 'essay_detail_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String classId;
@@ -266,18 +267,42 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         );
                       }
                       final w = _words[i - 1];
+                      final highlighted = _shouldHighlight(w);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: WordCard(
-                          word: w.word,
-                          meaning: w.meaning,
-                          pos: w.pos,
-                          isWrong: w.isWrong,
-                          highlight: _shouldHighlight(w),
-                          onToggleWrong: () => _toggleWrong(w),
-                          classId: widget.classId,
-                          wordId: w.id,
-                        ),
+                        child: w.isSentence
+                            ? SentenceCard(
+                                english: w.word,
+                                meaning: w.meaning,
+                                isWrong: w.isWrong,
+                                highlight: highlighted,
+                                onToggleWrong: () => _toggleWrong(w),
+                              )
+                            : w.isEssay
+                                ? EssayCard(
+                                    english: w.word,
+                                    title: w.title,
+                                    isWrong: w.isWrong,
+                                    highlight: highlighted,
+                                    onToggleWrong: () => _toggleWrong(w),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            EssayDetailScreen(essay: w),
+                                      ),
+                                    ),
+                                  )
+                                : WordCard(
+                                    word: w.word,
+                                    meaning: w.meaning,
+                                    pos: w.pos,
+                                    isWrong: w.isWrong,
+                                    highlight: highlighted,
+                                    onToggleWrong: () => _toggleWrong(w),
+                                    classId: widget.classId,
+                                    wordId: w.id,
+                                  ),
                       );
                     },
                   ),

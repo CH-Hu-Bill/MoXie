@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 import 'task_detail_screen.dart';
+import 'essay_detail_screen.dart';
 
 class StudyScreen extends StatefulWidget {
   const StudyScreen({super.key});
@@ -292,7 +293,9 @@ class StudyScreenState extends State<StudyScreen> {
                 (u.isWrong != _words[i].isWrong ||
                     u.word != _words[i].word ||
                     u.meaning != _words[i].meaning ||
-                    u.pos != _words[i].pos)) {
+                    u.pos != _words[i].pos ||
+                    u.type != _words[i].type ||
+                    u.title != _words[i].title)) {
               _words[i] = u;
               changed = true;
             }
@@ -324,7 +327,9 @@ class StudyScreenState extends State<StudyScreen> {
                     'id': w.id,
                     'word': w.word,
                     'meaning': w.meaning,
-                    'pos': w.pos
+                    'pos': w.pos,
+                    'type': w.type,
+                    'title': w.title,
                   })
               .toList());
       }
@@ -345,7 +350,9 @@ class StudyScreenState extends State<StudyScreen> {
           a[i].isWrong != b[i].isWrong ||
           a[i].word != b[i].word ||
           a[i].meaning != b[i].meaning ||
-          a[i].pos != b[i].pos) {
+          a[i].pos != b[i].pos ||
+          a[i].type != b[i].type ||
+          a[i].title != b[i].title) {
         return false;
       }
     }
@@ -438,77 +445,172 @@ class StudyScreenState extends State<StudyScreen> {
     }
   }
 
-  Future<void> _showAddWordDialog(String classId) async {
-    final wordCtrl = TextEditingController();
+  Future<void> _showAddDialog(String classId) async {
+    String type = 'word';
+    final contentCtrl = TextEditingController();
     final meaningCtrl = TextEditingController();
     final posCtrl = TextEditingController();
+    final titleCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    bool aiLoading = false;
 
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.paper,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppTheme.wobblyRadius,
-          side: const BorderSide(color: AppColors.pencil, width: 2),
-        ),
-        title: Text('添加单词',
-            style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: wordCtrl,
-                decoration: const InputDecoration(labelText: '单词'),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? '请输入单词' : null,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final isWord = type == 'word';
+          final isEssay = type == 'essay';
+          return AlertDialog(
+            backgroundColor: AppColors.paper,
+            shape: RoundedRectangleBorder(
+              borderRadius: AppTheme.wobblyRadius,
+              side: const BorderSide(color: AppColors.pencil, width: 2),
+            ),
+            title: Text('添加到知识库',
+                style: TextStyle(
+                    fontFamily: AppTheme.fontHeading, fontSize: 22)),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final t in const ['word', 'sentence', 'essay'])
+                          ChoiceChip(
+                            label: Text(
+                              t == 'word'
+                                  ? '单词'
+                                  : (t == 'sentence' ? '句子' : '作文'),
+                              style: TextStyle(fontFamily: AppTheme.fontBody),
+                            ),
+                            selected: type == t,
+                            onSelected: (_) => setLocal(() => type = t),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (isEssay)
+                      TextFormField(
+                        controller: titleCtrl,
+                        decoration:
+                            const InputDecoration(labelText: '标题（可选）'),
+                      ),
+                    if (isEssay) const SizedBox(height: 12),
+                    TextFormField(
+                      controller: contentCtrl,
+                      minLines: isWord ? 1 : 2,
+                      maxLines: isWord ? 1 : (isEssay ? 6 : 3),
+                      decoration: InputDecoration(
+                        labelText: isWord
+                            ? '单词'
+                            : (isEssay ? '作文内容（英文）' : '句子（英文）'),
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? '请输入内容' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: meaningCtrl,
+                      minLines: isWord ? 1 : 2,
+                      maxLines: isWord ? 2 : (isEssay ? 8 : 4),
+                      decoration: InputDecoration(
+                        labelText: isWord ? '释义' : '中文（直译）',
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? '请输入释义' : null,
+                    ),
+                    if (isWord) ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: posCtrl,
+                        decoration:
+                            const InputDecoration(labelText: '词性（可选）'),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: meaningCtrl,
-                decoration: const InputDecoration(labelText: '释义'),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? '请输入释义' : null,
+            ),
+            actions: [
+              TextButton(
+                onPressed: aiLoading
+                    ? null
+                    : () async {
+                        final text = contentCtrl.text.trim();
+                        if (text.isEmpty) return;
+                        setLocal(() => aiLoading = true);
+                        try {
+                          final res =
+                              await _api.aiWord(classId, text, type: type);
+                          final data = res['data'] as Map<String, dynamic>;
+                          meaningCtrl.text =
+                              (data['meaning'] ?? '').toString();
+                          if (isWord) {
+                            posCtrl.text = (data['pos'] ?? '').toString();
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('AI 补全失败: $e')),
+                            );
+                          }
+                        } finally {
+                          setLocal(() => aiLoading = false);
+                        }
+                      },
+                child: aiLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(isWord ? 'AI 补全' : 'AI 直译',
+                        style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            color: AppColors.blue)),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: posCtrl,
-                decoration: const InputDecoration(labelText: '词性（可选）'),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child:
+                    Text('取消', style: TextStyle(fontFamily: AppTheme.fontBody)),
+              ),
+              TextButton(
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  try {
+                    await _api.addWord(
+                      classId,
+                      contentCtrl.text.trim(),
+                      meaningCtrl.text.trim(),
+                      pos: posCtrl.text.trim(),
+                      type: type,
+                      title: titleCtrl.text.trim(),
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _loadWords(classId);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('添加成功')),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('添加失败: $e')),
+                      );
+                    }
+                  }
+                },
+                child:
+                    Text('添加', style: TextStyle(fontFamily: AppTheme.fontBody)),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: TextStyle(fontFamily: AppTheme.fontBody)),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              try {
-                await _api.addWord(classId, wordCtrl.text.trim(),
-                    meaningCtrl.text.trim(), posCtrl.text.trim());
-                if (ctx.mounted) Navigator.pop(ctx);
-                _loadWords(classId);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('添加成功')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('添加失败: $e')),
-                  );
-                }
-              }
-            },
-            child: Text('添加', style: TextStyle(fontFamily: AppTheme.fontBody)),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -604,7 +706,7 @@ class StudyScreenState extends State<StudyScreen> {
       ),
       floatingActionButton: _mainTab == 0
           ? FloatingActionButton(
-              onPressed: () => _showAddWordDialog(classId),
+              onPressed: () => _showAddDialog(classId),
               backgroundColor: AppColors.pencil,
               shape: RoundedRectangleBorder(
                 borderRadius: AppTheme.wobblyRadius,
@@ -657,6 +759,7 @@ class StudyScreenState extends State<StudyScreen> {
               );
             }
             final w = _words[i];
+            final showHeader = i == 0 || _words[i - 1].type != w.type;
             final isHighlighted =
                 _highlightWord?.toLowerCase() == w.word.toLowerCase();
             final key = _wordCardKeys.putIfAbsent(
@@ -666,20 +769,68 @@ class StudyScreenState extends State<StudyScreen> {
             return Container(
               key: key,
               padding: const EdgeInsets.only(bottom: 12),
-              child: WordCard(
-                word: w.word,
-                meaning: w.meaning,
-                pos: w.pos,
-                isWrong: w.isWrong,
-                highlight: isHighlighted,
-                onToggleWrong: () => _toggleWrong(classId, w),
-                classId: classId,
-                wordId: w.id,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (showHeader)
+                    Padding(
+                      padding:
+                          EdgeInsets.only(top: i == 0 ? 0 : 12, bottom: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: StickyNote(text: _typeLabel(w.type)),
+                      ),
+                    ),
+                  _buildItemCard(classId, w, highlighted: isHighlighted),
+                ],
               ),
             );
           },
         ),
       ),
+    );
+  }
+
+  String _typeLabel(String type) =>
+      type == 'sentence' ? '句子' : (type == 'essay' ? '作文' : '单词');
+
+  /// 按知识库类型渲染对应卡片（单词/句子/作文）。
+  Widget _buildItemCard(String classId, Word w,
+      {bool highlighted = false, bool showRemoveButton = false}) {
+    if (w.isSentence) {
+      return SentenceCard(
+        english: w.word,
+        meaning: w.meaning,
+        isWrong: w.isWrong,
+        showRemoveButton: showRemoveButton,
+        highlight: highlighted,
+        onToggleWrong: () => _toggleWrong(classId, w),
+      );
+    }
+    if (w.isEssay) {
+      return EssayCard(
+        english: w.word,
+        title: w.title,
+        isWrong: w.isWrong,
+        showRemoveButton: showRemoveButton,
+        highlight: highlighted,
+        onToggleWrong: () => _toggleWrong(classId, w),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => EssayDetailScreen(essay: w)),
+        ),
+      );
+    }
+    return WordCard(
+      word: w.word,
+      meaning: w.meaning,
+      pos: w.pos,
+      isWrong: w.isWrong,
+      showRemoveButton: showRemoveButton,
+      highlight: highlighted,
+      onToggleWrong: () => _toggleWrong(classId, w),
+      classId: classId,
+      wordId: w.id,
     );
   }
 
@@ -708,16 +859,7 @@ class StudyScreenState extends State<StudyScreen> {
               final w = _wrongWords[i];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: WordCard(
-                  word: w.word,
-                  meaning: w.meaning,
-                  pos: w.pos,
-                  isWrong: true,
-                  showRemoveButton: true,
-                  onToggleWrong: () => _toggleWrong(classId, w),
-                  classId: classId,
-                  wordId: w.id,
-                ),
+                child: _buildItemCard(classId, w, showRemoveButton: true),
               );
             },
           ),

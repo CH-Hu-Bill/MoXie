@@ -86,20 +86,27 @@ class WordMatch {
   final String word;
   final String meaning;
   final String pos;
+  final String type;
+  final String title;
 
   WordMatch({
     required this.id,
     required this.word,
     required this.meaning,
     this.pos = '',
+    this.type = 'word',
+    this.title = '',
   });
 
   factory WordMatch.fromJson(Map<String, dynamic> json) {
+    final rawType = (json['type'] ?? 'word').toString();
     return WordMatch(
-      id: json['id'] ?? '',
+      id: json['id'] ?? json['word_id'] ?? '',
       word: json['word'] ?? '',
       meaning: json['meaning'] ?? '',
       pos: json['pos'] ?? '',
+      type: (rawType == 'sentence' || rawType == 'essay') ? rawType : 'word',
+      title: (json['title'] ?? '').toString(),
     );
   }
 }

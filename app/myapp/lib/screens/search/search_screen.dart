@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/vlog_entry.dart';
+import '../../models/word.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 import '../study/task_detail_screen.dart';
+import '../study/essay_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final String? initialQuery;
@@ -172,28 +174,66 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  Widget _buildWordMatchCard(WordMatch w) {
+    final auth = context.read<AuthProvider>();
+    final onTap =
+        widget.onWordFound != null ? () => widget.onWordFound!(w.word) : null;
+    if (w.type == 'sentence') {
+      return SentenceCard(
+        english: w.word,
+        meaning: w.meaning,
+        isWrong: _wrongWordIds.contains(w.id),
+        highlight: true,
+        onToggleWrong: () => _toggleWrong(w),
+        onTap: onTap,
+      );
+    }
+    if (w.type == 'essay') {
+      return EssayCard(
+        english: w.word,
+        title: w.title,
+        isWrong: _wrongWordIds.contains(w.id),
+        highlight: true,
+        onToggleWrong: () => _toggleWrong(w),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EssayDetailScreen(
+              essay: Word(
+                id: w.id,
+                word: w.word,
+                meaning: w.meaning,
+                type: 'essay',
+                title: w.title,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return WordCard(
+      word: w.word,
+      meaning: w.meaning,
+      pos: w.pos,
+      highlight: true,
+      isWrong: _wrongWordIds.contains(w.id),
+      onToggleWrong: () => _toggleWrong(w),
+      onTap: onTap,
+      classId: auth.currentClassId,
+      wordId: w.id,
+    );
+  }
+
   Widget _buildResults() {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (_result!.words.isNotEmpty) ...[
-          const StickyNote(text: '单词'),
+          const StickyNote(text: '知识库'),
           const SizedBox(height: 8),
           ..._result!.words.map((w) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: WordCard(
-                  word: w.word,
-                  meaning: w.meaning,
-                  pos: w.pos,
-                  highlight: true,
-                  isWrong: _wrongWordIds.contains(w.id),
-                  onToggleWrong: () => _toggleWrong(w),
-                  onTap: widget.onWordFound != null
-                      ? () => widget.onWordFound!(w.word)
-                      : null,
-                  classId: context.read<AuthProvider>().currentClassId,
-                  wordId: w.id,
-                ),
+                child: _buildWordMatchCard(w),
               )),
           const SizedBox(height: 16),
         ],

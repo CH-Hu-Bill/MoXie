@@ -231,12 +231,33 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> addWord(
-      String classId, String word, String meaning, String pos) {
+    String classId,
+    String word,
+    String meaning, {
+    String pos = '',
+    String type = 'word',
+    String title = '',
+  }) {
     return _post('add_word', fields: {
       'class_id': classId,
       'word': word,
       'meaning': meaning,
       'pos': pos,
+      'type': type,
+      if (title.isNotEmpty) 'title': title,
+    });
+  }
+
+  /// AI 生成释义（word）或直译（sentence/essay）
+  Future<Map<String, dynamic>> aiWord(
+    String classId,
+    String word, {
+    String type = 'word',
+  }) {
+    return _post('ai_word', fields: {
+      'class_id': classId,
+      'word': word,
+      'type': type,
     });
   }
 

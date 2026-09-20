@@ -1191,6 +1191,222 @@ class _PronSheetState extends State<_PronSheet> {
   }
 }
 
+/// 卡片右上角小方按钮（发音/错题等），与 WordCard 内按钮同款手绘风。
+Widget _cardActionButton({
+  required IconData icon,
+  required Color background,
+  required Color iconColor,
+  VoidCallback? onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: background,
+        border: Border.all(color: AppColors.pencil, width: 2),
+        borderRadius: AppTheme.wobblySm,
+        boxShadow: AppTheme.hardShadowSm,
+      ),
+      child: Icon(icon, size: 16, color: iconColor),
+    ),
+  );
+}
+
+/// 句子卡片：英文在上（跑马灯，可手动拖动），中文释义在下。
+class SentenceCard extends StatelessWidget {
+  final String english;
+  final String meaning;
+  final bool isWrong;
+  final bool showRemoveButton;
+  final VoidCallback? onToggleWrong;
+  final VoidCallback? onTap;
+  final bool highlight;
+
+  const SentenceCard({
+    super.key,
+    required this.english,
+    required this.meaning,
+    this.isWrong = false,
+    this.showRemoveButton = false,
+    this.onToggleWrong,
+    this.onTap,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: highlight ? AppColors.postIt : AppColors.white,
+        borderRadius: AppTheme.wobblyRadius,
+        border: Border.all(
+          color: isWrong ? AppColors.red : AppColors.pencil,
+          width: isWrong ? 3 : 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isWrong ? AppColors.red : AppColors.pencil,
+            offset: const Offset(3, 3),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: MarqueeText(text: english, fontSize: 20)),
+              if (onToggleWrong != null || showRemoveButton) ...[
+                const SizedBox(width: 6),
+                _cardActionButton(
+                  icon: showRemoveButton
+                      ? Icons.remove
+                      : (isWrong ? Icons.check : Icons.add),
+                  background: (showRemoveButton || isWrong)
+                      ? AppColors.red
+                      : AppColors.white,
+                  iconColor: (showRemoveButton || isWrong)
+                      ? AppColors.white
+                      : AppColors.pencil,
+                  onTap: onToggleWrong,
+                ),
+              ],
+            ],
+          ),
+          if (meaning.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              meaning,
+              style: TextStyle(
+                fontFamily: AppTheme.fontBody,
+                fontSize: 16,
+                height: 1.4,
+                color: AppColors.pencil.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+    if (onTap != null) return GestureDetector(onTap: onTap, child: card);
+    return card;
+  }
+}
+
+/// 作文卡片：标题（如有）+ 英文摘要；点击进入详情查看全文。
+class EssayCard extends StatelessWidget {
+  final String english;
+  final String title;
+  final bool isWrong;
+  final bool showRemoveButton;
+  final VoidCallback? onToggleWrong;
+  final VoidCallback? onTap;
+  final bool highlight;
+
+  const EssayCard({
+    super.key,
+    required this.english,
+    this.title = '',
+    this.isWrong = false,
+    this.showRemoveButton = false,
+    this.onToggleWrong,
+    this.onTap,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: highlight ? AppColors.postIt : AppColors.white,
+        borderRadius: AppTheme.wobblyRadius,
+        border: Border.all(
+          color: isWrong ? AppColors.red : AppColors.pencil,
+          width: isWrong ? 3 : 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isWrong ? AppColors.red : AppColors.pencil,
+            offset: const Offset(3, 3),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title.isNotEmpty ? title : '作文',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontHeading,
+                    fontSize: 20,
+                    color: AppColors.blue,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (onToggleWrong != null || showRemoveButton) ...[
+                const SizedBox(width: 6),
+                _cardActionButton(
+                  icon: showRemoveButton
+                      ? Icons.remove
+                      : (isWrong ? Icons.check : Icons.add),
+                  background: (showRemoveButton || isWrong)
+                      ? AppColors.red
+                      : AppColors.white,
+                  iconColor: (showRemoveButton || isWrong)
+                      ? AppColors.white
+                      : AppColors.pencil,
+                  onTap: onToggleWrong,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            english,
+            style: TextStyle(
+              fontFamily: AppTheme.fontBody,
+              fontSize: 16,
+              height: 1.5,
+              color: AppColors.pencil.withValues(alpha: 0.7),
+            ),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '点击查看全文',
+                style: TextStyle(
+                  fontFamily: AppTheme.fontBody,
+                  fontSize: 13,
+                  color: AppColors.blue,
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 16, color: AppColors.blue),
+            ],
+          ),
+        ],
+      ),
+    );
+    if (onTap != null) return GestureDetector(onTap: onTap, child: card);
+    return card;
+  }
+}
+
 class WordCard extends StatelessWidget {
   final String word;
   final String meaning;

@@ -2,7 +2,7 @@
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
-- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.0.17`
+- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.0.18`
 - 历史版本与更新说明见 [app/README.md](app/README.md) 与 Web 端 `data/app_versions.json`
 - **开源协议**：[GPL-3.0](LICENSE)
 - **本应用为本地运行设计**：原线上服务器已下线，请在本地电脑启动服务，内网设备通过局域网访问。
