@@ -60,11 +60,28 @@ function Expand-Zip($zip, $dest) {
 }
 
 function Stop-Server {
-    Get-CimInstance Win32_Process -Filter "Name='php.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and ($_.CommandLine -like '*router.php*') } |
-        ForEach-Object {
-            try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+    # 结束旧实例。WMI 的 CommandLine 有时取不到，故多路兜底：端口监听 / runtime\php 路径 / router.php 命令行。
+    $ids = @()
+    if ($Port -gt 0) {
+        try {
+            $ids += Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty OwningProcess
+        } catch {}
+    }
+    try {
+        $ids += Get-CimInstance Win32_Process -Filter "Name='php.exe'" -ErrorAction SilentlyContinue |
+            Where-Object {
+                ($_.ExecutablePath -and ($_.ExecutablePath -like "$PhpDir*")) -or
+                ($_.CommandLine -and ($_.CommandLine -like '*router.php*'))
+            } |
+            Select-Object -ExpandProperty ProcessId
+    } catch {}
+    foreach ($procId in ($ids | Where-Object { $_ } | Select-Object -Unique)) {
+        $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        if ($p -and $p.ProcessName -eq 'php') {
+            try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch {}
         }
+    }
 }
 
 # ---------------- 卸载 ----------------
@@ -225,14 +242,20 @@ if (-not (Test-Path $cfg)) {
 
 # ---------------- 注册开机自启 ----------------
 Step '注册开机自启（计划任务，登录时自动启动）'
-$vbs = Join-Path $Root 'run-hidden.vbs'
-if (-not (Test-Path $vbs)) { throw "缺少 run-hidden.vbs，无法注册自启。" }
-$action    = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$vbs`""
-$trigger   = New-ScheduledTaskTrigger -AtLogOn
-$settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-Ok '已注册计划任务'
+$taskOk = $false
+try {
+    $vbs = Join-Path $Root 'run-hidden.vbs'
+    if (-not (Test-Path $vbs)) { throw '缺少 run-hidden.vbs' }
+    $action    = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$vbs`""
+    $trigger   = New-ScheduledTaskTrigger -AtLogOn
+    $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+    $taskOk = $true
+    Ok '已注册计划任务'
+} catch {
+    Warn "开机自启注册失败（通常是没有以管理员身份运行）：$($_.Exception.Message)"
+}
 
 # ---------------- 启动 ----------------
 Step '启动本地服务'
@@ -255,4 +278,9 @@ foreach ($ip in $ips) { Write-Host " 内网访问 : http://${ip}:$Port" }
 Write-Host ' 数据目录 : web\data\'
 Write-Host ' 停止服务 : 任务管理器结束 php.exe，或运行 uninstall.bat'
 Write-Host '==============================================' -ForegroundColor Green
+if (-not $taskOk) {
+    Write-Host ''
+    Write-Host ' 注意：开机自启未注册。请右键 install.bat「以管理员身份运行」重新执行；' -ForegroundColor Yellow
+    Write-Host '       本次可直接双击 run.bat 手动启动服务（其它功能不受影响）。' -ForegroundColor Yellow
+}
 Write-Host ''

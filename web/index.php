@@ -50,7 +50,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_class') {
     requireCsrf();
     $name = trim(reqPost('class_name'));
     $password = trim(reqPost('class_password'));
-    if ($name !== '' && mb_strlen($name) <= 30 && mb_strlen($password) >= 4 && preg_match('/^[a-zA-Z0-9]+$/', $password)) {
+    if ($name !== '' && mb_check_encoding($name, 'UTF-8') && mb_strlen($name) <= 30 && mb_strlen($password) >= 4 && preg_match('/^[a-zA-Z0-9]+$/', $password)) {
         $dup = false;
         foreach ($classes as $c) {
             if (mb_strtolower((string)($c['name'] ?? '')) === mb_strtolower($name)) { $dup = true; break; }
@@ -60,11 +60,16 @@ if (isset($_POST['action']) && $_POST['action'] === 'create_class') {
         } else {
             $id = uniqid();
             $classes[$id] = ['id' => $id, 'name' => $name, 'created_at' => date('Y-m-d H:i:s'), 'password_hash' => password_hash($password, PASSWORD_DEFAULT), 'auth_version' => 1];
-            Database::saveClasses($classes);
-            setSecureCookie('current_class_id', $id, time() + 86400 * 365);
-            setClassAuthCookie($id, 1);
-            header('Location: main.php?id=' . $id);
-            exit;
+            if (!Database::saveClasses($classes)) {
+                // 写盘失败（名称编码异常使 json_encode 失败、或 web/data 不可写）：不能假装成功
+                unset($classes[$id]);
+                $createError = '保存失败：班级名称编码异常或 web/data 目录不可写，请重试';
+            } else {
+                setSecureCookie('current_class_id', $id, time() + 86400 * 365);
+                setClassAuthCookie($id, 1);
+                header('Location: main.php?id=' . $id);
+                exit;
+            }
         }
     } else {
         $createError = '班级名或口令格式不正确';
