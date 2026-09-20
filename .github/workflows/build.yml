@@ -43,7 +43,7 @@ jobs:
           class ApiConfig {
             static String baseUrl = '$API_BASE_URL';
             static String get apiEndpoint => '\$baseUrl/app_api.php';
-            static const String appVersion = '1.2.0';
+            static const String appVersion = '1.2.1';
           }
           EOF
           fi
@@ -79,12 +79,11 @@ jobs:
           tag_name: apk-latest
           name: APK Latest
           body: |
-            ## v1.2.0
-            - 知识库拆分为 单词 / 句子 / 作文 三个板块，带数量角标（与网页端一致）
-            - 每个板块独立定位到该类型最近一次默写位置；搜索命中自动切到对应板块并定位
-            - 修复静默刷新：其他设备新增 / 删改的内容会自动刷新出来
-            - 添加弹窗支持选择类型与「AI 补全 / AI 直译」，并修复键盘遮挡问题
-            - 错题本、任务详情、搜索均支持句子与作文
+            ## v1.2.1
+            - 修复：知识库三个板块（单词/句子/作文）内容串板块、板块定位不生效
+            - 新增：知识库 / 错题本 / 任务列表支持下拉刷新
+            - 优化：添加弹窗改为手绘风格，并解决键盘遮挡
+            - 提示：三板块功能需要服务端同步更新（服务端需含 get_library_meta）
           files: app/myapp/build/app/outputs/flutter-apk/app-release.apk
           overwrite_files: true
           make_latest: true

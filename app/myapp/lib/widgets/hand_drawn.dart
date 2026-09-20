@@ -11,6 +11,84 @@ import '../services/storage_service.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
 
+/// 手绘风弹窗：纸张背景 + wobbly 边框 + 硬偏移阴影；内容整体可滚动。
+/// 键盘弹出时由 [Dialog] 自身的 viewInsets 处理，配合滚动可避免遮挡。
+Future<T?> showHandDrawnDialog<T>({
+  required BuildContext context,
+  required String title,
+  required Widget child,
+}) {
+  return showDialog<T>(
+    context: context,
+    useSafeArea: true,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    builder: (ctx) {
+      final maxH = MediaQuery.of(ctx).size.height * 0.82;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.paper,
+              borderRadius: AppTheme.wobblyRadius,
+              border: Border.all(color: AppColors.pencil, width: 3),
+              boxShadow: const [
+                BoxShadow(
+                  color: AppColors.pencil,
+                  offset: Offset(6, 6),
+                  blurRadius: 0,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontHeading,
+                            fontSize: 24,
+                            color: AppColors.blue,
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(ctx),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.close, color: AppColors.pencil),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(
+                  height: 2,
+                  thickness: 2,
+                  color: AppColors.pencil.withValues(alpha: 0.2),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                    child: child,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class HandDrawnCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;

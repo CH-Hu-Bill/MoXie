@@ -166,7 +166,9 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     if (initial) {
       // 缓存只用于「单词」板块首屏秒开；句子/作文量小，直接取网络
       final cached = _storage.getCachedWords(classId);
-      if (cached != null && cached.isNotEmpty) {
+      if (cached != null &&
+          cached.isNotEmpty &&
+          cached.every((e) => e['type'] != null)) {
         setState(() {
           _kb['word'] = cached.map((e) => Word.fromJson(e)).toList();
           _kbLoaded['word'] = true;
@@ -217,8 +219,10 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
           page: page, perPage: 20, type: type);
       if (!mounted) return;
       final data = res['data'] as Map<String, dynamic>;
+      // 客户端再按类型兜底过滤：即便服务端较旧未按 type 过滤，也不会串板块
       final words = (data['words'] as List)
           .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .where((w) => w.type == type)
           .toList();
       setState(() {
         if (reset) {
@@ -255,6 +259,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
                     })
                 .toList());
       }
+      _maybeAutoLocateCurrent();
     } catch (e) {
       if (!mounted) return;
       setState(() => _kbLoading[type] = false);
@@ -307,6 +312,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         final data = res['data'] as Map<String, dynamic>;
         final words = (data['words'] as List)
             .map((w) => Word.fromJson(w as Map<String, dynamic>))
+            .where((w) => w.type == type)
             .toList();
         setState(() {
           final ids = {for (final w in _kb[type]!) w.id};
@@ -517,100 +523,110 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     final formKey = GlobalKey<FormState>();
     bool aiLoading = false;
 
-    await showDialog(
+    await showHandDrawnDialog(
       context: context,
-      useSafeArea: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: StatefulBuilder(
-          builder: (ctx, setLocal) {
-            final isWord = type == 'word';
-            final isEssay = type == 'essay';
-            return AlertDialog(
-              scrollable: true,
-              backgroundColor: AppColors.paper,
-              insetPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              shape: RoundedRectangleBorder(
-                borderRadius: AppTheme.wobblyRadius,
-                side: const BorderSide(color: AppColors.pencil, width: 2),
-              ),
-              title: Text('添加到知识库',
+      title: '添加到知识库',
+      child: StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final isWord = type == 'word';
+          final isEssay = type == 'essay';
+
+          Widget chip(String t, String label) {
+            final active = type == t;
+            return GestureDetector(
+              onTap: () => setLocal(() => type = t),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                decoration: BoxDecoration(
+                  color: active ? AppColors.postIt : AppColors.white,
+                  borderRadius: AppTheme.wobblySm,
+                  border: Border.all(
+                      color: AppColors.pencil, width: active ? 2.5 : 2),
+                  boxShadow: AppTheme.hardShadowSm,
+                ),
+                child: Text(
+                  label,
                   style: TextStyle(
-                      fontFamily: AppTheme.fontHeading, fontSize: 22)),
-              content: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final t in _kbTypes)
-                          ChoiceChip(
-                            label: Text(
-                              t == 'word'
-                                  ? '单词'
-                                  : (t == 'sentence' ? '句子' : '作文'),
-                              style: TextStyle(fontFamily: AppTheme.fontBody),
-                            ),
-                            selected: type == t,
-                            onSelected: (_) => setLocal(() => type = t),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (isEssay)
-                      TextFormField(
-                        controller: titleCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration:
-                            const InputDecoration(labelText: '标题（可选）'),
-                      ),
-                    if (isEssay) const SizedBox(height: 12),
-                    TextFormField(
-                      controller: contentCtrl,
-                      minLines: isWord ? 1 : 2,
-                      maxLines: isWord ? 1 : (isEssay ? 5 : 3),
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: isWord
-                            ? '单词'
-                            : (isEssay ? '作文内容（英文）' : '句子（英文）'),
-                      ),
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? '请输入内容' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: meaningCtrl,
-                      minLines: 1,
-                      maxLines: isWord ? 2 : 5,
-                      decoration: InputDecoration(
-                        labelText: isWord ? '释义' : '中文（直译）',
-                      ),
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? '请输入释义' : null,
-                    ),
-                    if (isWord) ...[
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: posCtrl,
-                        decoration:
-                            const InputDecoration(labelText: '词性（可选）'),
-                      ),
-                    ],
-                  ],
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 16,
+                    color: active
+                        ? AppColors.pencil
+                        : AppColors.pencil.withValues(alpha: 0.6),
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
+            );
+          }
+
+          return Form(
+            key: formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    chip('word', '单词'),
+                    const SizedBox(width: 8),
+                    chip('sentence', '句子'),
+                    const SizedBox(width: 8),
+                    chip('essay', '作文'),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                if (isEssay) ...[
+                  HandDrawnInput(
+                    controller: titleCtrl,
+                    label: '标题（可选）',
+                    hint: '如：My Weekend',
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                HandDrawnInput(
+                  controller: contentCtrl,
+                  label: isWord
+                      ? '单词'
+                      : (isEssay ? '作文内容（英文）' : '句子（英文）'),
+                  hint: isWord ? 'english' : 'English text ...',
+                  maxLines: isWord ? 1 : (isEssay ? 5 : 3),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? '请输入内容' : null,
+                ),
+                const SizedBox(height: 14),
+                HandDrawnInput(
+                  controller: meaningCtrl,
+                  label: isWord ? '释义' : '中文（直译）',
+                  hint: '中文释义',
+                  maxLines: isWord ? 2 : 5,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? '请输入释义' : null,
+                ),
+                if (isWord) ...[
+                  const SizedBox(height: 14),
+                  HandDrawnInput(
+                    controller: posCtrl,
+                    label: '词性（可选）',
+                    hint: 'n. / v. / adj.',
+                  ),
+                ],
+                const SizedBox(height: 20),
+                HandDrawnButton(
+                  label:
+                      aiLoading ? '生成中…' : (isWord ? 'AI 补全' : 'AI 直译'),
+                  icon: Icons.auto_awesome,
+                  isSecondary: true,
+                  fullWidth: true,
                   onPressed: aiLoading
                       ? null
                       : () async {
                           final text = contentCtrl.text.trim();
-                          if (text.isEmpty) return;
+                          if (text.isEmpty) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('请先填写内容')),
+                            );
+                            return;
+                          }
                           setLocal(() => aiLoading = true);
                           try {
                             final res =
@@ -624,64 +640,65 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
                           } catch (e) {
                             if (ctx.mounted) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
-                                SnackBar(content: Text('AI 补全失败: $e')),
+                                SnackBar(content: Text('AI 失败: $e')),
                               );
                             }
                           } finally {
                             setLocal(() => aiLoading = false);
                           }
                         },
-                  child: aiLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(isWord ? 'AI 补全' : 'AI 直译',
-                          style: TextStyle(
-                              fontFamily: AppTheme.fontBody,
-                              color: AppColors.blue)),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('取消',
-                      style: TextStyle(fontFamily: AppTheme.fontBody)),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) return;
-                    try {
-                      await _api.addWord(
-                        classId,
-                        contentCtrl.text.trim(),
-                        meaningCtrl.text.trim(),
-                        pos: posCtrl.text.trim(),
-                        type: type,
-                        title: titleCtrl.text.trim(),
-                      );
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      _loadMeta(classId);
-                      _loadKb(classId, type, reset: true);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('添加成功')),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('添加失败: $e')),
-                        );
-                      }
-                    }
-                  },
-                  child: Text('添加',
-                      style: TextStyle(fontFamily: AppTheme.fontBody)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: HandDrawnButton(
+                        label: '取消',
+                        isSecondary: true,
+                        fullWidth: true,
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: HandDrawnButton(
+                        label: '添加',
+                        fullWidth: true,
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          try {
+                            await _api.addWord(
+                              classId,
+                              contentCtrl.text.trim(),
+                              meaningCtrl.text.trim(),
+                              pos: posCtrl.text.trim(),
+                              type: type,
+                              title: titleCtrl.text.trim(),
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            _loadMeta(classId);
+                            _loadKb(classId, type, reset: true);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('添加成功')),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('添加失败: $e')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -856,6 +873,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         },
         child: ListView.builder(
           controller: _kbScroll[type],
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           itemCount: list.length + (_kbHasMore[type]! ? 1 : 0),
           itemBuilder: (ctx, i) {
@@ -925,8 +943,17 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
 
   Widget _buildWrongWords(String classId) {
     if (_wrongWords.isEmpty) {
-      return const EmptyState(
-          message: '错题本为空', icon: Icons.check_circle_outline);
+      return RefreshIndicator(
+        onRefresh: () => _loadWrongWords(classId),
+        color: AppColors.red,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 160),
+            EmptyState(message: '错题本为空', icon: Icons.check_circle_outline),
+          ],
+        ),
+      );
     }
     return Column(
       children: [
@@ -941,16 +968,21 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _wrongWords.length,
-            itemBuilder: (ctx, i) {
-              final w = _wrongWords[i];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildItemCard(classId, w, showRemoveButton: true),
-              );
-            },
+          child: RefreshIndicator(
+            onRefresh: () => _loadWrongWords(classId),
+            color: AppColors.red,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _wrongWords.length,
+              itemBuilder: (ctx, i) {
+                final w = _wrongWords[i];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildItemCard(classId, w, showRemoveButton: true),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -984,6 +1016,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     return RefreshIndicator(
       onRefresh: () => _loadTasks(classId),
       child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: tasks.length,
         itemBuilder: (ctx, i) {

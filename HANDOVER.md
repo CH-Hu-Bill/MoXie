@@ -93,7 +93,7 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 
 ### 8.1 APP 端（Phase F，已完成，待随版本发布）
 
-> 已完成（**1.2.0**）：知识库句子/作文支持、服务端 `type/title` 暴露、AI 直译补全。
+> 已完成（**1.2.1**）：知识库句子/作文支持、服务端 `type/title` 暴露、AI 直译补全。
 > 发布：改 APP 需 bump 版本四处一致（`.github/workflows/build.yml` / `pubspec.yaml` /
 > `lib/config/api_config.example.dart` / 根 `README.md`），CI 自动出包到 Release `apk-latest`。
 
@@ -115,7 +115,7 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
    APP 端**暂无独立「默写 / 听写」模式**（该模式目前仅 Web 端）。
 7. **AI**：✅ 服务端按班级配置；`ai_word` 对句子/作文走「直译」提示词（不意译），
    APP 添加弹窗提供「AI 补全 / AI 直译」按钮。
-8. **发布**：见上。当前版本 **1.2.0**。
+8. **发布**：见上。当前版本 **1.2.1**。
 
 ### 8.2 非 APP 待办
 
