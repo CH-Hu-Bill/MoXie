@@ -33,8 +33,11 @@ PORT=8080 ./dev.sh  # 指定端口
    - **离线兜底**：若根目录存在 `offline/php.zip` 与 `offline/ffmpeg.zip`，脚本优先使用，**无需联网**（适合网络差的电脑）
    - 否则从官方源下载（PHP：windows.php.net；ffmpeg：gyan.dev → GitHub BtbN 兜底）
 2. 生成 `web/inc/config.php`（随机密钥）
-3. 注册**开机自启计划任务**并启动服务
+3. 注册**开机自启计划任务**、**放行防火墙入站端口**并启动服务
 4. 控制台打印内网访问地址
+
+> 防火墙：服务以隐藏窗口监听 `0.0.0.0`，脚本会按端口创建入站放行规则（卸载时移除），
+> 否则防火墙弹窗被忽略时手机 APP 连不上。
 
 `update.bat` 更新，`uninstall.bat` 卸载自启，`run.bat` 手动前台启动。
 
@@ -61,6 +64,8 @@ PORT=8080 ./dev.sh  # 指定端口
 - 本机配置低，**不要在本机跑 `flutter build apk`**，用 CI。
 - `app/myapp/lib/config/api_config.dart` gitignored；CI 可由 `API_BASE_URL` secret 生成（未设置则用 `api_config.example.dart`）。
 - 改 APP 代码需 bump 版本（`.github/workflows/build.yml`、`pubspec.yaml`、`api_config.example.dart`、根 README 四处一致），并在 Release 带上版本更新日志。
+- `.github/workflows/install-windows.yml`：在 `windows-latest` 用 **Windows PowerShell 5.1** 实跑 `install.ps1`（在线 / 离线两条路径），
+  校验 PHP/ffmpeg 解压与运行、php.ini 扩展、config 无 BOM、计划任务与防火墙规则、HTTP 200、受保护路径 403、`update.ps1`、卸载清理。改动相关脚本会自动触发。
 
 ## 6. 本地校验命令
 
@@ -113,6 +118,9 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - ✅ **Windows 脚本编码修复（已完成）**：`install.ps1` / `update.ps1` 必须是 **UTF-8 with BOM**
   （否则中文版 PowerShell 5.1 按 GBK 读会解析失败）；`.bat` 加 `chcp 65001`；生成的 `config.php`
   用 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` 写成**无 BOM**（避免 BOM 污染 PHP 输出）。
+- ✅ **Windows 安装脚本真机验证（已完成）**：`.github/workflows/install-windows.yml` 在 `windows-latest`
+  上用 PowerShell 5.1 实跑，**在线下载**与**离线包**两条路径均通过；并补上**防火墙入站放行**（否则手机 APP 连不上），
+  卸载时自动移除规则。
 - **CI（可选）**：`API_BASE_URL` 目前仍可覆盖内置默认；Release 已附固定版本日志，后续可改为自动读取。
 - **网页端视频媒体缓存优化（可选）**：图集视频偶发重复缓冲。
 

@@ -18,7 +18,7 @@
 ├── update.bat / update.ps1       # Windows 一键更新
 ├── uninstall.bat                 # 移除开机自启
 ├── run.bat / run-hidden.vbs      # 手动 / 隐藏启动服务
-├── .github/workflows/build.yml   # CI: 自动构建 APK 并发布到 Release
+├── .github/workflows/            # CI: APK 构建发布(build.yml) + Windows 安装脚本测试(install-windows.yml)
 └── LICENSE
 ```
 
@@ -47,9 +47,9 @@
    - 自动安装便携 PHP 8.2 与 ffmpeg 到 `runtime/`
    - **无网络也不怕**：若存在 `offline/php.zip` 与 `offline/ffmpeg.zip`，脚本会直接使用它们，无需联网下载（可用 U 盘携带）
    - 生成 `web/inc/config.php`
-   - 注册**开机自启**计划任务并启动服务
+   - 注册**开机自启**计划任务、**放行防火墙**入站端口并启动服务
    - 控制台会打印内网访问地址（如 `http://192.168.x.x:8000`）
-3. 其它设备连同一局域网，用该地址访问即可
+3. 其它设备连同一局域网，用该地址访问即可（防火墙已自动放行，无需手动确认弹窗）
 4. 更新代码：双击 `update.bat`；卸载自启：`uninstall.bat`
 
 > 部署、安全、数据存储、API 文档详见 [web/README.md](web/README.md)。
@@ -70,7 +70,7 @@ APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 
 | 模块 | 技术 |
 |------|------|
-| Web 后端 | PHP 7.4+，GD，cURL，JSON 文件存储（无数据库）；Composer 仅用于 php-ffmpeg（可选，视频首帧缩略图） |
+| Web 后端 | PHP 7.4+，GD，cURL，JSON 文件存储（无数据库）；调用 ffmpeg 可执行文件生成视频首帧缩略图（可选） |
 | Web 前端 | 原生 HTML/CSS/JS，Quill 2.x 富文本编辑器（本地），按班级自定义 AI（OpenAI 兼容 / Anthropic） |
 | APP | Flutter（Dart 3.5+），Provider，flutter_quill，cached_network_image |
 | APP 字体 | ZCOOL KuaiLe + Ma Shan Zheng（打包到 APK；Web 端自托管于 `web/fonts/`） |
