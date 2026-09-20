@@ -9,7 +9,7 @@
 # ============================================================
 set -euo pipefail
 
-cd "$(dirname "$0")/web"
+cd "$(dirname "$0")/../web"
 
 PORT="${PORT:-8000}"
 WORKERS="${PHP_CLI_SERVER_WORKERS:-6}"

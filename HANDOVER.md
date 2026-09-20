@@ -18,8 +18,8 @@
 ### 开发机（Linux/macOS，本仓库开发环境）
 
 ```bash
-./dev.sh            # 监听 0.0.0.0:8000，自动打印内网地址，多进程
-PORT=8080 ./dev.sh  # 指定端口
+./scripts/dev.sh            # 监听 0.0.0.0:8000，自动打印内网地址，多进程
+PORT=8080 ./scripts/dev.sh  # 指定端口
 ```
 
 - `web/router.php` 是内置服务器的安全路由：拦截 `/data/`、`/inc/`、`/bin/`、`/vendor/`、`*.json` 等；并为 `/fonts/`、`/lib/` 输出长缓存。
@@ -27,7 +27,7 @@ PORT=8080 ./dev.sh  # 指定端口
 
 ### 最终用户（Windows）
 
-双击 `install.bat`（自动请求管理员权限），会：
+双击 `scripts\install.bat`（自动请求管理员权限），会：
 
 1. 安装便携 PHP 8.2（启用 zip/gd/curl/mbstring/openssl）与 ffmpeg 到 `runtime/`
    - **离线兜底**：若根目录存在 `offline/php.zip` 与 `offline/ffmpeg.zip`，脚本优先使用，**无需联网**（适合网络差的电脑）
@@ -39,7 +39,7 @@ PORT=8080 ./dev.sh  # 指定端口
 > 防火墙：服务以隐藏窗口监听 `0.0.0.0`，脚本会按端口创建入站放行规则（卸载时移除），
 > 否则防火墙弹窗被忽略时手机 APP 连不上。
 
-`update.bat` 更新，`uninstall.bat` 卸载自启，`run.bat` 手动前台启动。
+`scripts\update.bat` 更新，`scripts\uninstall.bat` 卸载自启，`scripts\run.bat` 手动前台启动。
 
 > 说明：Windows 下 PHP 内置服务器为单进程，暂不支持 `PHP_CLI_SERVER_WORKERS`。
 
@@ -92,19 +92,20 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 
 ### 8.1 APP 端（Phase F，已完成，待随版本发布）
 
-> 已完成（**1.0.18**）：知识库句子/作文支持、服务端 `type/title` 暴露、AI 直译补全。
+> 已完成（**1.2.0**）：知识库句子/作文支持、服务端 `type/title` 暴露、AI 直译补全。
 > 发布：改 APP 需 bump 版本四处一致（`.github/workflows/build.yml` / `pubspec.yaml` /
 > `lib/config/api_config.example.dart` / 根 `README.md`），CI 自动出包到 Release `apk-latest`。
 
 1. **端点设置**：✅ 1.0.17 完成（首次启动手输、HTTP/HTTPS、运行时覆盖 `ApiConfig.baseUrl`）。
    - 可继续增强：端点不可用时提示「服务器未开机 / 更换端点」；可选多端点记忆与探活。
-2. **知识库合并展示**：✅ APP 单词库单页按 **单词 → 句子 → 作文** 顺序分组展示；
-   句子卡片上英下中（`MarqueeText` 跑马灯，可手动拖动），作文卡片显示标题+摘要、点击进入
-   `EssayDetailScreen` 全文。分组标题用 `StickyNote`。
+2. **知识库三板块**：✅ APP 端与网页端一致，二级标签栏 **单词 / 句子 / 作文**（带数量角标），
+   每个板块独立列表与滚动；句子卡片上英下中（`MarqueeText` 跑马灯，可手动拖动），
+   作文卡片显示标题+摘要、点击进入 `EssayDetailScreen` 全文。
 3. **错题本**：✅ 支持句子与作文（按类型渲染、可增删）。
-4. **搜索 / 刷新 / 定位**：定位沿用「扫描式定位」并在命中时提示「正在定位…」；
-   静默刷新就地合并、保持滚动位置（长列表不重建）。
-   - 仍可加强：更显性的全屏 loading 遮罩；跨类型长列表的定位精度。
+4. **搜索 / 刷新 / 定位**：✅ 定位沿用「扫描式定位」并提示「正在定位…」；每个板块独立定位到
+   该类型最近一次默写位置（服务端 `get_library_meta` 的 `last_ids`），搜索命中自动切板块并定位。
+   后台每 30s + 切回前台时轮询内容指纹 `rev`，有变化才静默重载（保持滚动位置）——
+   修复「其他设备新增内容不出现、重进也不刷新」。
 5. **数据模型对齐**：✅ `models/word.dart` 增加 `type/title`；`WordMatch` 同步；
    `ApiService.addWord` 支持 `type/title`，新增 `aiWord`。服务端 `app_api.php` 的
    `get_words`（按类型排序）/`add_word`/`ai_word`/`get_task_detail`/`get_wrong_words`/
@@ -113,7 +114,7 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
    APP 端**暂无独立「默写 / 听写」模式**（该模式目前仅 Web 端）。
 7. **AI**：✅ 服务端按班级配置；`ai_word` 对句子/作文走「直译」提示词（不意译），
    APP 添加弹窗提供「AI 补全 / AI 直译」按钮。
-8. **发布**：见上。当前版本 **1.0.18**。
+8. **发布**：见上。当前版本 **1.2.0**。
 
 ### 8.2 非 APP 待办
 
@@ -137,8 +138,8 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
   改 `common.css` / `common.js` 必须提升引用处的 `?v=`。
 - **字体自托管**：`web/fonts/`（来自 app assets）；Quill 本地 `web/lib/quill/`（原 jsdelivr）。
 - **超级导入导出**：`web/export.php`（勾选导出）、`web/index.php` 的 `import_class`（zip 白名单校验、隐私排除、
-  过期 pending 任务导入后置为 completed）；上传上限在 `dev.sh` / `install.ps1` 里设为 300M。
+  过期 pending 任务导入后置为 completed）；上传上限在 `scripts/dev.sh` / `scripts/install.ps1` 里设为 300M。
 - **AI**：`web/inc/api.php` 的 `AIClient`（OpenAI 兼容 / Anthropic 双协议，按班级 `settings.json` 的 `ai_{cid}`）。
-- **Windows 一键脚本**：`install.bat/.ps1`、`update.*`、`uninstall.bat`、`run.bat`、`run-hidden.vbs`；
-  `runtime/` 存放下载的 PHP/ffmpeg（gitignore）。
-- **本地运行**：`./dev.sh`（Linux）监听 `0.0.0.0:8000`，`web/router.php` 负责安全拦截与静态缓存。
+- **Windows 一键脚本**：`scripts/` 下的 `install.bat/.ps1`、`update.*`、`uninstall.bat`、`run.bat`、`run-hidden.vbs`；
+  `runtime/` 存放下载的 PHP/ffmpeg（gitignore）。`install.ps1` 以脚本上一级目录为项目根。
+- **本地运行**：`./scripts/dev.sh`（Linux）监听 `0.0.0.0:8000`，`web/router.php` 负责安全拦截与静态缓存。

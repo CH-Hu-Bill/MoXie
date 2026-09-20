@@ -152,15 +152,15 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 ### 开发机（Linux / macOS）
 
 ```bash
-./dev.sh              # 监听 0.0.0.0:8000，自动打印内网地址，多进程
-PORT=8080 ./dev.sh    # 指定端口
+./scripts/dev.sh              # 监听 0.0.0.0:8000，自动打印内网地址，多进程
+PORT=8080 ./scripts/dev.sh    # 指定端口
 ```
 
 `web/router.php` 作为 PHP 内置服务器的路由脚本，会拦截 `/data/`、`/inc/`、`/bin/`、`/vendor/`、`*.json` 等敏感路径，并为 `/fonts/`、`/lib/` 输出长缓存。**不要**去掉它。
 
 ### Windows 用户
 
-使用仓库根目录的一键脚本：`install.bat`（安装 PHP+ffmpeg、初始化配置、注册开机自启）、`update.bat`、`uninstall.bat`、`run.bat`。
+使用仓库根目录 `scripts/` 下的一键脚本：`install.bat`（安装 PHP+ffmpeg、初始化配置、注册开机自启）、`update.bat`、`uninstall.bat`、`run.bat`。
 
 ### 配置
 

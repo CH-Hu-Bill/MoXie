@@ -1,6 +1,7 @@
 @echo off
 setlocal
 set "ROOT=%~dp0"
+for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
 chcp 65001 >nul
 set "PATH=%ROOT%runtime\php;%ROOT%runtime\ffmpeg\bin;%PATH%"
 set "PORT=8000"

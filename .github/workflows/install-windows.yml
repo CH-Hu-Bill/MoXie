@@ -5,12 +5,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'install.ps1'
-      - 'install.bat'
-      - 'update.ps1'
-      - 'run.bat'
-      - 'run-hidden.vbs'
-      - 'uninstall.bat'
+      - 'scripts/install.ps1'
+      - 'scripts/install.bat'
+      - 'scripts/update.ps1'
+      - 'scripts/run.bat'
+      - 'scripts/run-hidden.vbs'
+      - 'scripts/uninstall.bat'
       - 'web/inc/config.example.php'
       - 'web/router.php'
       - '.github/workflows/install-windows.yml'
@@ -33,7 +33,7 @@ jobs:
       - name: Run install.ps1 (Windows PowerShell 5.1)
         shell: pwsh
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Port 8099 2>&1 |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Port 8099 2>&1 |
             Tee-Object -FilePath install.log
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited with $LASTEXITCODE" }
 
@@ -116,7 +116,7 @@ jobs:
       - name: Run update.ps1 and re-check HTTP
         shell: pwsh
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File update.ps1 2>&1 |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1 2>&1 |
             Tee-Object -FilePath update.log
           if ($LASTEXITCODE -ne 0) { throw "update.ps1 exited with $LASTEXITCODE" }
           $ok = $false
@@ -132,7 +132,7 @@ jobs:
       - name: Uninstall and verify stopped
         shell: pwsh
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Uninstall
           if (Get-ScheduledTask -TaskName 'ListenWrite Local Server' -ErrorAction SilentlyContinue) { throw 'scheduled task still present after uninstall' }
           if (Get-NetFirewallRule -DisplayName 'ListenWrite Local Server*' -ErrorAction SilentlyContinue) { throw 'firewall rule still present after uninstall' }
           Start-Sleep -Seconds 3
@@ -157,7 +157,7 @@ jobs:
       - name: Run install.ps1 with offline bundle
         shell: pwsh
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Port 8098 2>&1 |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Port 8098 2>&1 |
             Tee-Object -FilePath install.log
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited with $LASTEXITCODE" }
           if (-not (Select-String -Path install.log -Pattern '使用随包离线 PHP' -Quiet))     { throw 'offline PHP branch was not used' }
@@ -179,5 +179,5 @@ jobs:
       - name: Uninstall (offline)
         shell: pwsh
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Uninstall
           if (Get-ScheduledTask -TaskName 'ListenWrite Local Server' -ErrorAction SilentlyContinue) { throw 'scheduled task still present after uninstall' }

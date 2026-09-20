@@ -25,7 +25,8 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Root      = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$Root      = Split-Path -Parent $ScriptDir
 $Runtime   = Join-Path $Root 'runtime'
 $PhpDir    = Join-Path $Runtime 'php'
 $FfmpegDir = Join-Path $Runtime 'ffmpeg'
@@ -98,7 +99,7 @@ if ($Uninstall) {
 
 # ---------------- 环境检查 ----------------
 if (-not (Test-Path $WebDir)) {
-    throw "未找到 web/ 目录。请把本脚本放在项目根目录（与 web/ 同级）后再运行。"
+    throw "未找到 web/ 目录。请确保 scripts/ 与 web/ 位于同一项目目录后再运行。"
 }
 
 New-Item -ItemType Directory -Force -Path $Runtime | Out-Null
@@ -244,7 +245,7 @@ if (-not (Test-Path $cfg)) {
 Step '注册开机自启（计划任务，登录时自动启动）'
 $taskOk = $false
 try {
-    $vbs = Join-Path $Root 'run-hidden.vbs'
+    $vbs = Join-Path $ScriptDir 'run-hidden.vbs'
     if (-not (Test-Path $vbs)) { throw '缺少 run-hidden.vbs' }
     $action    = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$vbs`""
     $trigger   = New-ScheduledTaskTrigger -AtLogOn

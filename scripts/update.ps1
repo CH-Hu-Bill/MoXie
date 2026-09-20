@@ -6,7 +6,8 @@
 ============================================================
 #>
 $ErrorActionPreference = 'Stop'
-$Root = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$Root = Split-Path -Parent $ScriptDir
 
 Write-Host '==> 停止本地服务' -ForegroundColor Cyan
 Get-CimInstance Win32_Process -Filter "Name='php.exe'" -ErrorAction SilentlyContinue |
@@ -21,4 +22,4 @@ if (Test-Path (Join-Path $Root '.git')) {
 }
 
 Write-Host '==> 重新执行安装/启动流程' -ForegroundColor Cyan
-& (Join-Path $Root 'install.ps1') -Port 0
+& (Join-Path $ScriptDir 'install.ps1') -Port 0

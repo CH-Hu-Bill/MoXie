@@ -2,7 +2,7 @@
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
-- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.0.18`
+- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.2.0`
 - 历史版本与更新说明见 [app/README.md](app/README.md) 与 Web 端 `data/app_versions.json`
 - **开源协议**：[GPL-3.0](LICENSE)
 - **本应用为本地运行设计**：原线上服务器已下线，请在本地电脑启动服务，内网设备通过局域网访问。
@@ -13,11 +13,12 @@
 .
 ├── web/                          # Web 端 + 后端 API（PHP + JSON 文件存储，无数据库）
 ├── app/myapp/                    # Flutter APP 客户端（Android）
-├── dev.sh                        # 开发机（Linux/macOS）一键启动
-├── install.bat / install.ps1     # Windows 用户一键安装（PHP+ffmpeg+自启）
-├── update.bat / update.ps1       # Windows 一键更新
-├── uninstall.bat                 # 移除开机自启
-├── run.bat / run-hidden.vbs      # 手动 / 隐藏启动服务
+├── scripts/                      # 安装 / 启动脚本
+│   ├── install.bat / install.ps1 # Windows 一键安装（PHP+ffmpeg+自启）
+│   ├── update.bat / update.ps1   # Windows 一键更新
+│   ├── uninstall.bat             # 移除开机自启
+│   ├── run.bat / run-hidden.vbs  # 手动 / 隐藏启动服务
+│   └── dev.sh                    # 开发机（Linux/macOS）一键启动
 ├── .github/workflows/            # CI: APK 构建发布(build.yml) + Windows 安装脚本测试(install-windows.yml)
 └── LICENSE
 ```
@@ -34,7 +35,7 @@
 ### 方式一：开发机（Linux / macOS）
 
 ```bash
-./dev.sh            # 监听 0.0.0.0:8000，自动打印内网访问地址
+./scripts/dev.sh    # 监听 0.0.0.0:8000，自动打印内网访问地址
 # 浏览器打开 http://127.0.0.1:8000 或 http://<内网IP>:8000
 ```
 
@@ -43,14 +44,14 @@
 ### 方式二：Windows 用户（一键）
 
 1. 获取本仓库代码（`git clone` 或下载 ZIP）
-2. 双击 **`install.bat`**（自动请求管理员权限）：
+2. 双击 **`scripts\install.bat`**（自动请求管理员权限）：
    - 自动安装便携 PHP 8.2 与 ffmpeg 到 `runtime/`
    - **无网络也不怕**：若存在 `offline/php.zip` 与 `offline/ffmpeg.zip`，脚本会直接使用它们，无需联网下载（可用 U 盘携带）
    - 生成 `web/inc/config.php`
    - 注册**开机自启**计划任务、**放行防火墙**入站端口并启动服务
    - 控制台会打印内网访问地址（如 `http://192.168.x.x:8000`）
 3. 其它设备连同一局域网，用该地址访问即可（防火墙已自动放行，无需手动确认弹窗）
-4. 更新代码：双击 `update.bat`；卸载自启：`uninstall.bat`
+4. 更新代码：双击 `scripts\update.bat`；卸载自启：`scripts\uninstall.bat`
 
 > 部署、安全、数据存储、API 文档详见 [web/README.md](web/README.md)。
 
