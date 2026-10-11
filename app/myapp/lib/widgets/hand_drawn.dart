@@ -1385,6 +1385,7 @@ class EssayCard extends StatelessWidget {
   final VoidCallback? onToggleWrong;
   final VoidCallback? onTap;
   final bool highlight;
+  final bool hasMindmap;
 
   const EssayCard({
     super.key,
@@ -1395,6 +1396,7 @@ class EssayCard extends StatelessWidget {
     this.onToggleWrong,
     this.onTap,
     this.highlight = false,
+    this.hasMindmap = false,
   });
 
   @override
@@ -1434,6 +1436,34 @@ class EssayCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (hasMindmap) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.blue.withValues(alpha: 0.12),
+                    borderRadius: AppTheme.wobblyRadius,
+                    border: Border.all(color: AppColors.blue, width: 1.2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.account_tree_outlined,
+                          size: 12, color: AppColors.blue),
+                      const SizedBox(width: 3),
+                      Text(
+                        '导图',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBody,
+                          fontSize: 12,
+                          color: AppColors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (onToggleWrong != null || showRemoveButton) ...[
                 const SizedBox(width: 6),
                 _cardActionButton(

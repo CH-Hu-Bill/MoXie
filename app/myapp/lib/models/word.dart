@@ -10,6 +10,9 @@ class Word {
   /// 作文标题（可选），句子/单词为空
   final String title;
 
+  /// 作文思维导图（英文要点树，Markdown 大纲字符串；仅部分作文有，空串表示无）
+  final String mindmap;
+
   final bool isWrong;
   final bool isFavorite;
 
@@ -20,6 +23,7 @@ class Word {
     this.pos = '',
     this.type = 'word',
     this.title = '',
+    this.mindmap = '',
     this.isWrong = false,
     this.isFavorite = false,
   });
@@ -27,6 +31,7 @@ class Word {
   bool get isWord => type == 'word';
   bool get isSentence => type == 'sentence';
   bool get isEssay => type == 'essay';
+  bool get hasMindmap => mindmap.trim().isNotEmpty;
 
   factory Word.fromJson(Map<String, dynamic> json) {
     final rawType = (json['type'] ?? 'word').toString();
@@ -37,6 +42,7 @@ class Word {
       pos: json['pos'] ?? '',
       type: (rawType == 'sentence' || rawType == 'essay') ? rawType : 'word',
       title: (json['title'] ?? '').toString(),
+      mindmap: (json['mindmap'] ?? '').toString(),
       isWrong: json['is_wrong'] ?? false,
       isFavorite: json['is_favorite'] ?? false,
     );
@@ -49,6 +55,7 @@ class Word {
     String? pos,
     String? type,
     String? title,
+    String? mindmap,
     bool? isWrong,
     bool? isFavorite,
   }) {
@@ -59,6 +66,7 @@ class Word {
       pos: pos ?? this.pos,
       type: type ?? this.type,
       title: title ?? this.title,
+      mindmap: mindmap ?? this.mindmap,
       isWrong: isWrong ?? this.isWrong,
       isFavorite: isFavorite ?? this.isFavorite,
     );

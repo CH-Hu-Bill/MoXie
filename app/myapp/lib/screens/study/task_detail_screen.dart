@@ -285,6 +285,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                     title: w.title,
                                     isWrong: w.isWrong,
                                     highlight: highlighted,
+                                    hasMindmap: w.hasMindmap,
                                     onToggleWrong: () => _toggleWrong(w),
                                     onTap: () => Navigator.push(
                                       context,

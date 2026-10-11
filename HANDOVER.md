@@ -115,7 +115,7 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
    APP 端**暂无独立「默写 / 听写」模式**（该模式目前仅 Web 端）。
 7. **AI**：✅ 服务端按班级配置；`ai_word` 对句子/作文走「直译」提示词（不意译），
    APP 添加弹窗提供「AI 补全 / AI 直译」按钮。
-8. **发布**：见上。当前版本 **1.2.1**。
+8. **发布**：见上。当前版本 **1.2.2**。
 
 ### 8.2 非 APP 待办
 
@@ -188,6 +188,17 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - 渲染：`display.php`（首屏 PHP 直出）与 `display.js` 的 `renderWords()` 均按「单词网格 + 句子一行条 + 作文卡片」三段输出；作文按作文库卡片样式（标题 + 英文 + 中文，多行截断 `-webkit-line-clamp`）；`fitWords()` 会扣除句子/作文区高度。
 - 英文字体已随全局设置（`head.php` 给 `<html>` 加 `font-en-andika`，`display.css` 用 `var(--font-heading/body)`）；占位 emoji 已去除。
 - 缓存版本：`display.css?v=13`、`display.js?v=20`。
+
+---
+
+## 12. APP 端作文思维导图展示（1.2.2）
+
+- 模型：`app/myapp/lib/models/word.dart` 新增 `mindmap` 字段 + `hasMindmap`。
+- 组件：`app/myapp/lib/widgets/mind_map_view.dart` —— 解析 Markdown 大纲（嵌套 `- ` 列表）→ 自绘手绘风树状图（白底 + 铅笔描边 + 硬阴影 + 贝塞尔连线；超宽可横向滚动；零第三方依赖，样式对齐 Web）。
+- 展示：`essay_detail_screen.dart` 标题下展示「思维导图（英文要点）」区块；`EssayCard` 新增「导图」标记（`study_screen` / `task_detail_screen` 传 `hasMindmap: w.hasMindmap`）。
+- 数据来源：`web/app_api.php` 的 `appWordOut` 已含 `mindmap`（`get_words` / `get_task_detail` / `search_all`）。
+- 版本 **1.2.2**（`.github/workflows/build.yml` / `pubspec.yaml` / `api_config.example.dart` / 根 `README.md` 四处一致；本地 `api_config.dart` 同步）。
+- **未做**（如需另开轮次）：APP 端「按导图默写」（APP 暂无默写模式）、APP 添加作文时生成导图（`app_api` 的 `add_word` 支持 `gen_mindmap`）。
 
 
 

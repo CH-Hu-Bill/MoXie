@@ -43,7 +43,7 @@ jobs:
           class ApiConfig {
             static String baseUrl = '$API_BASE_URL';
             static String get apiEndpoint => '\$baseUrl/app_api.php';
-            static const String appVersion = '1.2.1';
+            static const String appVersion = '1.2.2';
           }
           EOF
           fi
@@ -79,11 +79,10 @@ jobs:
           tag_name: apk-latest
           name: APK Latest
           body: |
-            ## v1.2.1
-            - 修复：知识库三个板块（单词/句子/作文）内容串板块、板块定位不生效
-            - 新增：知识库 / 错题本 / 任务列表支持下拉刷新
-            - 优化：添加弹窗改为手绘风格，并解决键盘遮挡
-            - 提示：三板块功能需要服务端同步更新（服务端需含 get_library_meta）
+            ## v1.2.2
+            - 作文详情页展示「思维导图（英文要点树）」；作文卡片新增「导图」标记
+            - 数据模型同步服务端 mindmap 字段（思维导图由网页端生成，需服务端已更新）
+            - 提示：思维导图需服务端已包含 mindmap 字段（网页端 1.2.1+ 生成的作文）
           files: app/myapp/build/app/outputs/flutter-apk/app-release.apk
           overwrite_files: true
           make_latest: true

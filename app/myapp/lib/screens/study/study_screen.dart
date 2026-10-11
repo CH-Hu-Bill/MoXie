@@ -921,6 +921,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         isWrong: w.isWrong,
         showRemoveButton: showRemoveButton,
         highlight: highlighted,
+        hasMindmap: w.hasMindmap,
         onToggleWrong: () => _toggleWrong(classId, w),
         onTap: () => Navigator.push(
           context,
