@@ -52,6 +52,7 @@ function appWordOut($w) {
         'pos' => $w['pos'] ?? '',
         'type' => $type,
         'title' => $w['title'] ?? '',
+        'mindmap' => $w['mindmap'] ?? '',
     ];
 }
 

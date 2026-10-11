@@ -199,6 +199,101 @@ window.addEventListener('resize', () => {
     _marqueeResizeTimer = setTimeout(initMarquee, 120);
 });
 
+// ---------- 作文思维导图（Markdown 大纲 → 手绘风树状 SVG）----------
+// AI 输出的英文要点大纲（嵌套 "- " 列表，≤3 层 ≤20 节点）在此解析并绘制成树状图。
+// 零第三方依赖；文本用 textContent 注入，天然防 XSS。
+function parseMindmapOutline(md) {
+    var root = { text: '', children: [] };
+    var stack = [{ node: root, indent: -1 }];
+    String(md || '').replace(/\r/g, '').split('\n').forEach(function (raw) {
+        if (!raw.trim()) return;
+        var m = raw.match(/^(\s*)(?:[-*+]|\d+\.)\s+(.*)$/);
+        if (!m) return;
+        var indent = m[1].replace(/\t/g, '  ').length;
+        var node = { text: m[2].trim(), children: [] };
+        while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+        stack[stack.length - 1].node.children.push(node);
+        stack.push({ node: node, indent: indent });
+    });
+    return root;
+}
+
+function renderMindmap(container, markdown) {
+    if (!container) return;
+    container.innerHTML = '';
+    var root = parseMindmapOutline(markdown);
+    if (!root.children.length) { container.innerHTML = '<div class="mindmap-empty">（无思维导图）</div>'; return; }
+
+    var NODE_H = 34, V_GAP = 30, PAD_X = 14, SIB_GAP = 18, PAD = 10;
+    var meas = document.createElement('canvas').getContext('2d');
+    var family = (getComputedStyle(document.documentElement).getPropertyValue('--font-heading') || '').trim() || 'sans-serif';
+
+    function measureText(node) {
+        meas.font = '600 15px ' + family;
+        node.w = Math.max(54, Math.ceil(meas.measureText(node.text).width) + PAD_X * 2);
+        node.h = NODE_H;
+    }
+    (function walk(n) { measureText(n); n.children.forEach(walk); })(root);
+
+    function layout(n) {
+        if (!n.children.length) { n.subW = n.w; return n.subW; }
+        var span = n.children.reduce(function (a, c, i) { return a + layout(c) + (i ? SIB_GAP : 0); }, 0);
+        n.subW = Math.max(n.w, span);
+        return n.subW;
+    }
+    var roots = root.children;
+    var totalW = roots.reduce(function (a, n, i) { return a + layout(n) + (i ? SIB_GAP : 0); }, 0);
+
+    var maxDepth = 0;
+    function assign(n, left, depth) {
+        n.y = depth * (NODE_H + V_GAP);
+        if (depth > maxDepth) maxDepth = depth;
+        if (!n.children.length) { n.x = left + n.subW / 2; return; }
+        var span = n.children.reduce(function (a, c, i) { return a + c.subW + (i ? SIB_GAP : 0); }, 0);
+        var cur = left + (n.subW - span) / 2;
+        n.children.forEach(function (c) { assign(c, cur, depth + 1); cur += c.subW + SIB_GAP; });
+        n.x = left + n.subW / 2;
+    }
+    var curX = 0;
+    roots.forEach(function (n, i) { assign(n, curX, 0); curX += n.subW + SIB_GAP; });
+
+    var svgW = totalW + PAD * 2;
+    var svgH = maxDepth * (NODE_H + V_GAP) + NODE_H + PAD * 2;
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + svgW + ' ' + svgH);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+    svg.setAttribute('class', 'mindmap-svg');
+
+    function el(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+
+    function drawConnector(p, c) {
+        var x1 = p.x + PAD, y1 = p.y + NODE_H + PAD;
+        var x2 = c.x + PAD, y2 = c.y + PAD;
+        var my = (y1 + y2) / 2;
+        svg.appendChild(el('path', {
+            d: 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + my + ' ' + x2 + ',' + my + ' ' + x2 + ',' + y2,
+            fill: 'none', stroke: '#2d2d2d', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-opacity': 0.75
+        }));
+    }
+    function drawNode(n) {
+        var x = n.x - n.w / 2 + PAD, y = n.y + PAD;
+        svg.appendChild(el('rect', { x: x + 3, y: y + 3, width: n.w, height: n.h, rx: 8, fill: '#2d2d2d', 'fill-opacity': 0.18 }));
+        svg.appendChild(el('rect', { x: x, y: y, width: n.w, height: n.h, rx: 8, fill: '#fffdf7', stroke: '#2d2d2d', 'stroke-width': 2 }));
+        var t = el('text', { x: n.x + PAD, y: y + n.h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'mindmap-node-text' });
+        t.textContent = n.text;
+        svg.appendChild(t);
+    }
+    function draw(n) { drawNode(n); n.children.forEach(function (c) { drawConnector(n, c); draw(c); }); }
+    roots.forEach(draw);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'mindmap-wrap';
+    wrap.appendChild(svg);
+    container.appendChild(wrap);
+}
+window.renderMindmap = renderMindmap;
+
 // ---------- 超级霸屏（全屏公告）----------
 // 霸屏层由 header.php 服务端渲染（位于状态栏下方），
 // 通过 <html>.fs-active 控制显隐；仅站内点击跳转的新页面显示。

@@ -97,6 +97,55 @@ class AIClient
         return ['success' => true, 'message' => '连接成功'];
     }
 
+    /**
+     * 生成英文作文的思维导图大纲（Markdown 嵌套无序列表，≤3 层 ≤20 节点）。
+     * 失败返回 ''（调用方据此决定是否回退）。
+     */
+    public static function generateEssayMindmap($classId, $title, $essayText)
+    {
+        $essayText = trim((string)$essayText);
+        if ($essayText === '') return '';
+        $titleLine = trim((string)$title) !== '' ? trim((string)$title) : '(untitled)';
+        $prompt = <<<PROMPT
+你是英语学习助手。请为下面这篇英文作文生成用于记忆的英文思维导图大纲。
+要求：
+1. 只输出嵌套的 Markdown 无序列表（每行以 "- " 开头），用缩进（每层两个空格）表示层级；不要输出任何解释、标题或代码块。
+2. 节点文字只用英文关键词 / 短语，简洁，不含中文。
+3. 最多 3 层，总节点数不超过 20 个，每个节点不超过 40 个字符。
+4. 第一层节点为该作文的主题；其后按段落 / 要点展开。
+
+作文标题：{$titleLine}
+作文正文：
+{$essayText}
+PROMPT;
+        $r = self::call($classId, [
+            ['role' => 'system', 'content' => '你是英语教学助手，只按要求输出 Markdown 嵌套列表。'],
+            ['role' => 'user', 'content' => $prompt],
+        ], 1024, 60);
+        if (empty($r['success'])) return '';
+        return self::normalizeMindmapOutline($r['content']);
+    }
+
+    /** 把 AI 输出规整为受限的 Markdown 大纲（≤3 层、≤20 节点、节点 ≤40 字符） */
+    public static function normalizeMindmapOutline($content)
+    {
+        $out = [];
+        $count = 0;
+        foreach (preg_split('/\r\n|\r|\n/', (string)$content) as $line) {
+            if (!preg_match('/^(\s*)(?:[-*+]|\d+\.)\s+(.*)$/u', $line, $m)) continue;
+            $indent = strlen(str_replace("\t", '  ', $m[1]));
+            $level = min(2, (int)floor($indent / 2)); // 0/1/2 → 最多 3 层
+            $text = trim(preg_replace('/\s+/u', ' ', $m[2]));
+            $text = str_replace(['*', '`', '#'], '', $text);
+            $text = trim($text);
+            $text = mb_substr($text, 0, 40);
+            if ($text === '') continue;
+            $out[] = str_repeat('  ', $level) . '- ' . $text;
+            if (++$count >= 20) break;
+        }
+        return implode("\n", $out);
+    }
+
     /** 端点容错：允许只填域名或省略 /v1 等路径 */
     public static function normalizeEndpoint($provider, $endpoint)
     {

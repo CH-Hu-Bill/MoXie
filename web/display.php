@@ -372,7 +372,7 @@ var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JS
     }
 })();
 </script>
-<script src="common.js?v=13"></script>
+<script src="common.js?v=14"></script>
 <script src="display.js?v=19"></script>
 </body>
 </html>

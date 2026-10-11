@@ -1002,3 +1002,19 @@ body.lb-open .gallery-card img[src$=".gif"] {
 .hide-mode .task-line-en{display:none}
 .hide-mode .task-line-zh{font-size:24px;color:var(--pencil);margin-top:0}
 .hide-mode .word-card .meaning{font-size:27px}
+
+/* ---- 作文思维导图（英文要点树，自绘 SVG）---- */
+.mindmap-wrap{width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:4px 0}
+.mindmap-svg{display:block;width:100%;height:auto;min-width:480px}
+.mindmap-node-text{font-family:var(--font-heading);font-size:15px;font-weight:600;fill:var(--pencil)}
+.mindmap-empty{color:#999;font-size:14px;padding:8px 2px}
+.mindmap-label{font-family:var(--font-heading);color:var(--blue);font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:5px}
+.mindmap-block{margin-top:14px;padding-top:12px;border-top:2px dashed var(--old-paper)}
+.task-line-mindmap{margin-top:12px;padding-top:10px;border-top:2px dashed var(--old-paper)}
+/* 默写（hide）模式 + 导图模式：作文隐藏中英文，改为展示导图作为默写提示 */
+.hide-mode .task-line-mindmap{display:none}
+.hide-mode .task-line-card.show-mindmap .task-line-en,
+.hide-mode .task-line-card.show-mindmap .task-line-zh{display:none !important}
+.hide-mode .task-line-card.show-mindmap .task-line-mindmap{display:block;margin-top:6px;padding-top:0;border-top:none}
+.hide-mode .task-line-card.show-mindmap .mindmap-svg{min-width:520px}
+

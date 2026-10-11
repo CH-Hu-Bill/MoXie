@@ -42,6 +42,7 @@ requireClassAuth($classId, $class);
 $words = Database::getWords($classId);
 $tasks = Database::getTasks($classId);
 $settings = Database::getSettings();
+$aiConfigured = AIClient::isConfigured($classId); // 是否已配置 AI（决定"生成思维导图"可选项是否显示）
 $searchQ = trim(reqGet('search'));
 
 // 知识库按类型分组（旧数据无 type → word）
@@ -143,10 +144,16 @@ if (isset($_POST['action'])) {
             $newId = uniqid();
             $item = ['id' => $newId, 'type' => $type, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => date('Y-m-d')];
             if ($type === 'essay') $item['title'] = $title;
+            // 作文可选：导入时生成英文思维导图（需已配置 AI）
+            if ($type === 'essay' && reqPost('gen_mindmap') === '1' && $aiConfigured) {
+                $mm = AIClient::generateEssayMindmap($classId, $title, $word);
+                if ($mm !== '') $item['mindmap'] = $mm;
+            }
             $words[] = $item;
             Database::saveWords($classId, $words);
             $response['success'] = true;
             $response['new_id'] = $newId;
+            if (isset($item['mindmap'])) $response['mindmap'] = $item['mindmap'];
         }
         echo json_encode($response); exit;
     }
@@ -690,7 +697,13 @@ PROMPT;
             <div class="form-group"><label>英文作文</label><textarea id="essayEn" rows="6" class="textarea" placeholder="输入英文作文"></textarea></div>
             <div class="form-group"><label>中文释义</label><textarea id="essayZh" rows="5" class="textarea" placeholder="点击下方 AI 直译，或手动填写"></textarea></div>
             <div style="margin-bottom:12px;"><button type="button" class="btn btn-sm btn-secondary" onclick="aiTranslate('essay')" id="essayAiBtn">✨ AI 直译</button></div>
-            <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('addEssayModal')">取消</button><button type="button" class="submit" onclick="addItem('essay')">添加</button></div>
+            <?php if ($aiConfigured): ?>
+            <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+                <input type="checkbox" id="essayGenMindmap" style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer;">
+                <label for="essayGenMindmap" style="font-size:14px;color:var(--pencil);cursor:pointer;">同时生成思维导图（英文要点树，用于按导图默写）</label>
+            </div>
+            <?php endif; ?>
+            <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('addEssayModal')">取消</button><button type="button" class="submit" id="essayAddBtn" onclick="addItem('essay')">添加</button></div>
         </div>
     </div>
 
@@ -699,6 +712,7 @@ PROMPT;
             <div class="modal-title" id="essayDetailTitle">作文</div>
             <div class="kb-detail-en" id="essayDetailEn"></div>
             <div class="kb-detail-zh" id="essayDetailZh"></div>
+            <div id="essayDetailMindmap"></div>
             <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('essayDetailModal')">关闭</button></div>
         </div>
     </div>
@@ -840,7 +854,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=13"></script>
+    <script src="common.js?v=14"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
@@ -929,7 +943,7 @@ PROMPT;
 
         // ==================== 句子 / 作文添加 ====================
         function showSentenceModal() { document.getElementById('sentenceEn').value = ''; document.getElementById('sentenceZh').value = ''; document.getElementById('addSentenceModal').classList.add('active'); }
-        function showEssayModal() { document.getElementById('essayTitle').value = ''; document.getElementById('essayEn').value = ''; document.getElementById('essayZh').value = ''; document.getElementById('addEssayModal').classList.add('active'); }
+        function showEssayModal() { document.getElementById('essayTitle').value = ''; document.getElementById('essayEn').value = ''; document.getElementById('essayZh').value = ''; const gm = document.getElementById('essayGenMindmap'); if (gm) gm.checked = false; document.getElementById('addEssayModal').classList.add('active'); }
 
         async function aiTranslate(mode) {
             const enId = mode === 'essay' ? 'essayEn' : 'sentenceEn';
@@ -958,8 +972,16 @@ PROMPT;
             if (!en || !zh) { showToast('请填写英文内容和中文释义', 'error'); return; }
             const fd = new FormData();
             fd.append('action', 'add_word'); fd.append('type', mode); fd.append('word', en); fd.append('meaning', zh);
-            if (mode === 'essay') fd.append('title', document.getElementById('essayTitle').value.trim());
+            const gmBox = mode === 'essay' ? document.getElementById('essayGenMindmap') : null;
+            const willGen = !!(gmBox && gmBox.checked);
+            if (mode === 'essay') {
+                fd.append('title', document.getElementById('essayTitle').value.trim());
+                if (willGen) fd.append('gen_mindmap', '1');
+            }
             fd.append('csrf_token', CSRF_TOKEN);
+            const addBtn = mode === 'essay' ? document.getElementById('essayAddBtn') : null;
+            const addBtnOld = addBtn ? addBtn.textContent : '';
+            if (addBtn && willGen) { addBtn.disabled = true; addBtn.textContent = '正在生成思维导图…'; }
             try {
                 const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
                 if (d.error) { showToast(d.error, 'error'); return; }
@@ -968,13 +990,16 @@ PROMPT;
                     closeModal(mode === 'essay' ? 'addEssayModal' : 'addSentenceModal');
                     const item = { id: d.new_id, type: mode, word: en, meaning: zh, pos: '', created_at: '' };
                     if (mode === 'essay') item.title = document.getElementById('essayTitle').value.trim();
+                    if (d.mindmap) item.mindmap = d.mindmap;
                     wordsArray.push(item);
                     if (currentTab !== mode) switchTab(mode, true);
                     refreshPanel(mode);
                     scrollToNew(d.new_id);
-                    showToast('添加成功', 'success');
+                    if (willGen && !d.mindmap) showToast('已添加，但思维导图生成失败（可稍后重试）', 'error');
+                    else showToast(d.mindmap ? '已添加并生成思维导图' : '添加成功', 'success');
                 }
             } catch (e) { showToast('网络错误', 'error'); }
+            finally { if (addBtn) { addBtn.disabled = false; addBtn.textContent = addBtnOld; } }
         }
 
         function showEssayDetail(id) {
@@ -982,6 +1007,17 @@ PROMPT;
             document.getElementById('essayDetailTitle').textContent = e.title || '作文';
             document.getElementById('essayDetailEn').textContent = e.word || '';
             document.getElementById('essayDetailZh').textContent = e.meaning || '';
+            const mmBox = document.getElementById('essayDetailMindmap');
+            mmBox.innerHTML = '';
+            if (e.mindmap && window.renderMindmap) {
+                mmBox.className = 'mindmap-block';
+                mmBox.innerHTML = '<div class="mindmap-label"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2"/><circle cx="5" cy="20" r="2"/><circle cx="19" cy="20" r="2"/><path d="M12 6v5M12 11l-6 7M12 11l6 7"/></svg>思维导图（英文要点）</div>';
+                const holder = document.createElement('div');
+                mmBox.appendChild(holder);
+                window.renderMindmap(holder, e.mindmap);
+            } else {
+                mmBox.className = '';
+            }
             document.getElementById('essayDetailModal').classList.add('active');
         }
 

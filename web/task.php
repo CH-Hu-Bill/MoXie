@@ -153,6 +153,10 @@ if ($selectedTask) {
     }
 }
 $taskHasMixed = !empty($taskSentenceItems) || !empty($taskEssayItems);
+// 作文思维导图：默认开启（'0' 表示"按中文默写"）
+$mindmapMode = ($settings['mindmap_' . $classId] ?? '1') !== '0';
+$taskEssayMindmaps = [];
+foreach ($taskEssayItems as $__e) { if (!empty($__e['mindmap'])) $taskEssayMindmaps[$__e['id']] = $__e['mindmap']; }
 ?>
 <?php $pageTitle = '默写任务'; require 'inc/head.php'; ?>
 
@@ -271,10 +275,16 @@ require 'inc/header.php';
     <?php if (!empty($taskEssayItems)): ?>
     <div class="task-extra" id="taskEssaySection">
         <?php foreach ($taskEssayItems as $e): ?>
-            <div class="task-line-card" data-id="<?php echo htmlspecialchars($e['id']); ?>" data-type="essay">
+            <div class="task-line-card" data-id="<?php echo htmlspecialchars($e['id']); ?>" data-type="essay"<?php echo !empty($e['mindmap']) ? ' data-has-mindmap="1"' : ''; ?>>
                 <?php if (!empty($e['title'])): ?><div class="task-line-title"><?php echo htmlspecialchars($e['title']); ?></div><?php endif; ?>
                 <div class="task-line-en"><?php echo nl2br(htmlspecialchars($e['word'])); ?></div>
                 <div class="task-line-zh"><?php echo nl2br(htmlspecialchars($e['meaning'])); ?></div>
+                <?php if (!empty($e['mindmap'])): ?>
+                <div class="task-line-mindmap">
+                    <div class="mindmap-label">思维导图（英文要点）</div>
+                    <div class="mindmap-holder" data-mindmap-for="<?php echo htmlspecialchars($e['id']); ?>"></div>
+                </div>
+                <?php endif; ?>
             </div>
         <?php endforeach; ?>
     </div>
@@ -358,7 +368,7 @@ require 'inc/header.php';
     <input type="hidden" name="task_id" id="completeTaskId" value="<?php echo $selectedTask['id'] ?? ''; ?>">
 </form>
 
-<script src="common.js?v=13"></script>
+<script src="common.js?v=14"></script>
 <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
 <?php if ($selectedTask): ?>
 <script>
@@ -383,6 +393,7 @@ require 'inc/header.php';
         if (dictBtn) dictBtn.classList.toggle('active', mode === 'dict');
         const execView = document.getElementById('execView');
         if (execView) execView.classList.toggle('hide-mode', mode === 'hide');
+        if (typeof applyEssayMindmapMode === 'function') applyEssayMindmapMode(mode);
 
         const wordGrid = document.getElementById('wordGrid');
         const dictUI = document.getElementById('dictationUI');
@@ -449,6 +460,25 @@ require 'inc/header.php';
     const taskWordIds = <?php echo json_encode($selectedTask['word_ids'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     const wordMapData = <?php echo json_encode($wordMap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     const settings = <?php echo json_encode($settings, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    const mindmapMode = <?php echo $mindmapMode ? 'true' : 'false'; ?>;
+    const mindmapData = <?php echo json_encode($taskEssayMindmaps, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+    // 作文思维导图：渲染 + 按"设置/模式"显隐
+    function renderTaskMindmaps() {
+        document.querySelectorAll('.mindmap-holder[data-mindmap-for]').forEach(function (holder) {
+            var md = mindmapData[holder.getAttribute('data-mindmap-for')];
+            if (md && window.renderMindmap) window.renderMindmap(holder, md);
+        });
+    }
+    function applyEssayMindmapMode(mode) {
+        document.querySelectorAll('#taskEssaySection .task-line-card').forEach(function (card) {
+            var has = card.getAttribute('data-has-mindmap') === '1';
+            card.classList.toggle('show-mindmap', mode === 'hide' && mindmapMode && has);
+        });
+    }
+    renderTaskMindmaps();
+    applyEssayMindmapMode(currentMode);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderTaskMindmaps);
     let dictState = {
         words: [],
         currentIndex: 0,

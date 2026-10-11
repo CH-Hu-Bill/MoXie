@@ -112,6 +112,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     if (isset($_POST['en_font'])) {
         $settings['font_' . $classId] = (reqPost('en_font') === 'andika') ? 'andika' : '';
     }
+    // 作文默写方式：'1'=思维导图（默认） / '0'=中文
+    if (isset($_POST['mindmap_mode'])) {
+        $settings['mindmap_' . $classId] = (reqPost('mindmap_mode') === '0') ? '0' : '1';
+    }
     Database::saveSettings($settings);
     header('Content-Type: application/json');
     echo json_encode(['success' => true]);
@@ -137,6 +141,8 @@ $aiApiKey   = is_array($aiCfg) ? (string)($aiCfg['api_key'] ?? '') : '';
 $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
 // 英文字体：''=默认手写字体 / 'andika'=教学字体（按班级，全局生效）
 $enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
+// 作文默写方式：思维导图（默认） / 中文
+$mindmapMode = ($settings['mindmap_' . $classId] ?? '1') !== '0';
 ?>
 <?php $pageTitle = '设置'; require 'inc/head.php'; ?>
 </head>
@@ -182,6 +188,19 @@ $enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
                 <button type="button" class="ai-seg-btn" data-value="andika">Andika（更清晰）</button>
             </div>
             <input type="hidden" id="enFont" value="<?php echo htmlspecialchars($enFont === 'andika' ? 'andika' : 'default', ENT_QUOTES, 'UTF-8'); ?>">
+        </div>
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><circle cx="12" cy="4" r="2"/><circle cx="5" cy="20" r="2"/><circle cx="19" cy="20" r="2"/><path d="M12 6v5M12 11l-6 7M12 11l6 7"/></svg>作文默写方式
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.7;margin-bottom:12px;">
+                默写作文时，学生看到的内容：<b>思维导图</b>（英文要点树，需该作文已生成导图；没有导图会自动回退中文）或<b>中文释义</b>。此设置对全班生效。
+            </div>
+            <div class="ai-seg" id="mindmapSeg">
+                <button type="button" class="ai-seg-btn" data-value="1">思维导图</button>
+                <button type="button" class="ai-seg-btn" data-value="0">中文</button>
+            </div>
+            <input type="hidden" id="mindmapMode" value="<?php echo $mindmapMode ? '1' : '0'; ?>">
         </div>
         <div class="card mb-3">
             <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
@@ -325,7 +344,7 @@ $enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=13"></script>
+    <script src="common.js?v=14"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {
@@ -408,6 +427,20 @@ $enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
             });
         });
         syncEnFontSeg();
+        // ===== 作文默写方式 =====
+        function syncMindmapSeg() {
+            var v = document.getElementById('mindmapMode').value;
+            document.querySelectorAll('#mindmapSeg .ai-seg-btn').forEach(function(b) {
+                b.classList.toggle('active', b.dataset.value === v);
+            });
+        }
+        document.querySelectorAll('#mindmapSeg .ai-seg-btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+                document.getElementById('mindmapMode').value = this.dataset.value;
+                syncMindmapSeg();
+            });
+        });
+        syncMindmapSeg();
         async function saveSettings() {
             const fd = new FormData();
             fd.append('action', 'save_settings');
@@ -421,6 +454,7 @@ $enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
             fd.append('gallery_api_key', document.getElementById('galleryApiKey').value.trim());
             fd.append('display_token', document.getElementById('displayToken').value.trim());
             fd.append('en_font', document.getElementById('enFont').value);
+            fd.append('mindmap_mode', document.getElementById('mindmapMode').value);
             fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('settings.php?id=<?php echo $classId; ?>', { method: 'POST', body: fd })).json();
             if (d.success) {

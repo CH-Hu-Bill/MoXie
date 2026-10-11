@@ -161,3 +161,19 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
    - 截图：沿用 `web/docs/images/`（如需更新 UI 截图，覆盖同名文件即可，清单见 `web/docs/使用说明.md`）。
 5. **离线包**：以上改动后需重打 `ListenWrite-USB.zip`。
 
+---
+
+## 10. 维护轮次（作文思维导图 MVP，Web 已完成，APP 待做）
+
+> 需求源头：根目录 `维护.txt` 第 10 条 + 与用户的问答确认。**仅 Web 端已实现**，需用户验证后再做 APP。
+
+- **数据**：`words.json` 作文条目新增可选 `mindmap`（Markdown 大纲字符串，≤3 层 ≤20 节点 ≤40 字符/节点）。旧作文不动、不补生成。
+- **生成**：`inc/api.php` 新增 `AIClient::generateEssayMindmap($classId,$title,$text)` + `normalizeMindmapOutline()`（规整/限长）。`words.php` 的 `add_word` 在 `type=essay & gen_mindmap=1 & 已配置 AI` 时调用并写入 `mindmap`；添加模态出现**可选项复选框**（仅 `AIClient::isConfigured($classId)` 为真时）。
+- **渲染**：`common.js` 新增 `parseMindmapOutline()` / `renderMindmap()`（自绘 SVG 树状图，手绘铅笔风，零依赖，`textContent` 防 XSS）；样式在 `common.css`（`.mindmap-*`）。
+- **展示**：`words.php` 作文**详情弹窗**展示导图；`task.php` 作文卡内嵌 `.mindmap-holder` + `mindmapData`，**展示模式**显示导图，**默写模式**在 `mindmap_{classId}` 开启且该作文有导图时隐藏中英文、改显导图。
+- **设置**：`settings.php` 新增「作文默写方式」（思维导图 / 中文，默认思维导图，存 `mindmap_{classId}`）；`main.php` 引导弹窗新增说明步。
+- **API**：`app_api.php` 的 `appWordOut` 增加 `mindmap` 字段（供 APP 阶段使用）。
+- **缓存版本**：`common.css?v=16`、`common.js?v=14`。
+- **APP 阶段待办**：作文详情页 / 知识库作文 / 任务详情 / 搜索展示导图，以及 APP 端「按导图/中文默写」；`app_api` 的 `add_word` 也支持 `gen_mindmap`。完成后 bump APP 版本并发布。
+
+

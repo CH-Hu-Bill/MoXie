@@ -338,7 +338,7 @@ require 'inc/header.php';
     </div>
 </div>
 
-    <script src="common.js?v=13"></script>
+    <script src="common.js?v=14"></script>
     <script>
         // SVG 线条图标助手（代替 emoji，统一手绘线条风）
         function iconSvg(name, size) {
@@ -547,6 +547,7 @@ require 'inc/header.php';
                 { title: '默写记录', desc: '查看所有已完成和已取消的任务。可以重新创建任务或查看单词详情。', icon: 'clipboard' },
                 { title: '搜索功能', desc: '在上方搜索框输入单词或释义，可以快速查找词库、任务和历史中的内容。', icon: 'search' },
                 { title: '英文字体', desc: '若觉得英文手写字体不易辨认，可在<b>设置</b>页把英文切换为更清晰的教学字体 Andika（中文手写字体不变）。', icon: 'star' },
+                { title: '作文思维导图（可选）', desc: '导入作文时可选生成「英文要点思维导图」（需配置 AI）。默写作文时默认展示导图、看要点写全文，可在设置页改为按中文默写；没有导图的作文会自动回退中文。', icon: 'book' },
                 { title: '开始学习吧！', desc: '点击任意功能卡片即可开始。随时可在设置页面重新查看本说明。', icon: 'star' }
             ];
             let stepIdx = 0;
