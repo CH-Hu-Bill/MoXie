@@ -45,53 +45,77 @@ function displayBannerAnnouncement($classId) {
 }
 
 /**
- * 最近一次未完成的默写任务 + 其单词。
- * 规则：只显示 status=pending（未完成）的任务；取日期最晚的那天；
- *      同一天有多个 pending 时，取最先创建（created_at 最早）的那个。
- * 返回结构：['task' => ['id','date','label','status','word_count'], 'items' => [{word,meaning,pos},...]]
+ * 最近一次任务 + 其内容（单词/句子/作文）。
+ * 规则：优先显示「最近一次未完成(pending)任务」；若没有未完成，则取历史中「最近一次已完成(completed)任务」。
+ *      "最近"= 日期最晚；同日多个时，pending 取最早创建、completed 取最晚创建。
+ * 返回：['task' => [...], 'words' => [...], 'sentences' => [...], 'essays' => [...]]
  */
+function displayPickLatestTask($list, $preferEarliestCreated) {
+    $best = null;
+    foreach ($list as $t) {
+        if ($best === null) { $best = $t; continue; }
+        $d = (string)($t['date'] ?? '');
+        $bd = (string)($best['date'] ?? '');
+        if ($d > $bd) { $best = $t; continue; }
+        if ($d === $bd) {
+            $c = (string)($t['created_at'] ?? '');
+            $bc = (string)($best['created_at'] ?? '');
+            if ($preferEarliestCreated ? ($c < $bc) : ($c > $bc)) $best = $t;
+        }
+    }
+    return $best;
+}
+
 function displayRecentTaskWords($classId) {
     try {
-        $tasks = Database::getTasks($classId);
-        $best = null;
-        foreach ($tasks as $t) {
-            if (($t['status'] ?? '') !== 'pending') continue; // 只显示未完成的任务
-            if ($best === null) { $best = $t; continue; }
-            $d = (string)($t['date'] ?? '');
-            $bd = (string)($best['date'] ?? '');
-            if ($d > $bd) { $best = $t; continue; }            // 日期更晚优先
-            if ($d === $bd) {
-                // 同一天多个 pending → 取最先创建的
-                $c = (string)($t['created_at'] ?? '');
-                $bc = (string)($best['created_at'] ?? '');
-                if (strcmp($c, $bc) < 0) $best = $t;
-            }
+        $empty = ['task' => null, 'words' => [], 'sentences' => [], 'essays' => []];
+        $pending = []; $completed = [];
+        foreach (Database::getTasks($classId) as $t) {
+            $st = $t['status'] ?? '';
+            if ($st === 'pending') $pending[] = $t;
+            elseif ($st === 'completed') $completed[] = $t;
         }
-        if ($best === null) return ['task' => null, 'items' => []];
-        $ids = $best['word_ids'] ?? [];
-        $ids = array_slice(array_values(array_unique(array_map('strval', $ids))), 0, 20);
+        $best = displayPickLatestTask($pending, true);
+        if ($best === null) $best = displayPickLatestTask($completed, false);
+        if ($best === null) return $empty;
+
+        $ids = array_values(array_unique(array_map('strval', $best['word_ids'] ?? [])));
         $byId = [];
         foreach (Database::getWords($classId) as $w) $byId[(string)$w['id']] = $w;
-        $out = [];
+        $words = []; $sentences = []; $essays = [];
         foreach ($ids as $wid) {
             if (!isset($byId[$wid])) continue;
-            $out[] = [
-                'word' => (string)$byId[$wid]['word'],
-                'meaning' => (string)($byId[$wid]['meaning'] ?? ''),
-                'pos' => (string)($byId[$wid]['pos'] ?? ''),
+            $w = $byId[$wid];
+            $t = $w['type'] ?? 'word';
+            if (!in_array($t, ['word', 'sentence', 'essay'], true)) $t = 'word';
+            $item = [
+                'word' => (string)$w['word'],
+                'meaning' => (string)($w['meaning'] ?? ''),
+                'pos' => (string)($w['pos'] ?? ''),
+                'type' => $t,
+                'title' => (string)($w['title'] ?? ''),
             ];
+            if ($t === 'sentence') $sentences[] = $item;
+            elseif ($t === 'essay') $essays[] = $item;
+            else $words[] = $item;
         }
+        // 上限：单词 20（与任务创建一致），句子/作文各限量，避免大屏过载
+        $words = array_slice($words, 0, 20);
+        $sentences = array_slice($sentences, 0, 10);
+        $essays = array_slice($essays, 0, 8);
         return [
             'task' => [
                 'id' => (string)($best['id'] ?? ''),
                 'date' => (string)($best['date'] ?? ''),
                 'label' => (string)($best['label'] ?? ''),
                 'status' => (string)($best['status'] ?? ''),
-                'word_count' => count($out),
+                'counts' => ['word' => count($words), 'sentence' => count($sentences), 'essay' => count($essays)],
             ],
-            'items' => $out,
+            'words' => $words,
+            'sentences' => $sentences,
+            'essays' => $essays,
         ];
-    } catch (Throwable $e) { return ['task' => null, 'items' => []]; }
+    } catch (Throwable $e) { return ['task' => null, 'words' => [], 'sentences' => [], 'essays' => []]; }
 }
 
 /** 日期转中文星期（如 2026-08-21 → 周五） */
@@ -211,7 +235,7 @@ if ($classId !== '' && isset($classes[$classId])) {
 // 各视图数据
 $className = $view === 'content' ? (string)($class['name'] ?? '') : '';
 $banner = $view === 'content' ? displayBannerAnnouncement($classId) : null;
-$wordsData = $view === 'content' ? displayRecentTaskWords($classId) : ['task' => null, 'items' => []];
+$wordsData = $view === 'content' ? displayRecentTaskWords($classId) : ['task' => null, 'words' => [], 'sentences' => [], 'essays' => []];
 $gallery = $view === 'content' ? displayGallery($classId) : [];
 
 // 班级列表（选择页 + 口令弹窗共用）
@@ -228,7 +252,7 @@ $csrfToken = csrfToken();
 $pageTitle = '展示大屏';
 require 'inc/head.php';
 ?>
-<link rel="stylesheet" href="display.css?v=12">
+<link rel="stylesheet" href="display.css?v=13">
 </head>
 <body>
 <script>
@@ -295,17 +319,40 @@ var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JS
             <span class="d-words-tag"><?php echo htmlspecialchars((string)$wordsData['task']['label']); ?></span>
           <?php endif; ?>
         </div>
-        <?php if (empty($wordsData['items'])): ?>
-          <div class="d-placeholder">最近暂无默写任务 ✍️</div>
+        <?php if (empty($wordsData['words']) && empty($wordsData['sentences']) && empty($wordsData['essays'])): ?>
+          <div class="d-placeholder">最近暂无默写任务</div>
         <?php else: ?>
+          <?php if (!empty($wordsData['words'])): ?>
           <div class="d-word-grid">
-            <?php foreach ($wordsData['items'] as $w): ?>
+            <?php foreach ($wordsData['words'] as $w): ?>
               <div class="d-word">
                 <div class="d-word-main"><span class="d-word-scroll"><?php echo htmlspecialchars($w['word']); ?></span><?php if ($w['pos'] !== ''): ?><span class="d-word-pos"><?php echo htmlspecialchars($w['pos']); ?></span><?php endif; ?></div>
                 <?php if ($w['meaning'] !== ''): ?><div class="d-word-mean"><span class="d-word-scroll"><?php echo htmlspecialchars($w['meaning']); ?></span></div><?php endif; ?>
               </div>
             <?php endforeach; ?>
           </div>
+          <?php endif; ?>
+          <?php if (!empty($wordsData['sentences'])): ?>
+          <div class="d-lines">
+            <?php foreach ($wordsData['sentences'] as $s): ?>
+              <div class="d-line">
+                <div class="d-line-en"><?php echo htmlspecialchars($s['word']); ?></div>
+                <?php if ($s['meaning'] !== ''): ?><div class="d-line-zh"><?php echo htmlspecialchars($s['meaning']); ?></div><?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+          <?php if (!empty($wordsData['essays'])): ?>
+          <div class="d-essays">
+            <?php foreach ($wordsData['essays'] as $e): ?>
+              <div class="d-essay">
+                <?php if ($e['title'] !== ''): ?><div class="d-essay-title"><?php echo htmlspecialchars($e['title']); ?></div><?php endif; ?>
+                <div class="d-essay-en"><?php echo nl2br(htmlspecialchars($e['word'])); ?></div>
+                <?php if ($e['meaning'] !== ''): ?><div class="d-essay-zh"><?php echo nl2br(htmlspecialchars($e['meaning'])); ?></div><?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
         <?php endif; ?>
       </div>
 
@@ -373,6 +420,6 @@ var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JS
 })();
 </script>
 <script src="common.js?v=14"></script>
-<script src="display.js?v=19"></script>
+<script src="display.js?v=20"></script>
 </body>
 </html>

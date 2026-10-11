@@ -17,12 +17,13 @@ var galleryTimer = null;
 var pollTimer = null;
 var polling = false;
 var reducedMotion = false;
-var lastWords = (typeof DISPLAY_WORDS !== 'undefined' && DISPLAY_WORDS) ? DISPLAY_WORDS : { task: null, items: [] };
-/* 单词区内容指纹：任务日期/状态/标签 + 单词序列，用于 60s 轮询 diff（比 JSON.stringify 全量轻） */
+var lastWords = (typeof DISPLAY_WORDS !== 'undefined' && DISPLAY_WORDS) ? DISPLAY_WORDS : { task: null, words: [], sentences: [], essays: [] };
+/* 内容指纹：任务日期/状态/标签 + 单词/句子/作文序列，用于 60s 轮询 diff（比 JSON.stringify 全量轻） */
 function wordsFingerprint(w) {
     if (!w || !w.task) return 'none';
+    function seg(a) { return (a || []).map(function(it) { return it.word + '|' + it.meaning + '|' + it.pos + '|' + (it.title || ''); }).join(';'); }
     return (w.task.id || '') + '#' + (w.task.date || '') + '#' + (w.task.status || '') + '#' + (w.task.label || '') + '|'
-        + (w.items || []).map(function(it) { return it.word + '|' + it.meaning + '|' + it.pos; }).join(';');
+        + seg(w.words) + '|' + seg(w.sentences) + '|' + seg(w.essays);
 }
 
 /* 图集轮播断点记忆（localStorage）：
@@ -579,7 +580,9 @@ function renderWords(words) {
     var zone = document.getElementById('dWords');
     if (!zone) return;
     var task = words && words.task;
-    var items = words && words.items ? words.items : [];
+    var wlist = (words && words.words) || [];
+    var slist = (words && words.sentences) || [];
+    var elist = (words && words.essays) || [];
     var header = '<div class="d-words-header"><span class="d-words-title">最近默写</span>';
     if (task && task.date) {
         header += '<span class="d-words-date">' + escHtml(task.date) + ' 周' + weekdayCn(task.date) + '</span>';
@@ -588,18 +591,35 @@ function renderWords(words) {
         header += '<span class="d-words-tag">' + escHtml(task.label) + '</span>';
     }
     header += '</div>';
-    if (items.length === 0) {
-        zone.innerHTML = header + '<div class="d-placeholder">最近暂无默写任务 ✍️</div>';
+    if (wlist.length === 0 && slist.length === 0 && elist.length === 0) {
+        zone.innerHTML = header + '<div class="d-placeholder">最近暂无默写任务</div>';
         return;
     }
-    var cards = items.map(function(w) {
-        // 词性独立成行放卡片顶部：不再与单词同行混排（词性过长会把整行挤成省略号，
-        // 并让跑马灯位移量与内容错位失效）；main 现在只含单词，溢出检测/滚动纯净
-        var posRow = w.pos ? '<div class="d-word-pos-row"><span class="d-word-pos">' + escHtml(w.pos) + '</span></div>' : '';
-        var mean = w.meaning ? '<div class="d-word-mean"><span class="d-word-scroll">' + escHtml(w.meaning) + '</span></div>' : '';
-        return '<div class="d-word">' + posRow + '<div class="d-word-main"><span class="d-word-scroll">' + escHtml(w.word) + '</span></div>' + mean + '</div>';
-    }).join('');
-    zone.innerHTML = header + '<div class="d-word-grid">' + cards + '</div>';
+    var html = header;
+    if (wlist.length) {
+        var cards = wlist.map(function(w) {
+            // 词性独立成行放卡片顶部：不再与单词同行混排（词性过长会把整行挤成省略号，
+            // 并让跑马灯位移量与内容错位失效）；main 现在只含单词，溢出检测/滚动纯净
+            var posRow = w.pos ? '<div class="d-word-pos-row"><span class="d-word-pos">' + escHtml(w.pos) + '</span></div>' : '';
+            var mean = w.meaning ? '<div class="d-word-mean"><span class="d-word-scroll">' + escHtml(w.meaning) + '</span></div>' : '';
+            return '<div class="d-word">' + posRow + '<div class="d-word-main"><span class="d-word-scroll">' + escHtml(w.word) + '</span></div>' + mean + '</div>';
+        }).join('');
+        html += '<div class="d-word-grid">' + cards + '</div>';
+    }
+    if (slist.length) {
+        html += '<div class="d-lines">' + slist.map(function(s) {
+            var zh = s.meaning ? '<div class="d-line-zh">' + escHtml(s.meaning) + '</div>' : '';
+            return '<div class="d-line"><div class="d-line-en">' + escHtml(s.word) + '</div>' + zh + '</div>';
+        }).join('') + '</div>';
+    }
+    if (elist.length) {
+        html += '<div class="d-essays">' + elist.map(function(e) {
+            var title = e.title ? '<div class="d-essay-title">' + escHtml(e.title) + '</div>' : '';
+            var zh = e.meaning ? '<div class="d-essay-zh">' + escHtml(e.meaning) + '</div>' : '';
+            return '<div class="d-essay">' + title + '<div class="d-essay-en">' + escHtml(e.word) + '</div>' + zh + '</div>';
+        }).join('') + '</div>';
+    }
+    zone.innerHTML = html;
     fitWords();
     fitWordMarquees();
     marqueeAfterFonts();
@@ -630,8 +650,12 @@ function fitWords() {
     // 减去 header 高度
     var header = zone.querySelector('.d-words-header');
     var headerH = header ? header.offsetHeight : 40;
+    // 句子 / 作文区占据的高度需从单词网格可用高度中扣除
+    var linesEl = zone.querySelector('.d-lines');
+    var essaysEl = zone.querySelector('.d-essays');
+    var othersH = (linesEl ? linesEl.offsetHeight + 10 : 0) + (essaysEl ? essaysEl.offsetHeight + 10 : 0);
     var availW = Math.max(100, zoneW - 4);
-    var availH = Math.max(60, zoneH - headerH - 12);
+    var availH = Math.max(60, zoneH - headerH - othersH - 12);
     var GAP = 10;
     // 估算列数：偏向较少列数 → 卡片更宽 → 字号更大（壁纸优先可读性）
     var aspect = availW / availH;

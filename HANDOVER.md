@@ -177,4 +177,17 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - **编辑重生成**：`update_word` 中，作文若原本已有 `mindmap` 且英文/标题有变化 → 自动重新生成；AI 不可用则保存正文、保留旧导图并返回 `mindmap_warning`（前端提示）。英文/标题未变则沿用旧导图。添加模态的勾选项改为手绘风 `.hd-check`（样式在 `common.css`）。
 - **APP 阶段待办**：作文详情页 / 知识库作文 / 任务详情 / 搜索展示导图，以及 APP 端「按导图/中文默写」；`app_api` 的 `add_word` 也支持 `gen_mindmap`。完成后 bump APP 版本并发布。
 
+---
+
+## 11. 展示大屏适配（已完成）
+
+> 需求：大屏未跟上「知识库三板块」，需显示单词 + 句子 + 作文，并调整任务取法。
+
+- `display.php` 的 `displayRecentTaskWords()` 重写：内容含 `words/sentences/essays`（各带 type/title）。
+- **任务取法**：优先最近一次 **pending**（未完成）任务；无未完成则取历史中最近一次 **completed** 任务（`displayPickLatestTask($list,$preferEarliestCreated)`：日期最晚优先，同日 pending 取最早创建、completed 取最晚创建）。上限：单词 20 / 句子 10 / 作文 8。
+- 渲染：`display.php`（首屏 PHP 直出）与 `display.js` 的 `renderWords()` 均按「单词网格 + 句子一行条 + 作文卡片」三段输出；作文按作文库卡片样式（标题 + 英文 + 中文，多行截断 `-webkit-line-clamp`）；`fitWords()` 会扣除句子/作文区高度。
+- 英文字体已随全局设置（`head.php` 给 `<html>` 加 `font-en-andika`，`display.css` 用 `var(--font-heading/body)`）；占位 emoji 已去除。
+- 缓存版本：`display.css?v=13`、`display.js?v=20`。
+
+
 
