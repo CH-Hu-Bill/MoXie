@@ -173,7 +173,8 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - **展示**：`words.php` 作文**详情弹窗**展示导图；`task.php` 作文卡内嵌 `.mindmap-holder` + `mindmapData`，**展示模式**显示导图，**默写模式**在 `mindmap_{classId}` 开启且该作文有导图时隐藏中英文、改显导图。
 - **设置**：`settings.php` 新增「作文默写方式」（思维导图 / 中文，默认思维导图，存 `mindmap_{classId}`）；`main.php` 引导弹窗新增说明步。
 - **API**：`app_api.php` 的 `appWordOut` 增加 `mindmap` 字段（供 APP 阶段使用）。
-- **缓存版本**：`common.css?v=16`、`common.js?v=14`。
+- **缓存版本**：`common.css?v=17`、`common.js?v=14`。
+- **编辑重生成**：`update_word` 中，作文若原本已有 `mindmap` 且英文/标题有变化 → 自动重新生成；AI 不可用则保存正文、保留旧导图并返回 `mindmap_warning`（前端提示）。英文/标题未变则沿用旧导图。添加模态的勾选项改为手绘风 `.hd-check`（样式在 `common.css`）。
 - **APP 阶段待办**：作文详情页 / 知识库作文 / 任务详情 / 搜索展示导图，以及 APP 端「按导图/中文默写」；`app_api` 的 `add_word` 也支持 `gen_mindmap`。完成后 bump APP 版本并发布。
 
 

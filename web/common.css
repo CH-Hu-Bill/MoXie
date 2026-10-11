@@ -1018,3 +1018,16 @@ body.lb-open .gallery-card img[src$=".gif"] {
 .hide-mode .task-line-card.show-mindmap .task-line-mindmap{display:block;margin-top:6px;padding-top:0;border-top:none}
 .hide-mode .task-line-card.show-mindmap .mindmap-svg{min-width:520px}
 
+/* ---- 手绘风复选行（如作文"同时生成思维导图"）---- */
+.hd-check{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px dashed var(--old-paper);border-radius:var(--wobbly-sm);background:var(--post-it);cursor:pointer;user-select:none;position:relative;transition:border-color .15s}
+.hd-check:hover{border-color:var(--blue)}
+.hd-check input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.hd-box{width:22px;height:22px;flex:none;border:2.5px solid var(--pencil);border-radius:6px;background:var(--white);box-shadow:2px 2px 0 var(--pencil);display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+.hd-box svg{width:14px;height:14px;display:none}
+.hd-check input:checked + .hd-box{background:var(--blue);border-color:var(--blue)}
+.hd-check input:checked + .hd-box svg{display:block}
+.hd-check input:focus-visible + .hd-box{outline:2px solid var(--blue);outline-offset:2px}
+.hd-label{font-size:14px;color:var(--pencil);line-height:1.45}
+.hd-check input:checked ~ .hd-label{color:var(--blue);font-weight:600}
+
+

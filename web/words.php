@@ -183,10 +183,31 @@ if (isset($_POST['action'])) {
             }
             if ($exists) { echo json_encode(['success' => false, 'exists' => true]); break; }
             $updated = ['id' => $wordId, 'type' => $dbType, 'word' => $word, 'meaning' => $meaning, 'pos' => $pos, 'created_at' => $w['created_at']];
-            if ($dbType === 'essay') $updated['title'] = $title;
+            $resp = ['success' => true];
+            if ($dbType === 'essay') {
+                $updated['title'] = $title;
+                $hadMap = !empty($w['mindmap']);
+                $textChanged = ($word !== (string)($w['word'] ?? '')) || ($title !== (string)($w['title'] ?? ''));
+                if ($hadMap && $textChanged) {
+                    // 内容变化：自动重新生成思维导图（仅限原本就有导图的作文）
+                    $mm = $aiConfigured ? AIClient::generateEssayMindmap($classId, $title, $word) : '';
+                    if ($mm !== '') {
+                        $updated['mindmap'] = $mm;
+                        $resp['mindmap'] = $mm;
+                        $resp['mindmap_regenerated'] = true;
+                    } else {
+                        $updated['mindmap'] = $w['mindmap']; // 保留旧导图
+                        $resp['mindmap'] = $w['mindmap'];
+                        $resp['mindmap_warning'] = '作文已保存，但思维导图未能重新生成（AI 不可用或失败），仍为之前的版本';
+                    }
+                } elseif ($hadMap) {
+                    $updated['mindmap'] = $w['mindmap']; // 英文/标题未变，沿用原导图
+                    $resp['mindmap'] = $w['mindmap'];
+                }
+            }
             $words[$idx] = $updated;
             Database::saveWords($classId, $words);
-            echo json_encode(['success' => true]);
+            echo json_encode($resp);
             break;
         }
         if (!$found) { echo json_encode(['success' => false, 'error' => '内容不存在']); }
@@ -672,6 +693,9 @@ PROMPT;
                 <input type="hidden" name="word_id" id="editWordId">
                 <input type="hidden" name="type" id="editType">
                 <div class="form-group" id="editTitleGroup" style="display:none;"><label>标题（作文，可选）</label><input type="text" name="title" id="editTitle" maxlength="200"></div>
+                <div class="form-group" id="editMindmapNote" style="display:none;">
+                    <div style="font-size:12px;color:#777;line-height:1.6;background:var(--post-it);border:2px dashed var(--old-paper);border-radius:var(--wobbly-sm);padding:8px 10px;">该作文已有思维导图；若修改了英文或标题，保存后会<b>自动重新生成</b>（需 AI 可用；若 AI 不可用则保留原导图并提示）。</div>
+                </div>
                 <div class="form-group"><label id="editWordLabel">单词</label><input type="text" name="word" id="editWord" required></div>
                 <div class="form-group"><label id="editMeaningLabel">释义</label><textarea name="meaning" id="editMeaning" required rows="4" class="textarea"></textarea></div>
                 <div class="form-group" id="editPosGroup"><label>词性</label><input type="text" name="pos" id="editPos" placeholder="如 n. v. adj."></div>
@@ -698,9 +722,12 @@ PROMPT;
             <div class="form-group"><label>中文释义</label><textarea id="essayZh" rows="5" class="textarea" placeholder="点击下方 AI 直译，或手动填写"></textarea></div>
             <div style="margin-bottom:12px;"><button type="button" class="btn btn-sm btn-secondary" onclick="aiTranslate('essay')" id="essayAiBtn">✨ AI 直译</button></div>
             <?php if ($aiConfigured): ?>
-            <div class="form-group" style="display:flex;align-items:center;gap:10px;">
-                <input type="checkbox" id="essayGenMindmap" style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer;">
-                <label for="essayGenMindmap" style="font-size:14px;color:var(--pencil);cursor:pointer;">同时生成思维导图（英文要点树，用于按导图默写）</label>
+            <div class="form-group">
+                <label class="hd-check" for="essayGenMindmap">
+                    <input type="checkbox" id="essayGenMindmap">
+                    <span class="hd-box"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                    <span class="hd-label">同时生成思维导图（英文要点树，用于按导图默写）</span>
+                </label>
             </div>
             <?php endif; ?>
             <div class="modal-btns"><button type="button" class="cancel" onclick="closeModal('addEssayModal')">取消</button><button type="button" class="submit" id="essayAddBtn" onclick="addItem('essay')">添加</button></div>
@@ -1386,6 +1413,7 @@ PROMPT;
             document.getElementById('editTitle').value = w.title || '';
             document.getElementById('editPosGroup').style.display = (t === 'word') ? '' : 'none';
             document.getElementById('editTitleGroup').style.display = (t === 'essay') ? '' : 'none';
+            document.getElementById('editMindmapNote').style.display = (t === 'essay' && w.mindmap) ? '' : 'none';
             document.getElementById('editModal').classList.add('active');
         }
 
@@ -1421,23 +1449,34 @@ PROMPT;
 
         // ==================== Edit Word ====================
         document.getElementById('editForm').onsubmit = async function(e) {
-            e.preventDefault(); const fd = new FormData(this); fd.append('action', 'update_word'); fd.append('csrf_token', CSRF_TOKEN);
-            const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
-            if (d.error) { showToast(d.error, 'error'); return; }
-            if (d.exists) { showToast('内容已存在', 'error'); return; }
-            if (d.success) {
-                const id = document.getElementById('editWordId').value;
-                const it = itemById(id);
-                if (it) {
-                    it.word = document.getElementById('editWord').value.trim();
-                    it.meaning = document.getElementById('editMeaning').value.trim();
-                    it.pos = document.getElementById('editPos') ? document.getElementById('editPos').value.trim() : '';
-                    it.title = document.getElementById('editTitle') ? document.getElementById('editTitle').value.trim() : '';
+            e.preventDefault();
+            const fd = new FormData(this); fd.append('action', 'update_word'); fd.append('csrf_token', CSRF_TOKEN);
+            const id = document.getElementById('editWordId').value;
+            const it0 = itemById(id);
+            const willRegen = !!(it0 && itemType(it0) === 'essay' && it0.mindmap);
+            const btn = this.querySelector('.submit');
+            const btnOld = btn ? btn.textContent : '';
+            if (btn && willRegen) { btn.disabled = true; btn.textContent = '正在重新生成…'; }
+            try {
+                const d = await (await fetch('words.php?id=' + classId, { method: 'POST', body: fd })).json();
+                if (d.error) { showToast(d.error, 'error'); return; }
+                if (d.exists) { showToast('内容已存在', 'error'); return; }
+                if (d.success) {
+                    const it = itemById(id);
+                    if (it) {
+                        it.word = document.getElementById('editWord').value.trim();
+                        it.meaning = document.getElementById('editMeaning').value.trim();
+                        it.pos = document.getElementById('editPos') ? document.getElementById('editPos').value.trim() : '';
+                        it.title = document.getElementById('editTitle') ? document.getElementById('editTitle').value.trim() : '';
+                        if (typeof d.mindmap !== 'undefined') it.mindmap = d.mindmap;
+                    }
+                    closeModal('editModal');
+                    refreshPanel(itemType(it));
+                    if (d.mindmap_warning) showToast(d.mindmap_warning, 'error');
+                    else showToast(d.mindmap_regenerated ? '已保存并重新生成思维导图' : '保存成功', 'success');
                 }
-                closeModal('editModal');
-                refreshPanel(itemType(it));
-                showToast('保存成功', 'success');
-            }
+            } catch (err) { showToast('网络错误', 'error'); }
+            finally { if (btn) { btn.disabled = false; btn.textContent = btnOld; } }
         };
 
         // ==================== Delete Word ====================
