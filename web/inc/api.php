@@ -226,10 +226,30 @@ PROMPT;
         $response  = curl_exec($ch);
         $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
+
+        // Windows 便携版 PHP 常缺少 HTTPS 根证书（curl.cainfo 为空）→ SSL 校验失败。
+        // 本地部署场景下，遇到证书类错误时关闭校验重试一次，保证 AI 可用。
+        if ($curlError !== '' && stripos($curlError, 'certificate') !== false) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+            $response  = curl_exec($ch);
+            $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+        }
         curl_close($ch);
 
         if ($curlError) {
-            return ['success' => false, 'error' => 'AI 服务连接失败，请检查接口地址或网络'];
+            $detail = mb_substr($curlError, 0, 200);
+            if (stripos($curlError, 'certificate') !== false) {
+                return ['success' => false, 'error' => 'AI 连接失败：HTTPS 证书校验失败（' . $detail . '）'];
+            }
+            if (stripos($curlError, 'resolve') !== false || stripos($curlError, 'resolve host') !== false) {
+                return ['success' => false, 'error' => 'AI 连接失败：无法解析域名（' . $detail . '），请检查接口地址或网络/DNS'];
+            }
+            if (stripos($curlError, 'timed out') !== false || stripos($curlError, 'timeout') !== false) {
+                return ['success' => false, 'error' => 'AI 连接超时（' . $detail . '），请检查网络'];
+            }
+            return ['success' => false, 'error' => 'AI 服务连接失败（' . $detail . '），请检查接口地址或网络'];
         }
         if ($httpCode !== 200) {
             $msg = 'AI 服务暂时不可用 (HTTP ' . $httpCode . ')';
