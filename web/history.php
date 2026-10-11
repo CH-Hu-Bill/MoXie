@@ -173,7 +173,7 @@ if ($selectedTask) {
         </div>
     </div>
 
-    <script src="common.js?v=12"></script>
+    <script src="common.js?v=13"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';

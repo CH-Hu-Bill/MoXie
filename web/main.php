@@ -338,7 +338,7 @@ require 'inc/header.php';
     </div>
 </div>
 
-    <script src="common.js?v=12"></script>
+    <script src="common.js?v=13"></script>
     <script>
         // SVG 线条图标助手（代替 emoji，统一手绘线条风）
         function iconSvg(name, size) {
@@ -541,10 +541,12 @@ require 'inc/header.php';
             if (localStorage.getItem('guide_done')) return;
             const steps = [
                 { title: '欢迎使用 ListenWrite', desc: '这是一个班级单词学习工具，帮助您高效管理单词、进行默写练习。' },
+                { title: '内网访问', desc: '本服务运行在您自己的电脑上。手机 / 其它设备需与电脑连接<b>同一 WiFi（局域网）</b>，用内网地址访问：<b>' + escHtml(window.LAN_URL || '') + '</b>。若需在外网 / 外地使用，需要内网穿透服务，请联系运行本服务的管理员。' },
                 { title: '知识库', desc: '管理班级的单词、句子与作文。可添加、编辑、批量导入，AI 智能补全或直译。', icon: 'book' },
                 { title: '默写任务', desc: '选择单词创建默写任务，支持听写模式。完成任务后可在历史记录中查看。', icon: 'edit' },
                 { title: '默写记录', desc: '查看所有已完成和已取消的任务。可以重新创建任务或查看单词详情。', icon: 'clipboard' },
                 { title: '搜索功能', desc: '在上方搜索框输入单词或释义，可以快速查找词库、任务和历史中的内容。', icon: 'search' },
+                { title: '英文字体', desc: '若觉得英文手写字体不易辨认，可在<b>设置</b>页把英文切换为更清晰的教学字体 Andika（中文手写字体不变）。', icon: 'star' },
                 { title: '开始学习吧！', desc: '点击任意功能卡片即可开始。随时可在设置页面重新查看本说明。', icon: 'star' }
             ];
             let stepIdx = 0;

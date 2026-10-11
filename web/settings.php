@@ -20,6 +20,7 @@
  */
 require_once 'inc/db.php';
 require_once 'inc/security.php';
+require_once 'inc/net.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
@@ -107,6 +108,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
         }
         $settings['display_token_' . $classId] = $displayToken;
     }
+    // 英文字体（按班级，仅影响英文显示；空=使用默认手写字体）
+    if (isset($_POST['en_font'])) {
+        $settings['font_' . $classId] = (reqPost('en_font') === 'andika') ? 'andika' : '';
+    }
     Database::saveSettings($settings);
     header('Content-Type: application/json');
     echo json_encode(['success' => true]);
@@ -130,6 +135,8 @@ $aiProvider = (is_array($aiCfg) && in_array(($aiCfg['provider'] ?? ''), ['openai
 $aiEndpoint = is_array($aiCfg) ? (string)($aiCfg['endpoint'] ?? '') : '';
 $aiApiKey   = is_array($aiCfg) ? (string)($aiCfg['api_key'] ?? '') : '';
 $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
+// 英文字体：''=默认手写字体 / 'andika'=教学字体（按班级，全局生效）
+$enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
 ?>
 <?php $pageTitle = '设置'; require 'inc/head.php'; ?>
 </head>
@@ -148,6 +155,34 @@ $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
         .ai-seg-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); box-shadow: 2px 2px 0 var(--pencil); }
     </style>
     <div class="content">
+        <div class="card mb-3" style="border-color:var(--blue);">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20 15.3 15.3 0 010-20z"/></svg>内网主网址
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.7;margin-bottom:12px;">
+                本服务运行在你自己的电脑上。同一局域网（WiFi）内的手机 / 其它电脑，请用下面的地址访问：
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+                <code class="tag" id="lanUrlText" style="flex:1;font-size:13px;word-break:break-all;"><?php echo htmlspecialchars(lw_lan_url(), ENT_QUOTES, 'UTF-8'); ?></code>
+                <button type="button" class="btn btn-sm" onclick="copyLanUrl()" style="white-space:nowrap;">复制</button>
+            </div>
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+                此地址仅在同一局域网内可用；如需在外网 / 外地访问，需要<b>内网穿透服务</b>，请联系运行本服务的管理员。
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>英文字体（仅影响英文）
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.7;margin-bottom:12px;">
+                英文可在「默认手写字体」与更易辨认的教学字体 <b>Andika</b> 之间切换；<b>中文始终使用手写字体</b>。切换后点页底「保存设置」生效，本班全局生效。
+            </div>
+            <div class="ai-seg" id="enFontSeg">
+                <button type="button" class="ai-seg-btn" data-value="default">默认手写字体</button>
+                <button type="button" class="ai-seg-btn" data-value="andika">Andika（更清晰）</button>
+            </div>
+            <input type="hidden" id="enFont" value="<?php echo htmlspecialchars($enFont === 'andika' ? 'andika' : 'default', ENT_QUOTES, 'UTF-8'); ?>">
+        </div>
         <div class="card mb-3">
             <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>听写设置
@@ -290,7 +325,7 @@ $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=12"></script>
+    <script src="common.js?v=13"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {
@@ -346,6 +381,33 @@ $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
             }
         }
         document.getElementById('displayToken').addEventListener('input', updateDisplayLink);
+        // ===== 内网主网址 =====
+        function copyLanUrl() {
+            var url = document.getElementById('lanUrlText').textContent.trim();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(function() { showToast('内网地址已复制', 'success'); })
+                    .catch(function() { showToast('复制失败，请手动复制', 'error'); });
+            } else {
+                var ta = document.createElement('textarea');
+                ta.value = url; document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); showToast('内网地址已复制', 'success'); } catch(e) { showToast('复制失败，请手动复制', 'error'); }
+                document.body.removeChild(ta);
+            }
+        }
+        // ===== 英文字体切换 =====
+        function syncEnFontSeg() {
+            var v = document.getElementById('enFont').value;
+            document.querySelectorAll('#enFontSeg .ai-seg-btn').forEach(function(b) {
+                b.classList.toggle('active', b.dataset.value === v);
+            });
+        }
+        document.querySelectorAll('#enFontSeg .ai-seg-btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+                document.getElementById('enFont').value = this.dataset.value;
+                syncEnFontSeg();
+            });
+        });
+        syncEnFontSeg();
         async function saveSettings() {
             const fd = new FormData();
             fd.append('action', 'save_settings');
@@ -358,6 +420,7 @@ $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
             fd.append('gallery_api_enabled', document.getElementById('galleryApiEnabled').checked ? '1' : '0');
             fd.append('gallery_api_key', document.getElementById('galleryApiKey').value.trim());
             fd.append('display_token', document.getElementById('displayToken').value.trim());
+            fd.append('en_font', document.getElementById('enFont').value);
             fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('settings.php?id=<?php echo $classId; ?>', { method: 'POST', body: fd })).json();
             if (d.success) {

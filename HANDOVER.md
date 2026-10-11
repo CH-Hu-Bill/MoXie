@@ -144,3 +144,20 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - **Windows 一键脚本**：`scripts/` 下的 `install.bat/.ps1`、`update.*`、`uninstall.bat`、`run.bat`、`run-hidden.vbs`；
   `runtime/` 存放下载的 PHP/ffmpeg（gitignore）。`install.ps1` 以脚本上一级目录为项目根。
 - **本地运行**：`./scripts/dev.sh`（Linux）监听 `0.0.0.0:8000`，`web/router.php` 负责安全拦截与静态缓存。
+
+---
+
+## 9. 维护轮次（Web 体验优化，已完成）
+
+> 需求源头：根目录 `维护.txt`。均为 Web 端改动，**未动 APP**（APP 仅随 MVP 功能发布）。
+
+1. **内网主网址**：新增 `web/inc/net.php` —— 探测局域网 IPv4（`lw_lan_ip()`：HTTP_HOST 优先 → 多来源候选按网段打分择优，避免误选 Docker/WSL 的 172.16-31 段；带 10 分钟文件缓存 `web/data/.lan_ip_cache.json`），`lw_lan_url()` 组装 `http://<ip>:<port>`（端口取 `SERVER_PORT`，默认 8000）。
+   - 注入：`web/inc/head.php` 暴露 `window.LAN_URL`（并据班级设置给 `<html>` 加 `font-en-andika`）；`web/main.php` 引导弹窗新增「内网访问」步；`web/settings.php` 顶部新增「内网主网址」卡片（复制按钮）。
+2. **英文字体（可选 Andika，仅影响英文）**：`web/fonts/Andika-{Regular,Bold,Italic}.ttf`（源自 `web/fonts/Andika-7.000.zip`，OFL 协议），`common.css` 加 `@font-face` 与 `html.font-en-andika { --font-body/--font-heading: 'Andika', 中文字体… }`。中文始终回落手写字体。
+   - 班级设置页新增「英文字体」分段切换，存 `settings.json` 的 `font_{classId}`（空=默认，`andika`=教学字体）；`head.php` 读取后加 `<html>` class；引导弹窗新增说明步。
+3. **跑马灯修复（长单词/释义卡住不动）**：根因是部分安卓 WebView / 智能教学设备**不支持在 `@keyframes` 中插值 CSS 变量**（`var(--mx)`），动画停在起点。改用 **Web Animations API** 直接驱动 `transform`（`common.js` 新增 `applyScrollMarquee()/resetScrollMarquee()/marqueeSpanOf()`，`words.php` 的 `initKbMarquee`、`display.js` 的 `fitWordMarquees` 复用），并移除 `common.css`/`display.css`/`words.php` 里 `.scrollable span` 的 CSS `animation` 与已无用的 `@keyframes marquee`/`dWordMarquee`。
+   - 缓存版本：`common.css?v=15`、`common.js?v=13`、`display.css?v=12`、`display.js?v=19`。
+4. **文档与仓库美化**：更新 `web/docs/使用说明.md`（内网访问、知识库三板块、设置/英文字体、FAQ）与 `web/README.md`（知识库三板块、`net.php`、自托管字体 + Andika、设置项）；根 `README.md` 加**网站图标 + 功能亮点 + 界面预览**；删除无用的 `web/project-features/`。
+   - 截图：沿用 `web/docs/images/`（如需更新 UI 截图，覆盖同名文件即可，清单见 `web/docs/使用说明.md`）。
+5. **离线包**：以上改动后需重打 `ListenWrite-USB.zip`。
+

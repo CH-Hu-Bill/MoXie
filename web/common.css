@@ -18,6 +18,29 @@
   font-display: swap;
 }
 
+/* ---- 可选英文字体 Andika（教学字体；无中文字形，中文自动回落手写字体）---- */
+@font-face {
+  font-family: 'Andika';
+  src: url('fonts/Andika-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Andika';
+  src: url('fonts/Andika-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Andika';
+  src: url('fonts/Andika-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* ---- 设计令牌 (CSS 自定义属性) ---- */
 :root {
   /* 颜色 */
@@ -43,6 +66,13 @@
   --wobbly-sm: 128px 14px 98px 14px / 14px 88px 14px 75px;
   --wobbly:    255px 15px 225px 15px / 15px 225px 15px 255px;
   --wobbly-lg: 255px 25px 225px 25px / 25px 225px 25px 255px;
+}
+
+/* ---- 英文字体切换（仅替换拉丁字形；中文仍回落到手写字体）----
+   由 <html class="font-en-andika"> 控制，见 inc/head.php 与 settings.php */
+html.font-en-andika {
+  --font-body:    'Andika', 'Ma Shan Zheng', 'Patrick Hand', 'ZCOOL KuaiLe', cursive;
+  --font-heading: 'Andika', 'ZCOOL KuaiLe', 'Ma Shan Zheng', 'Kalam', cursive;
 }
 
 /* ---- 基础重置 ---- */
@@ -527,8 +557,7 @@ body {
 }
 .word-card .word.scrollable span {
   display: inline-block;
-  animation: marquee var(--md, 5s) ease-in-out infinite alternate;
-  animation-delay: 0.6s;
+  will-change: transform;
 }
 .word-card .meaning {
   overflow: hidden; white-space: nowrap; width: 100%;
@@ -541,12 +570,7 @@ body {
 }
 .word-card .meaning.scrollable span {
   display: inline-block; white-space: nowrap;
-  animation: marquee var(--md, 4s) ease-in-out infinite alternate;
-  animation-delay: 0.8s;
-}
-@keyframes marquee {
-  0%,12% { transform: translateX(0); }
-  88%,100% { transform: translateX(var(--mx, -30px)); }
+  will-change: transform;
 }
 .word-card .pos {
   font-size: 17px; color: #888; font-style: italic;

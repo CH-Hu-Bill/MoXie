@@ -508,10 +508,10 @@ PROMPT;
     .kb-body { flex: 1; min-width: 0; cursor: pointer; }
     .kb-en { font-family: var(--font-heading); font-size: 22px; color: var(--pencil); line-height: 1.4; overflow: hidden; white-space: nowrap; }
     .kb-en.scrollable { -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); }
-    .kb-en.scrollable span { display: inline-block; white-space: nowrap; animation: marquee var(--md,5s) ease-in-out infinite alternate; animation-delay: 0.6s; }
+    .kb-en.scrollable span { display: inline-block; white-space: nowrap; will-change: transform; }
     .kb-zh { font-family: var(--font-body); font-size: 17px; color: #555; margin-top: 4px; line-height: 1.5; overflow: hidden; white-space: nowrap; }
     .kb-zh.scrollable { -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%); }
-    .kb-zh.scrollable span { display: inline-block; white-space: nowrap; animation: marquee var(--md,4s) ease-in-out infinite alternate; animation-delay: 0.8s; }
+    .kb-zh.scrollable span { display: inline-block; white-space: nowrap; will-change: transform; }
     .kb-title { font-family: var(--font-heading); font-size: 19px; color: var(--blue); margin-bottom: 6px; }
     .kb-clamp { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
     .kb-clamp-dim { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #888; white-space: pre-wrap; }
@@ -840,7 +840,7 @@ PROMPT;
     </form>
     <input type="hidden" id="globalCsrfToken" value="<?php echo $csrfToken; ?>">
 
-    <script src="common.js?v=12"></script>
+    <script src="common.js?v=13"></script>
     <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
     <script>
         const classId = '<?php echo $classId; ?>';
@@ -912,14 +912,17 @@ PROMPT;
         function initKbMarquee() {
             document.querySelectorAll('.kb-en, .kb-zh').forEach(el => {
                 if (el.classList.contains('kb-clamp') || el.classList.contains('kb-clamp-dim')) return;
-                el.classList.remove('scrollable');
-                el.style.removeProperty('--mx');
-                el.style.removeProperty('--md');
+                if (typeof resetScrollMarquee === 'function') resetScrollMarquee(el);
+                else el.classList.remove('scrollable');
                 const over = el.scrollWidth - el.clientWidth;
                 if (over > 4) {
-                    el.classList.add('scrollable');
-                    el.style.setProperty('--mx', '-' + (over + 10) + 'px');
-                    el.style.setProperty('--md', Math.max(3, over / 35) + 's');
+                    if (typeof applyScrollMarquee === 'function') {
+                        applyScrollMarquee(el, over, Math.max(3, over / 35), el.classList.contains('kb-en') ? 0.6 : 0.8);
+                    } else {
+                        el.classList.add('scrollable');
+                        el.style.setProperty('--mx', '-' + (over + 10) + 'px');
+                        el.style.setProperty('--md', Math.max(3, over / 35) + 's');
+                    }
                 }
             });
         }

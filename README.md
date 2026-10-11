@@ -1,4 +1,8 @@
+<p align="center"><img src="web/favicon.png" width="96" height="96" alt="ListenWrite"></p>
+
 # ListenWrite · 默写史记
+
+<p align="center">班级默写 + 班级史记 · 本地部署 · Web + Android</p>
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
@@ -6,6 +10,27 @@
 - 历史版本与更新说明见 [app/README.md](app/README.md) 与 Web 端 `data/app_versions.json`
 - **开源协议**：[GPL-3.0](LICENSE)
 - **本应用为本地运行设计**：原线上服务器已下线，请在本地电脑启动服务，内网设备通过局域网访问。
+
+## 功能亮点
+
+- **知识库**：单词 / 句子 / 作文三类同库，AI 补全 / 直译、CSV 导入导出、跟读发音
+- **默写任务**：看词 / 默写 / 听写三种模式，支持句子与作文；历史记录可一键重建任务
+- **班级史记**：Quill 富文本 + 手写板 + 拖拽 / 粘贴插图 + PDF / 长图导出
+- **班级图集**：图片 / GIF / MP4 照片墙，MP4 自动生成首帧缩略图
+- **展示大屏**：免口令壁纸链接（公告跑马灯 + 今日单词 + 图集轮播）
+- **英文字体切换**：英文可在手写体与教学字体 **Andika** 之间切换（中文始终手写体）
+- **本地优先**：Windows 一键安装 / 更新脚本，数据全部保存在自己电脑上
+
+## 界面预览
+
+| 知识库（三板块） | 创建默写任务 |
+| :---: | :---: |
+| ![知识库](web/docs/images/02-单词库.png) | ![创建任务](web/docs/images/04-创建任务.png) |
+
+| 班级图集 | 班级史记编辑器 |
+| :---: | :---: |
+| ![图集](web/docs/images/07-图集.png) | ![史记编辑器](web/docs/images/05-编辑器工具栏.png) |
+
 
 ## 仓库结构
 
@@ -76,7 +101,7 @@ APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 | Web 后端 | PHP 7.4+，GD，cURL，JSON 文件存储（无数据库）；调用 ffmpeg 可执行文件生成视频首帧缩略图（可选） |
 | Web 前端 | 原生 HTML/CSS/JS，Quill 2.x 富文本编辑器（本地），按班级自定义 AI（OpenAI 兼容 / Anthropic） |
 | APP | Flutter（Dart 3.5+），Provider，flutter_quill，cached_network_image |
-| APP 字体 | ZCOOL KuaiLe + Ma Shan Zheng（打包到 APK；Web 端自托管于 `web/fonts/`） |
+| APP 字体 | ZCOOL KuaiLe + Ma Shan Zheng（打包到 APK；Web 端自托管于 `web/fonts/`，另含可选英文 Andika） |
 | APP 音频 | just_audio（有道词典 TTS 在线发音） |
 | CI/CD | GitHub Actions（Flutter stable + Java 17） |
 

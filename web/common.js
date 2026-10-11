@@ -130,6 +130,44 @@ function initMarquee() {
 }
 
 // 单张卡片跑马灯测量（供 content-visibility 下卡片进入视口时调用）
+// ---------- 长文本横向跑马灯（不依赖 @keyframes 里的 CSS 变量，兼容老 WebView）----------
+// 部分安卓 WebView / 智能教学设备不支持在 @keyframes 中插值 CSS 变量（var(--mx)），
+// 会导致动画停在起始位置（"跑马灯卡住不动"）。改用 Web Animations API 直接驱动 transform。
+function marqueeSpanOf(el) {
+    if (!el) return null;
+    var span = el.querySelector(':scope > span');
+    if (!span && el.firstElementChild && el.firstElementChild.tagName === 'SPAN') span = el.firstElementChild;
+    return span || null;
+}
+function resetScrollMarquee(el) {
+    if (!el) return;
+    var span = marqueeSpanOf(el);
+    if (span && span.__marqueeAnim) { try { span.__marqueeAnim.cancel(); } catch (e) {} span.__marqueeAnim = null; }
+    el.classList.remove('scrollable');
+}
+// over: 溢出像素; durSec: 单程时长(秒); delaySec: 起始延迟(秒)
+function applyScrollMarquee(el, over, durSec, delaySec) {
+    if (!el) return;
+    el.classList.add('scrollable');
+    var span = marqueeSpanOf(el);
+    if (!span) return;
+    if (span.__marqueeAnim) { try { span.__marqueeAnim.cancel(); } catch (e) {} span.__marqueeAnim = null; }
+    if (typeof span.animate !== 'function') return; // 极老引擎：退化为静态截断，不卡死
+    var dist = over + 10;
+    try {
+        span.__marqueeAnim = span.animate(
+            [{ transform: 'translateX(0)' }, { transform: 'translateX(' + (-dist) + 'px)' }],
+            {
+                duration: Math.max(3000, durSec * 1000),
+                delay: (delaySec || 0) * 1000,
+                direction: 'alternate',
+                iterations: Infinity,
+                easing: 'ease-in-out'
+            }
+        );
+    } catch (e) {}
+}
+
 function initMarqueeFor(card) {
     if (!card) return;
     card.querySelectorAll('.word, .meaning').forEach(el => {
@@ -145,14 +183,10 @@ function initMarqueeFor(card) {
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             card.querySelectorAll('.word, .meaning').forEach(el => {
-                el.classList.remove('scrollable');
-                el.style.removeProperty('--mx');
-                el.style.removeProperty('--md');
+                resetScrollMarquee(el);
                 const over = el.scrollWidth - el.clientWidth;
                 if (over > 4) {
-                    el.classList.add('scrollable');
-                    el.style.setProperty('--mx', '-' + (over + 10) + 'px');
-                    el.style.setProperty('--md', Math.max(3, over / 35) + 's');
+                    applyScrollMarquee(el, over, Math.max(3, over / 35), el.classList.contains('word') ? 0.6 : 0.8);
                 }
             });
         });

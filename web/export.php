@@ -181,6 +181,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'export_zip') {
         </div>
     </div>
     <div class="toast" id="toast"></div>
-    <script src="common.js?v=12"></script>
+    <script src="common.js?v=13"></script>
 </body>
 </html>

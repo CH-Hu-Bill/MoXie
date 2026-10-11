@@ -358,7 +358,7 @@ require 'inc/header.php';
     <input type="hidden" name="task_id" id="completeTaskId" value="<?php echo $selectedTask['id'] ?? ''; ?>">
 </form>
 
-<script src="common.js?v=12"></script>
+<script src="common.js?v=13"></script>
 <script>var speakRepeat = <?php echo $settings['repeat_' . $classId] ?? $settings['default_repeat'] ?? 1; ?>;</script>
 <?php if ($selectedTask): ?>
 <script>

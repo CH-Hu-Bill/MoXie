@@ -319,11 +319,7 @@ body {
 .d-word-mean.scrollable .d-word-scroll {
   display: inline-block;
   white-space: nowrap;
-  animation: dWordMarquee var(--md, 5s) ease-in-out infinite alternate;
-}
-@keyframes dWordMarquee {
-  0%, 6% { transform: translateX(0); }
-  94%, 100% { transform: translateX(var(--mx, -30px)); }
+  will-change: transform;
 }
 .d-placeholder {
   flex: 1;

@@ -228,7 +228,7 @@ $csrfToken = csrfToken();
 $pageTitle = '展示大屏';
 require 'inc/head.php';
 ?>
-<link rel="stylesheet" href="display.css?v=11">
+<link rel="stylesheet" href="display.css?v=12">
 </head>
 <body>
 <script>
@@ -372,7 +372,7 @@ var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JS
     }
 })();
 </script>
-<script src="common.js?v=12"></script>
-<script src="display.js?v=18"></script>
+<script src="common.js?v=13"></script>
+<script src="display.js?v=19"></script>
 </body>
 </html>

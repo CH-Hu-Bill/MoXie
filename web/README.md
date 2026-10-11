@@ -26,14 +26,14 @@
 | 模块 | 说明 |
 |------|------|
 | **班级管理** | 创建 / 选择 / 切换 / 删除班级；班级口令保护（`password_hash` + 版本号控制，改口令即让所有设备失效） |
-| **单词库** (`words.php`) | 单词 CRUD、TTS 发音、AI 批量导入（粘贴单词列表 → DeepSeek 自动补全释义/词性 → 预览确认）、CSV 导入 / 导出、**跟读**（全部/已选单词，可随机乱序——只打乱播放顺序不改单词库位置） |
+| **知识库** (`words.php`) | 单词 / 句子 / 作文三类同库管理（第二层 Tab，徽标显示已选数量）：CRUD、TTS 发音、AI 批量导入（粘贴列表 → AI 自动补全释义/词性/直译 → 预览确认）、CSV 导入 / 导出（五列 `英文,中文,词性,类型,标题`）、**跟读**（全部/已选单词，可随机乱序——只打乱播放顺序不改单词库位置） |
 | **默写任务** (`task.php`) | 三种模式：**看词**(show) / **默写**(hide) / **听写**(dict)；听写状态机（音量/间隔/朗读次数可调，支持暂停）；短按完成、长按取消；**跟读**（任务单词，乱序可选） |
 | **默写记录** (`history.php`) | 历史任务列表（按日期倒序）、单词详情、一键重新创建任务 |
 | **周末大礼包** | 周末从本周已默写单词中随机抽 20 个组成加练任务，周一随机决定本周是否开启 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；支持 PDF / HTML / 长图导出；**手写板用 Pointer Events 统一鼠标/触摸/笔**（`touch-action:none` 防触屏手势被浏览器接管滚动页面，高分屏按 devicePixelRatio 渲染不发糊，弹窗期间锁定 body 滚动）；**编辑器支持拖拽图片直接上传插入**（配合原有 Ctrl+V 粘贴，绕开 Windows 触屏设备文件选择对话框卡死问题） |
 | **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB/4096×4096）；**MP4 自动生成首帧缩略图**（ffmpeg，`video_thumb.php` 提供，加载中/列表先显示首帧预览）；**网格视频进视口才播放**（preload=metadata + IntersectionObserver，首屏不并发全量下载）；支持修改描述；**灯箱布局为「左媒体 + 右描述整列」**，描述框宽度按媒体宽高比自适应（竖图更宽、横图更窄），描述过长在右列内**来回自动滚动**（缓慢、requestAnimationFrame 逐帧平滑、溢出时加边缘渐变蒙版防硬截断，鼠标悬停/触摸暂停、离开 2s 后恢复；描述存 JS 映射表按 id 取，不内嵌到 onclick，杜绝长描述/换行导致卡片打不开）；**打开详情时暂停网格所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后只恢复之前正在播放的**；媒体失效显示「媒体已失效」占位；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好；**图集描述过长在固定区域内来回自动滚动**（壁纸页纯自动、无手动打断，requestAnimationFrame 平滑 + 边缘渐变蒙版） |
-| **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数（跟读停顿 = 单词音频实际时长 + 缓冲时间，长词停得久、短词停得短；缓冲 **-0.5~5 秒**，负数让停顿比音频短、节奏更紧凑，实际停顿不低于 0）、图集公开 API 密钥保护、展示大屏 token，均按班级隔离存储 |
+| **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数（跟读停顿 = 单词音频实际时长 + 缓冲时间，长词停得久、短词停得短；缓冲 **-0.5~5 秒**，负数让停顿比音频短、节奏更紧凑，实际停顿不低于 0）、图集公开 API 密钥保护、展示大屏 token、**英文字体切换（仅影响英文，可选 Andika 教学字体）**、**内网主网址展示**，均按班级隔离存储 |
 | **全球发音** (`pronunciation.php` + `app_api.php` + 单词库卡片) | 班级内真人发音共享：APP 端单词卡（单词库/错题本/搜索）地球按钮**长按录音（AAC/M4A ≤10s ≤2MB，`inc/audio_guard.php` 校验 magic bytes + mvhd 时长）**、松手上传，**短按播放列表**（选同学发音播放）；web 端单词库卡片地球按钮短按弹手绘风列表播放（只听不录）。数据：`data/classes/{cid}/pronunciations.json`（wordId→uid→{file,name,duration,size}）+ `pronunciations/{wordId}/{32hex}.m4a`；**每人每单词 1 条（重录覆盖）**；文件名随机不可枚举，输出端点无需鉴权（同图集模式） |
 | **管理后台** (`admin.php`) | 班级删除（级联清理）、重置班级口令、APP 版本发布（含渠道/日志）、**APK 安装包上传**（只保留最新一版，自动关联最新发布版本的版本号与更新日志，写入 `app_versions.json` 的 `apk` 字段）、**全服公告管理**（内容/颜色/班级/平台/时间/可关闭，超级霸屏限 60 字、顶部横幅限 200 字，前端实时计数）。页面已加 no-store 防缓存 + 分区导航（班级/APP/公告/大屏） |
 | **全服公告** | 公告分两类：**顶部横幅**（状态栏跑马灯，可关闭）与**超级霸屏**（mode=fullscreen）。超级霸屏：仅站内点击跳转时触发（刷新/直达/系统返回不触发），新页面**首帧即渲染**（无内容闪现），页面加载完成后开始计时展示 1~5 秒、点击任意处跳过；霸屏层只占状态栏（横幅）**下方**区域，不遮挡顶部横幅。两类同时间段可共存、同类互斥。后台时间选择已预填服务器当前时间（默认立即生效），并醒目显示服务器时间 |
@@ -55,7 +55,7 @@
 | PHP 扩展 | **GD**（图片安全处理与缩放）、**cURL**（调用 DeepSeek AI） |
 | Web 服务器 | Nginx / Apache，文档根指向本目录 |
 | 数据库 | 无，使用 JSON 文件存储（`inc/db.php` 封装，原子写入 + 文件锁） |
-| 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；[ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng) 中文字体；富文本编辑器 [Quill 2.x](https://quilljs.com)（CDN 引入） |
+| 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；中文字体 [ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（**自托管于 `web/fonts/`，无外部 CDN**）；可选英文字体 **Andika**（`web/fonts/Andika-*.ttf`，班级设置页切换）；富文本编辑器 [Quill 2.x](https://quilljs.com)（**本地 `web/lib/quill/`**） |
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 | 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |
 
@@ -124,7 +124,8 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 ├── 风格.md                # 设计规范（Hand-Drawn 手绘风格）
 ├── shiyin.mp3             # 任务提示音
 ├── inc/                   # 核心库
-│   ├── head.php           # 统一 HTML <head>（Google Fonts、meta、common.css）
+│   ├── head.php           # 统一 HTML <head>（自托管字体、meta、common.css；按班级设置英文显示字体、暴露内网地址）
+│   ├── net.php            # 内网地址探测（局域网 IPv4 优选 + 组装 http://<ip>:<port>）
 │   ├── header.php         # 统一状态栏（返回按钮、班级名、标题、右侧操作区）
 │   ├── db.php             # JSON 存储层（原子写 + 文件锁 + 班级数据隔离）
 │   ├── input.php          # 请求参数安全读取（reqGet/reqPost）+ 纯文本消毒（sanitizePlainText）
@@ -139,8 +140,6 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 │   ├── .htaccess          # Deny all
 │   └── uploads/.htaccess  # Deny all（图片经 upload.php 控制访问）
 ├── composer.json          # Composer 依赖（仅 php-ffmpeg，用于视频首帧缩略图；vendor/ 不入库）
-├── project-features/
-    └── project-features.html  # 功能总览文档
 ```
 
 ---

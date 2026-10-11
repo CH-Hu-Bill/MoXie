@@ -688,9 +688,13 @@ function fitWordMarquees() {
     requestAnimationFrame(function() {
         requestAnimationFrame(function() {
             els.forEach(function(el) {
-                el.classList.remove('scrollable');
-                el.style.removeProperty('--mx');
-                el.style.removeProperty('--md');
+                if (typeof resetScrollMarquee === 'function') {
+                    resetScrollMarquee(el);
+                } else {
+                    el.classList.remove('scrollable');
+                    el.style.removeProperty('--mx');
+                    el.style.removeProperty('--md');
+                }
                 // 用真实文本宽度测量：scrollWidth 在 ellipsis/overflow 下可能失真
                 var text = el.textContent || '';
                 var over = 0;
@@ -707,11 +711,15 @@ function fitWordMarquees() {
                     over = textW - availW;
                 }
                 if (over > 2) {
-                    var fs2 = parseFloat(getComputedStyle(el).fontSize) || 16;
-                    var overEm = (over + 8) / fs2;
-                    el.classList.add('scrollable');
-                    el.style.setProperty('--mx', '-' + overEm.toFixed(2) + 'em');
-                    el.style.setProperty('--md', Math.max(3, over / 30) + 's');
+                    if (typeof applyScrollMarquee === 'function') {
+                        applyScrollMarquee(el, over, Math.max(3, over / 30), 0);
+                    } else {
+                        var fs2 = parseFloat(getComputedStyle(el).fontSize) || 16;
+                        var overEm = (over + 8) / fs2;
+                        el.classList.add('scrollable');
+                        el.style.setProperty('--mx', '-' + overEm.toFixed(2) + 'em');
+                        el.style.setProperty('--md', Math.max(3, over / 30) + 's');
+                    }
                 }
             });
         });
