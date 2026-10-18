@@ -220,6 +220,7 @@ $pageTitle = '使用说明';
         background: var(--old-paper);
         color: var(--pencil);
         line-height: 1.75;
+        font-size: 17px;
     }
     .help-wrap {
         max-width: 820px;
@@ -233,11 +234,11 @@ $pageTitle = '使用说明';
         box-shadow: 6px 6px 0 rgba(45, 45, 45, 0.9);
         padding: 30px 38px 40px;
     }
-    .help-card h1 { font-size: 26px; border-bottom: 2px solid var(--old-paper); padding-bottom: 12px; margin-top: 0; }
+    .help-card h1 { font-size: 28px; border-bottom: 2px solid var(--old-paper); padding-bottom: 12px; margin-top: 0; }
     .help-card h1, .help-card h2, .help-card h3, .help-card h4 { scroll-margin-top: 16px; }
-    .help-card h2 { font-size: 20px; margin-top: 28px; color: var(--blue); }
-    .help-card h3 { font-size: 17px; margin-top: 20px; }
-    .help-card h4 { font-size: 15px; margin-top: 16px; }
+    .help-card h2 { font-size: 22px; margin-top: 28px; color: var(--blue); }
+    .help-card h3 { font-size: 18px; margin-top: 20px; }
+    .help-card h4 { font-size: 16px; margin-top: 16px; }
     .help-card p { margin: 10px 0; }
     .help-card ul, .help-card ol { padding-left: 26px; }
     .help-card ul.md-sub { margin: 4px 0 10px 26px; padding-left: 18px; }
@@ -262,7 +263,7 @@ $pageTitle = '使用说明';
     }
     /* APP 截图是竖版手机比例，限宽避免在文档里过长 */
     .help-card img[src*="images/A"] { max-width: 340px; }
-    .help-card table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+    .help-card table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 15px; }
     .help-card th, .help-card td { border: 1.5px solid var(--pencil); padding: 8px 12px; text-align: left; }
     .help-card th { background: var(--old-paper); }
     .help-card hr { border: none; border-top: 2px dashed #ccc; margin: 24px 0; }
@@ -274,7 +275,7 @@ $pageTitle = '使用说明';
         display: inline-block; margin-top: 20px; padding: 8px 22px;
         background: var(--white); border: 2px solid var(--pencil); border-radius: 10px;
         box-shadow: 3px 3px 0 var(--pencil); text-decoration: none; color: var(--pencil);
-        font-size: 14px;
+        font-size: 15px;
     }
     .help-back:hover { border-color: var(--blue); color: var(--blue); }
     @media (max-width: 640px) {

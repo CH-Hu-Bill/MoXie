@@ -1031,3 +1031,63 @@ body.lb-open .gallery-card img[src$=".gif"] {
 .hd-check input:checked ~ .hd-label{color:var(--blue);font-weight:600}
 
 
+
+/* =========================================================
+   全局字号微调（2026-10）
+   实际使用中整体偏小，统一 +1px 左右；不影响展示大屏与 APP。
+   ========================================================= */
+html { font-size: 17px; }
+body { font-size: 17px; }
+
+/* 常用组件：在原有 13–15px 基础上加 1px */
+.btn,
+.modal-btns button { font-size: 15px; }
+.input,
+.textarea,
+.form-group input,
+.form-group textarea { font-size: 16px; }
+.form-group label { font-size: 14px; }
+.modal-title { font-size: 19px; }
+
+/* 顶栏与主页 */
+.status-bar .left .class-name { font-size: 16px; }
+.status-bar .left .page-name { font-size: 14px; }
+.status-bar .title { font-size: 19px; }
+.menu-card .title { font-size: 21px; }
+.menu-card .desc { font-size: 14px; }
+.stat-label { font-size: 15px; }
+
+/* 列表 / 任务 / 知识库 */
+.search-results .sr-item .meaning { font-size: 14px; }
+.sidebar-header { font-size: 14px; }
+.task-item .date { font-size: 15px; }
+.task-item .status { font-size: 13px; }
+.tl-label { font-size: 16px; }
+.tl-meta { font-size: 13px; }
+.word-card .meaning { font-size: 23px; }
+.word-card .pos { font-size: 18px; }
+.hd-label { font-size: 15px; }
+.kb-en { font-size: 24px; }
+.kb-zh { font-size: 19px; }
+.kb-title { font-size: 20px; }
+.kb-detail-en { font-size: 19px; }
+.kb-detail-zh { font-size: 18px; }
+.task-line-title { font-size: 21px; }
+.task-line-en { font-size: 24px; }
+.task-line-zh { font-size: 19px; }
+.hide-mode .task-line-zh { font-size: 25px; }
+.mindmap-node-text { font-size: 16px; }
+
+/* 设置 / 表单 / 说明类内联字号：统一 +1px */
+[style*="font-size:11px"] { font-size: 12px !important; }
+[style*="font-size: 11px"] { font-size: 12px !important; }
+[style*="font-size:12px"] { font-size: 13px !important; }
+[style*="font-size: 12px"] { font-size: 13px !important; }
+[style*="font-size:13px"] { font-size: 14px !important; }
+[style*="font-size: 13px"] { font-size: 14px !important; }
+[style*="font-size:14px"] { font-size: 15px !important; }
+[style*="font-size: 14px"] { font-size: 15px !important; }
+[style*="font-size:15px"] { font-size: 16px !important; }
+[style*="font-size: 15px"] { font-size: 16px !important; }
+[style*="font-size:16px"] { font-size: 17px !important; }
+[style*="font-size: 16px"] { font-size: 17px !important; }
