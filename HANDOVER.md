@@ -222,3 +222,13 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - 缓存版本：`common.css?v=18`（`inc/head.php`）。
 - **未改**：展示大屏（`display.css` 自身布局与 clamp 字号）、APP（Flutter 字号已较大）。
 - 已重打离线包。
+
+---
+
+## 15. Word 版使用说明（2026-10-18）
+
+- 新增 `web/docs/ListenWrite使用说明.docx`（约 6.5MB，A4，46 张配图、25 个表格）。
+- 生成方式：由 `web/docs/使用说明.md` 经 pandoc 转换，再用 python-docx 设置中文字体、标题层级、页眉页脚、表格样式与图片宽度。
+- 目录为 Word 域：打开文档时自动更新；如未更新，右键目录 → 更新域。页脚含「第 X 页 / 共 Y 页」。
+- 正文 11pt / 1.5 倍行距，章标题 18pt，节标题 14pt，表格 9pt；图片 Web 6.2in、APP 3.2in。
+- **注意**：Markdown 说明更新后，Word 版需重新生成；当前 docx 与 md 内容一致（仅 md 顶部多了 Word 版下载链接）。

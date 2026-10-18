@@ -26,6 +26,8 @@
 
 完整图文手册（含目录、19 章、FAQ 与参数速查）：[web/docs/使用说明.md](web/docs/使用说明.md)。部署后也可直接访问 `/help.php` 查看同一份文档；截图制作规范见 [web/docs/截图清单.md](web/docs/截图清单.md)。
 
+- **Word 版**：[web/docs/ListenWrite使用说明.docx](web/docs/ListenWrite使用说明.docx)（可直接用 Word / WPS 打开、打印或批注；打开后如目录未自动更新，右键目录 → 更新域）
+
 ## 界面预览
 
 | 功能主页 | 知识库（三板块） |
