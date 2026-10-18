@@ -170,7 +170,7 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - **数据**：`words.json` 作文条目新增可选 `mindmap`（Markdown 大纲字符串，≤3 层 ≤20 节点 ≤40 字符/节点）。旧作文不动、不补生成。
 - **生成**：`inc/api.php` 新增 `AIClient::generateEssayMindmap($classId,$title,$text)` + `normalizeMindmapOutline()`（规整/限长）。`words.php` 的 `add_word` 在 `type=essay & gen_mindmap=1 & 已配置 AI` 时调用并写入 `mindmap`；添加模态出现**可选项复选框**（仅 `AIClient::isConfigured($classId)` 为真时）。
 - **渲染**：`common.js` 新增 `parseMindmapOutline()` / `renderMindmap()`（自绘 SVG 树状图，手绘铅笔风，零依赖，`textContent` 防 XSS）；样式在 `common.css`（`.mindmap-*`）。
-- **展示**：`words.php` 作文**详情弹窗**展示导图；`task.php` 作文卡内嵌 `.mindmap-holder` + `mindmapData`，**展示模式**显示导图，**默写模式**在 `mindmap_{classId}` 开启且该作文有导图时隐藏中英文、改显导图。
+- **展示**：`words.php` 作文**详情弹窗**展示导图；`task.php` 作文卡内嵌 `.mindmap-holder` + `mindmapData`，**展示模式不显示导图**，**默写模式**在 `mindmap_{classId}` 开启且该作文有导图时隐藏中英文、改显导图。
 - **设置**：`settings.php` 新增「作文默写方式」（思维导图 / 中文，默认思维导图，存 `mindmap_{classId}`）；`main.php` 引导弹窗新增说明步。
 - **API**：`app_api.php` 的 `appWordOut` 增加 `mindmap` 字段（供 APP 阶段使用）。
 - **缓存版本**：`common.css?v=17`、`common.js?v=14`。
@@ -200,5 +200,12 @@ flutter test            # 6 个通过；widget_test 模板测试为既有失败
 - 版本 **1.2.2**（`.github/workflows/build.yml` / `pubspec.yaml` / `api_config.example.dart` / 根 `README.md` 四处一致；本地 `api_config.dart` 同步）。
 - **未做**（如需另开轮次）：APP 端「按导图默写」（APP 暂无默写模式）、APP 添加作文时生成导图（`app_api` 的 `add_word` 支持 `gen_mindmap`）。
 
+---
 
+## 13. 完整使用说明与截图清单（文字部分已完成）
 
+- `web/docs/使用说明.md` 重写为 **19 章完整手册**：目录、产品简介、安装、班级、主页、知识库、发音跟读、任务、记录、史记、图集、大屏、设置、AI、导出导入、APP、管理员、数据备份、FAQ、限额速查。
+- `web/help.php`：标题自动生成 GitHub 风格 slug id（保留中英文、去标点、空格转 `-`），文档内目录锚点可跳转；`#` 锚点链接在当前页打开；加入平滑滚动与 `scroll-margin-top`。
+- `web/docs/截图清单.md`：Web 32 张 + APP 17 张，逐张写明入口、操作状态、画面必含元素、优先级与文件名；含拍摄准备与交付方式。
+- 根 `README.md`、`web/README.md` 增加完整手册入口；同步修正 `web/README.md` 中过期描述（完成/取消按钮、周末大礼包规则、班级史记导出）。
+- **待办**：用户按截图清单提供图片 → 放入 `web/docs/images/` → 插入使用说明与根 README 的「界面预览」。

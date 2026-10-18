@@ -21,13 +21,36 @@ function esc($s) {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
+/** 生成与 GitHub 风格一致的标题锚点（保留中英文，去标点，空格转 -） */
+function mdSlug($s) {
+    $s = strip_tags((string)$s);
+    $s = preg_replace('/!\[([^\]]*)\]\([^)]*\)/', '$1', $s);
+    $s = preg_replace('/\[([^\]]*)\]\([^)]*\)/', '$1', $s);
+    $s = str_replace(['**', '__', '`'], '', $s);
+    $s = function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+    $s = preg_replace('/[^\p{L}\p{N}\s_-]+/u', '', $s);
+    $s = preg_replace('/[\s_]+/u', '-', $s);
+    $s = trim($s, '-');
+    return $s === '' ? 'section' : $s;
+}
+
 /** 行内语法：粗体/斜体/行内代码/图片/链接 */
 function inlineMd($s) {
     $s = esc($s);
     // 图片 ![alt](url)
-    $s = preg_replace('/!\[([^\]]*)\]\(([^)\s]+)\)/', '<img src="$2" alt="$1" loading="lazy">', $s);
-    // 链接 [text](url)
-    $s = preg_replace('/\[([^\]]+)\]\(([^)\s]+)\)/', '<a href="$2" target="_blank" rel="noopener">$1</a>', $s);
+    // 文档位于 web/docs/，但 help.php 在 web 根目录：把相对 images/ 前缀补成 docs/images/，
+    // 这样同一份 Markdown 在 GitHub（相对 docs/）与 help.php（相对 web/）都能正常显示。
+    $s = preg_replace_callback('/!\[([^\]]*)\]\(([^)\s]+)\)/', function ($m) {
+        $src = $m[2];
+        if (strpos($src, 'images/') === 0) $src = 'docs/' . $src;
+        return '<img src="' . $src . '" alt="' . $m[1] . '" loading="lazy">';
+    }, $s);
+    // 链接 [text](url)；页内锚点（#开头）在当前页跳转，不新开标签
+    $s = preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) {
+        $href = $m[2];
+        $attrs = (strpos($href, '#') === 0) ? '' : ' target="_blank" rel="noopener"';
+        return '<a href="' . $href . '"' . $attrs . '>' . $m[1] . '</a>';
+    }, $s);
     // 行内代码 `code`
     $s = preg_replace('/`([^`]+)`/', '<code>$1</code>', $s);
     // 粗体 **text**
@@ -46,6 +69,7 @@ function renderMarkdown($md) {
     $listType = null; // 'ul' | 'ol' | null
     $inTable = false;
     $tableRows = [];
+    $usedSlugs = [];
 
     $flushList = function () use (&$out, &$listType) {
         if ($listType) { $out .= "</$listType>\n"; $listType = null; }
@@ -90,7 +114,11 @@ function renderMarkdown($md) {
         if (preg_match('/^(#{1,6})\s+(.*)$/', $t, $m)) {
             $flushList(); $flushTable();
             $level = strlen($m[1]);
-            $out .= "<h$level>" . inlineMd($m[2]) . "</h$level>\n";
+            $slug = mdSlug($m[2]);
+            $base = $slug; $n = 2;
+            while (isset($usedSlugs[$slug])) { $slug = $base . '-' . $n++; }
+            $usedSlugs[$slug] = true;
+            $out .= "<h$level id=\"" . esc($slug) . "\">" . inlineMd($m[2]) . "</h$level>\n";
             continue;
         }
 
@@ -162,6 +190,7 @@ $pageTitle = '使用说明';
         --shadow-sm: 3px 3px 0 var(--pencil);
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
         margin: 0;
         font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -182,6 +211,7 @@ $pageTitle = '使用说明';
         padding: 30px 38px 40px;
     }
     .help-card h1 { font-size: 26px; border-bottom: 2px solid var(--old-paper); padding-bottom: 12px; margin-top: 0; }
+    .help-card h1, .help-card h2, .help-card h3, .help-card h4 { scroll-margin-top: 16px; }
     .help-card h2 { font-size: 20px; margin-top: 28px; color: var(--blue); }
     .help-card h3 { font-size: 17px; margin-top: 20px; }
     .help-card h4 { font-size: 15px; margin-top: 16px; }
