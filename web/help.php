@@ -67,11 +67,13 @@ function renderMarkdown($md) {
     $inCode = false;
     $codeBuf = [];
     $listType = null; // 'ul' | 'ol' | null
+    $subList = false; // 缩进子列表（用独立 ul.md-sub 呈现，兼容简单解析器）
     $inTable = false;
     $tableRows = [];
     $usedSlugs = [];
 
-    $flushList = function () use (&$out, &$listType) {
+    $flushList = function () use (&$out, &$listType, &$subList) {
+        if ($subList) { $out .= "</ul>\n"; $subList = false; }
         if ($listType) { $out .= "</$listType>\n"; $listType = null; }
     };
     $flushTable = function () use (&$out, &$inTable, &$tableRows) {
@@ -141,16 +143,37 @@ function renderMarkdown($md) {
             continue;
         }
 
-        // 无序列表
-        if (preg_match('/^\s*[-*+]\s+(.*)$/', $t, $m)) {
+        // 无序列表（缩进 ≥2 空格视为子列表，渲染成独立缩进 ul.md-sub）
+        if (preg_match('/^(\s*)[-*+]\s+(.*)$/', $t, $m)) {
+            $indent = strlen(str_replace("\t", '  ', $m[1]));
+            if ($indent >= 2 && ($listType !== null || $subList)) {
+                if ($listType !== null) { $out .= "</$listType>\n"; $listType = null; }
+                if (!$subList) { $out .= "<ul class=\"md-sub\">\n"; $subList = true; }
+                $out .= '<li>' . inlineMd($m[2]) . "</li>\n";
+                continue;
+            }
+            if ($subList) { $out .= "</ul>\n"; $subList = false; }
             if ($listType !== 'ul') { $flushList(); $out .= "<ul>\n"; $listType = 'ul'; }
-            $out .= '<li>' . inlineMd($m[1]) . "</li>\n";
+            $out .= '<li>' . inlineMd($m[2]) . "</li>\n";
             continue;
         }
-        // 有序列表
-        if (preg_match('/^\s*(\d+)\.\s+(.*)$/', $t, $m)) {
-            if ($listType !== 'ol') { $flushList(); $out .= "<ol>\n"; $listType = 'ol'; }
-            $out .= '<li>' . inlineMd($m[2]) . "</li>\n";
+        // 有序列表（保留起始编号，便于子列表后继续编号）
+        if (preg_match('/^(\s*)(\d+)\.\s+(.*)$/', $t, $m)) {
+            $indent = strlen(str_replace("\t", '  ', $m[1]));
+            if ($indent >= 2 && ($listType !== null || $subList)) {
+                if ($listType !== null) { $out .= "</$listType>\n"; $listType = null; }
+                if (!$subList) { $out .= "<ul class=\"md-sub\">\n"; $subList = true; }
+                $out .= '<li>' . inlineMd($m[3]) . "</li>\n";
+                continue;
+            }
+            if ($subList) { $out .= "</ul>\n"; $subList = false; }
+            if ($listType !== 'ol') {
+                $flushList();
+                $start = (int)$m[2];
+                $out .= '<ol' . ($start > 1 ? ' start="' . $start . '"' : '') . ">\n";
+                $listType = 'ol';
+            }
+            $out .= '<li>' . inlineMd($m[3]) . "</li>\n";
             continue;
         }
 
@@ -217,6 +240,8 @@ $pageTitle = '使用说明';
     .help-card h4 { font-size: 15px; margin-top: 16px; }
     .help-card p { margin: 10px 0; }
     .help-card ul, .help-card ol { padding-left: 26px; }
+    .help-card ul.md-sub { margin: 4px 0 10px 26px; padding-left: 18px; }
+    .help-card ul.md-sub li { font-size: 14px; color: #555; }
     .help-card li { margin: 5px 0; }
     .help-card code { background: #f0eadf; border: 1px solid #ddd6c8; border-radius: 4px; padding: 1px 6px; font-size: 0.9em; }
     .help-card pre {
@@ -235,6 +260,8 @@ $pageTitle = '使用说明';
         margin: 14px auto; border: 2px solid var(--pencil);
         border-radius: 10px; box-shadow: 4px 4px 0 rgba(45,45,45,0.25);
     }
+    /* APP 截图是竖版手机比例，限宽避免在文档里过长 */
+    .help-card img[src*="images/A"] { max-width: 340px; }
     .help-card table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
     .help-card th, .help-card td { border: 1.5px solid var(--pencil); padding: 8px 12px; text-align: left; }
     .help-card th { background: var(--old-paper); }

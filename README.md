@@ -28,13 +28,17 @@
 
 ## 界面预览
 
-| 知识库（三板块） | 创建默写任务 |
+| 功能主页 | 知识库（三板块） |
 | :---: | :---: |
-| ![知识库](web/docs/images/02-单词库.png) | ![创建任务](web/docs/images/04-创建任务.png) |
+| ![功能主页](web/docs/images/08-功能主页.png) | ![知识库](web/docs/images/02-单词库.png) |
 
-| 班级图集 | 班级史记编辑器 |
+| 作文思维导图 | 展示大屏 |
 | :---: | :---: |
-| ![图集](web/docs/images/07-图集.png) | ![史记编辑器](web/docs/images/05-编辑器工具栏.png) |
+| ![作文思维导图](web/docs/images/12-作文详情-思维导图.png) | ![展示大屏](web/docs/images/25-展示大屏.png) |
+
+| APP 单词库 | APP 作文导图 |
+| :---: | :---: |
+| ![APP 单词库](web/docs/images/A04-学习-单词库.jpg) | ![APP 作文导图](web/docs/images/A06-作文详情-思维导图.jpg) |
 
 
 ## 仓库结构
