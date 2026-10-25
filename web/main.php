@@ -21,6 +21,7 @@
  */
 require_once 'inc/db.php';
 require_once 'inc/security.php';
+require_once 'inc/folia.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
@@ -54,6 +55,7 @@ $quotes = [
     "Success usually comes to those who are too busy to be looking for it. - Henry David Thoreau"
 ];
 $randomQuote = $quotes[array_rand($quotes)];
+$foliaUpdate = folia_update_available();
 
 // Weekend task availability
 $todayDow = (int)date('N'); // 1=Mon ... 7=Sun
@@ -312,6 +314,12 @@ require 'inc/header.php';
             <div class="title">超级导出</div>
             <div class="desc">打包班级数据</div>
         </div>
+        <a class="card menu-card folia-card" href="music.php?id=<?php echo urlencode($classId); ?>" target="_blank" rel="noopener">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9 9l12-2"/></svg></div>
+            <div class="title">Folia 音乐</div>
+            <div class="desc">沉浸式歌词播放 · 新标签打开</div>
+            <?php if ($foliaUpdate['available']): ?><span class="folia-update-badge">可更新</span><?php endif; ?>
+        </a>
         <div class="card menu-card" onclick="showOkOverlayThen('download_app.php')">
             <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
             <div class="title">下载 APP</div>

@@ -76,3 +76,6 @@ opencode.json.*
 
 # ── 离线安装包（PHP/ffmpeg 的 zip，用于无网络机器；体积大，不入库）──
 /offline/
+
+# ── Folia 可选组件的运行目录（镜像配置/数据，不进仓库）──
+/folia-runtime/

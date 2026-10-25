@@ -1,0 +1,10 @@
+{
+  "approved": true,
+  "app_version": "0.7.22",
+  "stack_version": "1.2.1",
+  "sync_version": "1.0.0",
+  "min_listenwrite": "1.2.2",
+  "tested_at": "2026-10-25",
+  "notes": "首个验收版本：网关、Web API、网易云/酷狗/QQ API、同步服务。",
+  "upstream": "https://github.com/chthollyphile/folia-major"
+}

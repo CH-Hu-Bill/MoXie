@@ -1,0 +1,106 @@
+name: Folia Docker Smoke
+
+on:
+  push:
+    branches: [feature/folia-integration]
+    paths:
+      - 'web/music.php'
+      - 'web/folia_status.php'
+      - 'web/inc/folia.php'
+      - 'web/main.php'
+      - 'web/common.css'
+      - 'scripts/folia/**'
+      - '.github/workflows/folia-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folia-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-smoke:
+    name: Install and smoke-test Folia stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FOLIA_HOME: ${{ runner.temp }}/folia-runtime
+      FOLIA_HTTP_PORT: '18080'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+          df -h /
+
+      - name: Shell and PHP syntax checks
+        run: |
+          bash -n scripts/folia/install.sh
+          bash -n scripts/folia/update.sh
+          if command -v php >/dev/null 2>&1; then
+            php -l web/inc/folia.php
+            php -l web/folia_status.php
+            php -l web/music.php
+            php -l web/main.php
+          else
+            echo "php not found on runner; skip PHP lint"
+          fi
+
+      - name: Install Folia stack
+        run: |
+          bash scripts/folia/install.sh
+
+      - name: Smoke test gateway and APIs
+        run: |
+          set -euo pipefail
+          base="http://127.0.0.1:${FOLIA_HTTP_PORT}"
+          for path in /healthz /api/healthz /netease/ /kugou/ /qq/login/status; do
+            code="$(curl -sS -o /tmp/folia-smoke-body -w '%{http_code}' --max-time 20 "${base}${path}")"
+            echo "${path} -> HTTP ${code}"
+            case "$code" in
+              2*|3*) ;;
+              *) echo "Unexpected status for ${path}"; cat /tmp/folia-smoke-body; exit 1 ;;
+            esac
+          done
+          curl -fsS --max-time 20 "${base}/" | grep -qi 'Folia'
+          test -s web/data/folia.json
+          echo "Folia smoke test passed."
+
+      - name: Container status
+        if: always()
+        run: |
+          if [ -f "$FOLIA_HOME/compose.yaml" ]; then
+            cd "$FOLIA_HOME"
+            docker compose --env-file .env -f compose.yaml ps || true
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-smoke-logs
+          if-no-files-found: ignore
+          path: |
+            web/data/folia.json
+            scripts/folia/release.json
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          if [ -f "$FOLIA_HOME/compose.yaml" ]; then
+            cd "$FOLIA_HOME"
+            docker compose --env-file .env -f compose.yaml logs --no-color --tail=200 || true
+          fi
+
+      - name: Stop and remove containers
+        if: always()
+        run: |
+          if [ -f "$FOLIA_HOME/compose.yaml" ]; then
+            cd "$FOLIA_HOME"
+            docker compose --env-file .env -f compose.yaml down -v --remove-orphans || true
+          fi

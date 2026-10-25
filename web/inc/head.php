@@ -32,4 +32,4 @@ $__enFont = ($__cid !== '' && lw_class_en_font($__cid) === 'andika') ? ' class="
 <?php if ($requireFonts): ?>
 <!-- 字体已自托管于 web/fonts/，通过 common.css 的 @font-face 加载（无需外部 CDN） -->
 <?php endif; ?>
-<link rel="stylesheet" href="common.css?v=18">
+<link rel="stylesheet" href="common.css?v=19">
