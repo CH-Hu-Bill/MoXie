@@ -22,9 +22,12 @@ if (!defined('FOLIA_DEFAULT_URL')) {
     define('FOLIA_DEFAULT_URL', 'https://folia-major.vercel.app/');
 }
 
-function folia_public_url(): string
+function folia_public_url(string $override = ''): string
 {
-    $url = getenv('LW_FOLIA_URL');
+    $url = trim($override);
+    if ($url === '') {
+        $url = getenv('LW_FOLIA_URL');
+    }
     if (!is_string($url) || trim($url) === '') {
         $url = FOLIA_DEFAULT_URL;
     }

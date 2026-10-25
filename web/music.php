@@ -33,7 +33,9 @@ requireClassAuth($classId, $class);
 $pageTitle = 'Folia 音乐';
 $backUrl = 'main.php?id=' . urlencode($classId);
 $preview = isset($_GET['preview']) && $_GET['preview'] === '1';
-$foliaUrl = folia_public_url();
+$settings = Database::getSettings();
+$classFoliaUrl = (string)($settings['folia_url_' . $classId] ?? '');
+$foliaUrl = folia_public_url($classFoliaUrl);
 
 require 'inc/head.php';
 ?>
