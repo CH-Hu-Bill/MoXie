@@ -120,9 +120,16 @@ try {
     $updated = $false
     try {
         Invoke-Compose -Arguments @('up', '-d', '--wait') -WorkDir $FoliaHome
-        $response = Invoke-WebRequest -UseBasicParsing -Uri ("http://127.0.0.1:" + [string]$state.port + '/healthz') -TimeoutSec 8
-        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
-            $updated = $true
+        for ($i = 0; $i -lt 5; $i++) {
+            try {
+                $response = Invoke-WebRequest -UseBasicParsing -Uri ("http://127.0.0.1:" + [string]$state.port + '/healthz') -TimeoutSec 8
+                if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
+                    $updated = $true
+                    break
+                }
+            } catch {
+                Start-Sleep -Seconds 2
+            }
         }
     } catch {
         $updated = $false

@@ -19,8 +19,17 @@ bash scripts/folia/install.sh
 
 **Windows（Docker Desktop）：**
 
+最简单：双击 `scripts\folia\install.bat`。  
+或在 PowerShell 中：
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\folia\install.ps1
+```
+
+更新同理：双击 `scripts\folia\update.bat`，或：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\folia\update.ps1 -Check
 ```
 
 > PowerShell 脚本使用 **UTF-8 with BOM + CRLF**，避免 Windows PowerShell 5.1 把中文读成乱码。

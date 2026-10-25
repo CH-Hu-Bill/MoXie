@@ -1,3 +1,4 @@
 # Shell 包装脚本必须保持 LF（CRLF 会破坏 #!/bin/sh shebang）
 web/bin/* text eol=lf
 scripts/folia/*.ps1 text eol=crlf
+scripts/folia/*.bat text eol=crlf
