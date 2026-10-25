@@ -11,9 +11,20 @@ Folia 是 ListenWrite 的**可选**音乐组件，独立运行在 Docker 中。�
 
 在 ListenWrite 根目录、已安装 Docker Engine + Compose v2 的机器上执行：
 
+**Linux / Ubuntu：**
+
 ```bash
 bash scripts/folia/install.sh
 ```
+
+**Windows（Docker Desktop）：**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\folia\install.ps1
+```
+
+> PowerShell 脚本使用 **UTF-8 with BOM + CRLF**，避免 Windows PowerShell 5.1 把中文读成乱码。
+> `.env` 和 `folia.json` 由脚本以 UTF-8 无 BOM 写入，避免 Docker Compose 解析异常。
 
 首次安装会联网拉取镜像（数百 MB）。脚本会：
 
@@ -46,6 +57,10 @@ bash scripts/folia/update.sh --check
 
 # 执行审核更新（会重启容器，播放会中断）
 bash scripts/folia/update.sh
+
+# Windows
+powershell -ExecutionPolicy Bypass -File scripts\folia\update.ps1 -Check
+powershell -ExecutionPolicy Bypass -File scripts\folia\update.ps1
 ```
 
 ## 更新策略

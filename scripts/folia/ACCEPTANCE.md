@@ -7,19 +7,20 @@
 
 1. `bash -n` 检查安装/更新脚本语法
 2. `php -l` 检查新增 PHP 文件（runner 有 PHP 时）
-3. 运行 `scripts/folia/install.sh`
+3. 检查 PowerShell 脚本 UTF-8 BOM，并用 `pwsh` 解析语法
+4. 运行 `scripts/folia/install.sh`
    - 拉取固定版本 `1.2.1` 镜像
    - 启动网关、Web API、网易云/酷狗/QQ API、同步服务
    - 等待 `/healthz` 通过
-4. 检查：
+5. 检查：
    - `/healthz`
    - `/api/healthz`
    - `/netease/`
    - `/kugou/`
    - `/qq/login/status`
    - 首页包含 `Folia`
-5. 上传 `web/data/folia.json` 和 `scripts/folia/release.json` 作为 artifact
-6. 失败时输出容器日志；结束时删除容器
+6. 上传 `web/data/folia.json` 和 `scripts/folia/release.json` 作为 artifact
+7. 失败时输出容器日志；结束时删除容器
 
 ## 本机/服务器验收
 
@@ -27,6 +28,12 @@
 bash scripts/folia/install.sh
 curl -fsS http://127.0.0.1:18080/healthz
 curl -fsS http://127.0.0.1:18080/api/healthz
+```
+
+想先看转场（不安装 Folia）：
+
+```text
+http://<服务器IP>:8000/music.php?id=<班级ID>&preview=1
 ```
 
 然后在 ListenWrite 主界面点击「Folia 音乐」：

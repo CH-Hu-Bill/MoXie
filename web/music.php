@@ -29,9 +29,11 @@ requireClassAuth($classId, $class);
 
 $pageTitle = 'Folia 音乐';
 $backUrl = 'main.php?id=' . urlencode($classId);
+$preview = isset($_GET['preview']) && $_GET['preview'] === '1';
 $state = folia_state();
-$foliaUpdate = folia_update_available();
-$foliaUrl = (string)$state['url'];
+$foliaUpdate = $preview ? ['available' => false] : folia_update_available();
+$foliaUrl = $preview && (string)$state['url'] === '' ? 'https://folia-major.vercel.app/' : (string)$state['url'];
+$showTransition = $preview || $state['running'];
 $statusUrl = 'folia_status.php';
 
 require 'inc/head.php';
@@ -39,7 +41,7 @@ require 'inc/head.php';
 </head>
 <body class="folia-page">
 
-<?php if ($state['running']): ?>
+<?php if ($showTransition): ?>
     <main class="folia-shell" id="foliaTransition">
         <section class="folia-sheet folia-sheet-launch" aria-label="正在进入 Folia">
             <div class="folia-kicker">LISTENWRITE × FOLIA</div>
@@ -58,6 +60,9 @@ require 'inc/head.php';
 
             <div class="folia-progress" aria-hidden="true"><span></span></div>
             <p class="folia-hint">已在新标签页打开 · 随时可以切回 ListenWrite</p>
+            <?php if ($preview): ?>
+            <div class="folia-preview-note">预览模式 · 当前没有安装 Folia，本页不会自动跳转；可以点下方按钮查看公开演示。</div>
+            <?php endif; ?>
             <?php if ($foliaUpdate['available']): ?>
             <div class="folia-update-panel">
                 <strong>发现已审核新版本 v<?php echo htmlspecialchars((string)$foliaUpdate['latest'], ENT_QUOTES, 'UTF-8'); ?></strong>
@@ -70,7 +75,7 @@ require 'inc/head.php';
             </div>
             <?php endif; ?>
             <div class="folia-actions">
-                <a class="folia-link-strong" href="<?php echo htmlspecialchars($foliaUrl, ENT_QUOTES, 'UTF-8'); ?>">如果没有自动进入，点这里</a>
+                <a class="folia-link-strong" href="<?php echo htmlspecialchars($foliaUrl, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $preview ? '打开公开 Folia 演示' : '如果没有自动进入，点这里'; ?></a>
                 <a class="folia-link" href="<?php echo htmlspecialchars($backUrl, ENT_QUOTES, 'UTF-8'); ?>">返回主界面</a>
             </div>
         </section>
@@ -79,6 +84,7 @@ require 'inc/head.php';
     (function () {
         var target = <?php echo json_encode($foliaUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
         var hasUpdate = <?php echo $foliaUpdate['available'] ? 'true' : 'false'; ?>;
+        var isPreview = <?php echo $preview ? 'true' : 'false'; ?>;
         var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         function enterFolia() {
             if (target) window.location.replace(target);
@@ -93,7 +99,7 @@ require 'inc/head.php';
                 showUpdate.textContent = updateCmd.hidden ? '查看更新方法' : '收起更新方法';
             });
         }
-        if (!hasUpdate) {
+        if (!hasUpdate && !isPreview) {
             setTimeout(enterFolia, reduce ? 450 : 1800);
         }
     })();

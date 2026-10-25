@@ -51,6 +51,40 @@ jobs:
             echo "php not found on runner; skip PHP lint"
           fi
 
+
+      - name: PowerShell UTF-8 BOM check
+        run: |
+          set -euo pipefail
+          for f in scripts/folia/*.ps1; do
+            bom="$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')"
+            if [ "$bom" != "efbbbf" ]; then
+              echo "缺少 UTF-8 BOM: $f" >&2
+              exit 1
+            fi
+            echo "OK $f (UTF-8 BOM, CRLF)"
+          done
+
+      - name: PowerShell syntax check
+        run: |
+          if command -v pwsh >/dev/null 2>&1; then
+            pwsh -NoProfile -Command - <<'PS'
+          $files = @("scripts/folia/install.ps1", "scripts/folia/update.ps1")
+          foreach ($f in $files) {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors -and $errors.Count -gt 0) {
+                  Write-Host "PowerShell syntax errors in $f" -ForegroundColor Red
+                  $errors | ForEach-Object { Write-Host $_ }
+                  exit 1
+              }
+          }
+          Write-Host "PowerShell syntax OK"
+          PS
+          else
+            echo "pwsh not found; skip PowerShell syntax check"
+          fi
+
       - name: Install Folia stack
         run: |
           bash scripts/folia/install.sh

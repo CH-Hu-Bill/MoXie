@@ -1447,3 +1447,15 @@ body.folia-page {
   margin-top: 10px;
   font-size: 13px;
 }
+
+.folia-preview-note {
+  max-width: 560px;
+  margin: 14px auto 0;
+  padding: 8px 12px;
+  color: #8a5a00;
+  background: #fff6dc;
+  border: 1.5px dashed #d9a400;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
