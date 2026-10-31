@@ -10,7 +10,7 @@
  *   default_repeat   — 单词朗读次数 1-10 (发音按钮重复次数)
  *   follow_repeat    — 跟读每词朗读次数 1-5 (按班级)
  *   follow_buffer    — 跟读缓冲时间 -0.5~5 秒 (按班级; 每遍读完停顿 = 音频时长 + 此值, 负数提前, 实际停顿 ≥0)
- *   folia_url_{classId} — Folia 音乐在线地址（按班级；空=默认在线版）
+ *   music_url_{classId} — 音乐播放器在线地址（按班级；空=未配置）
  *
  * 同步机制:
  *   听写准备环节修改音量/间隔后，开始听写时自动回写 settings.json
@@ -22,7 +22,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/net.php';
-require_once 'inc/folia.php';
+require_once 'inc/music.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
@@ -118,19 +118,17 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     if (isset($_POST['mindmap_mode'])) {
         $settings['mindmap_' . $classId] = (reqPost('mindmap_mode') === '0') ? '0' : '1';
     }
-    // Folia 音乐地址（按班级；留空使用默认在线版）
-    if (isset($_POST['folia_url'])) {
-        $foliaUrl = trim(reqPost('folia_url'));
-        if ($foliaUrl !== '') {
-            if (strlen($foliaUrl) > 500
-                || !preg_match('#^https?://#i', $foliaUrl)
-                || filter_var($foliaUrl, FILTER_VALIDATE_URL) === false) {
-                header('Content-Type: application/json');
-                echo json_encode(['success' => false, 'error' => 'Folia 地址必须是有效的 http/https 链接']);
-                exit;
-            }
+    // 音乐播放器地址（按班级；空=未配置，卡片会提示去设置）
+    if (isset($_POST['music_url'])) {
+        $musicUrl = trim(reqPost('music_url'));
+        if ($musicUrl !== '' && music_normalize_url($musicUrl) === '') {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => '音乐播放器地址必须是有效的 http/https 链接']);
+            exit;
         }
-        $settings['folia_url_' . $classId] = $foliaUrl;
+        $settings['music_url_' . $classId] = music_normalize_url($musicUrl);
+        // 清掉旧版键，避免清空后又被旧值回退出来
+        unset($settings['folia_url_' . $classId]);
     }
     Database::saveSettings($settings);
     header('Content-Type: application/json');
@@ -159,9 +157,8 @@ $aiModel    = is_array($aiCfg) ? (string)($aiCfg['model'] ?? '') : '';
 $enFont = (($settings['font_' . $classId] ?? '') === 'andika') ? 'andika' : '';
 // 作文默写方式：思维导图（默认） / 中文
 $mindmapMode = ($settings['mindmap_' . $classId] ?? '1') !== '0';
-// Folia 音乐地址（按班级；空=默认在线版）
-$classFoliaUrl = (string)($settings['folia_url_' . $classId] ?? '');
-$defaultFoliaUrl = folia_public_url();
+// 音乐播放器地址（按班级；空=未配置）
+$classMusicUrl = music_get_class_url($classId);
 ?>
 <?php $pageTitle = '设置'; require 'inc/head.php'; ?>
 </head>
@@ -355,15 +352,15 @@ $defaultFoliaUrl = folia_public_url();
         </div>
         <div class="card mb-3">
             <div style="font-size:16px;font-weight:bold;color:var(--pencil);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--old-paper);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Folia 音乐地址（按班级）
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:4px;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>音乐播放器地址（按班级）
             </div>
             <div style="font-size:13px;color:#666;line-height:1.7;margin-bottom:12px;">
-                每个班级可以单独设置 Folia 地址。主界面点击「Folia 音乐」后，会在新标签页打开并自动跳转到这个地址；留空使用默认在线版。
+                每个班级单独设置一个音乐播放器地址。主界面点击「音乐播放器」后，会在新标签页打开并自动跳转到这个地址；未配置时，卡片会提示班级先来设置。
             </div>
-            <input type="text" id="foliaUrl" class="input" value="<?php echo htmlspecialchars($classFoliaUrl, ENT_QUOTES, 'UTF-8'); ?>" placeholder="<?php echo htmlspecialchars($defaultFoliaUrl, ENT_QUOTES, 'UTF-8'); ?>" style="width:100%;">
+            <input type="text" id="musicUrl" class="input" value="<?php echo htmlspecialchars($classMusicUrl, ENT_QUOTES, 'UTF-8'); ?>" placeholder="https://..." style="width:100%;">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-                <button type="button" class="btn btn-sm" onclick="document.getElementById('foliaUrl').value=''">恢复默认</button>
-                <span style="font-size:12px;color:#888;line-height:1.6;">默认：<code class="tag"><?php echo htmlspecialchars($defaultFoliaUrl, ENT_QUOTES, 'UTF-8'); ?></code></span>
+                <button type="button" class="btn btn-sm" onclick="document.getElementById('musicUrl').value=''">清空（不启用）</button>
+                <span style="font-size:12px;color:#888;line-height:1.6;">只接受 http/https 链接，最多 500 字符。</span>
             </div>
         </div>
         <div class="card mb-3" style="text-align:center;padding:18px;">
@@ -487,7 +484,7 @@ $defaultFoliaUrl = folia_public_url();
             fd.append('display_token', document.getElementById('displayToken').value.trim());
             fd.append('en_font', document.getElementById('enFont').value);
             fd.append('mindmap_mode', document.getElementById('mindmapMode').value);
-            fd.append('folia_url', document.getElementById('foliaUrl').value.trim());
+            fd.append('music_url', document.getElementById('musicUrl').value.trim());
             fd.append('csrf_token', CSRF_TOKEN);
             const d = await (await fetch('settings.php?id=<?php echo $classId; ?>', { method: 'POST', body: fd })).json();
             if (d.success) {
