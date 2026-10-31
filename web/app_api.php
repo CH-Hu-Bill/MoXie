@@ -950,13 +950,36 @@ switch ($action) {
         if (!isset($tasks[$taskId])) appError('任务不存在');
         $map = []; foreach (Database::getWords($classId) as $word) $map[(string)$word['id']] = $word;
         $csvRows = ["ï»¿单词,释义,词性"];
-        $textLines = [];
+        $exportGroups = ['word' => [], 'sentence' => [], 'essay' => []];
         $csvSafe = function($v) { $v = trim((string)$v); if ($v !== '' && preg_match('/^[=+\-@]/', $v)) $v = "'" . $v; return $v; };
         foreach (($tasks[$taskId]['word_ids'] ?? []) as $wid) if (isset($map[$wid])) {
-            $csvRows[] = '"' . str_replace('"', '""', $csvSafe($map[$wid]['word'])) . '","' . str_replace('"', '""', $csvSafe($map[$wid]['meaning'])) . '","' . $csvSafe($map[$wid]['pos'] ?? '') . '"';
-            $textLines[] = $map[$wid]['word'] . ' ' . $map[$wid]['meaning'] . ' ' . ($map[$wid]['pos'] ?? '');
+            $item = $map[$wid];
+            $type = (string)($item['type'] ?? 'word');
+            if (!isset($exportGroups[$type])) $type = 'word';
+            $csvRows[] = '"' . str_replace('"', '""', $csvSafe($item['word'])) . '","' . str_replace('"', '""', $csvSafe($item['meaning'])) . '","' . $csvSafe($item['pos'] ?? '') . '"';
+            if ($type === 'word') {
+                $line = trim((string)$item['word']) . ' ' . trim((string)$item['meaning']);
+                if (trim((string)($item['pos'] ?? '')) !== '') $line .= ' ' . trim((string)$item['pos']);
+                $exportGroups['word'][] = $line;
+            } elseif ($type === 'sentence') {
+                $exportGroups['sentence'][] = trim((string)$item['word']) . "\n" . trim((string)$item['meaning']);
+            } else {
+                $lines = [];
+                if (trim((string)($item['title'] ?? '')) !== '') $lines[] = '标题：' . trim((string)$item['title']);
+                $lines[] = trim((string)$item['word']);
+                if (trim((string)$item['meaning']) !== '') $lines[] = '释义：' . trim((string)$item['meaning']);
+                $exportGroups['essay'][] = implode("\n", $lines);
+            }
         }
-        if (!count($textLines)) appError('任务中没有可导出的单词');
+        $textLines = [];
+        $exportLabels = ['word' => '单词', 'sentence' => '句子', 'essay' => '作文'];
+        foreach ($exportLabels as $type => $label) {
+            if (empty($exportGroups[$type])) continue;
+            if (count($textLines)) $textLines[] = '';
+            $textLines[] = '【' . $label . '】';
+            foreach ($exportGroups[$type] as $block) $textLines[] = $block;
+        }
+        if (!count($textLines)) appError('任务中没有可导出的内容');
         if ($action === 'export_task_csv') {
             $csv = implode("\n", $csvRows);
             $directory = Database::getExportsDirectory();
