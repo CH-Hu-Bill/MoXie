@@ -11,16 +11,30 @@ $class = $classes[$classId];
 requireClassAuth($classId, $class);
 
 $gameId = reqGet('game');
-$games = ['2048' => ['title' => '2048', 'source' => __DIR__ . '/inc/game_2048.php', 'base' => 'games/2048/']];
+$games = require __DIR__ . '/inc/game_catalog.php';
 if (!isset($games[$gameId])) { header('Location: games.php?id=' . urlencode($classId)); exit; }
 
 $game = $games[$gameId];
 $csrfToken = csrfToken();
-$gameHtml = require $game['source'];
+$ext = strtolower(pathinfo((string)$game['source'], PATHINFO_EXTENSION));
+if ($ext === 'html') {
+    $gameHtml = @file_get_contents($game['source']);
+    if ($gameHtml === false) { header('Location: games.php?id=' . urlencode($classId)); exit; }
+} else {
+    $gameHtml = require $game['source'];
+}
 $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
 if ($base === '.' || $base === '/') $base = '';
 $gameBase = $base . '/' . $game['base'];
 $gameHtml = preg_replace('/<head>/i', '<head><base href="' . htmlspecialchars($gameBase, ENT_QUOTES, 'UTF-8') . '">', $gameHtml, 1);
+$gameHtml = preg_replace_callback(
+    '~\b(src|href)="((?!https?:|//|/|data:|#)[^"]+)"~i',
+    function ($m) use ($gameBase) {
+        $rel = ltrim($m[2], './');
+        return $m[1] . '="' . $gameBase . $rel . '"';
+    },
+    $gameHtml
+);
 
 $limit = game_limit_seconds($classId);
 $remaining = game_remaining_seconds($classId);

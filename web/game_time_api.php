@@ -6,11 +6,12 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/game_time.php';
+$gamesCatalog = require __DIR__ . '/inc/game_catalog.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store');
 
-$GAME_IDS = ['2048' => true];
+$GAME_IDS = array_fill_keys(array_keys($gamesCatalog), true);
 
 function gameJson($data, $status = 200)
 {

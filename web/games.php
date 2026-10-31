@@ -39,6 +39,13 @@ require 'inc/head.php';
 .game-icon-2048 span:nth-child(2){background:#f2b179;}
 .game-icon-2048 span:nth-child(3){background:#f59563;}
 .game-icon-2048 span:nth-child(4){background:#f67c5f;}
+.game-icon-mini{width:76px;height:76px;display:flex;align-items:center;justify-content:center;border:2px solid var(--pencil);border-radius:16px 9px 18px 9px;box-shadow:3px 3px 0 var(--pencil);}
+.game-icon-mini svg{width:58px;height:58px;display:block;}
+.game-icon-garden{background:#ecfdf5;transform:rotate(-2deg);}
+.game-icon-snake{background:#f0fdf4;transform:rotate(2deg);}
+.game-icon-gem{background:#f5f3ff;transform:rotate(-1deg);}
+.game-icon-pixel{background:#fffbeb;transform:rotate(2deg);}
+.game-icon-sudoku{background:#eff6ff;transform:rotate(-2deg);}
 .game-tile h2{font-family:var(--font-heading);font-size:24px;color:var(--pencil);margin:0 0 6px;}
 .game-tile p{font-size:13px;color:#777;line-height:1.7;margin:0 0 14px;}
 .game-meta{font-size:12px;color:#8a857e;border-top:1.5px dashed var(--old-paper);padding-top:10px;}
@@ -62,24 +69,28 @@ require 'inc/head.php';
         </div>
     </div>
 
+    <?php $gameList = require __DIR__ . '/inc/game_catalog.php'; ?>
     <div class="game-grid">
-        <?php if ($exhausted): ?>
-        <div class="game-tile disabled" aria-disabled="true">
-        <?php else: ?>
-        <a class="game-tile" href="game.php?id=<?php echo urlencode($classId); ?>&amp;game=2048">
-        <?php endif; ?>
-            <div class="game-icon game-icon-2048" aria-hidden="true"><span>2</span><span>0</span><span>4</span><span>8</span></div>
-            <h2>2048</h2>
-            <p>合并数字，冲击 2048。支持方向键和触屏滑动。</p>
-            <div class="game-meta">
-                <?php if ($exhausted): ?>
-                    今天的游戏时间已经用完，明天再来。
-                <?php else: ?>
-                    今日剩余：<?php echo $limit === null ? '不限时' : htmlspecialchars(game_format_seconds($remaining), ENT_QUOTES, 'UTF-8'); ?>
-                <?php endif; ?>
-            </div>
-            <?php if (!$exhausted): ?><span class="game-play">开始游戏 →</span><?php endif; ?>
-        <?php echo $exhausted ? '</div>' : '</a>'; ?>
+        <?php foreach ($gameList as $gid => $g): ?>
+            <?php if ($exhausted): ?>
+            <div class="game-tile disabled" aria-disabled="true">
+            <?php else: ?>
+            <a class="game-tile" href="game.php?id=<?php echo urlencode($classId); ?>&amp;game=<?php echo urlencode($gid); ?>">
+            <?php endif; ?>
+                <?php echo $g['icon']; ?>
+                <h2><?php echo htmlspecialchars($g['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
+                <p><?php echo htmlspecialchars($g['desc'], ENT_QUOTES, 'UTF-8'); ?></p>
+                <div class="game-meta">
+                    <?php echo htmlspecialchars($g['meta'], ENT_QUOTES, 'UTF-8'); ?> ·
+                    <?php if ($exhausted): ?>
+                        今天的时间已经用完
+                    <?php else: ?>
+                        剩余：<?php echo $limit === null ? '不限时' : htmlspecialchars(game_format_seconds($remaining), ENT_QUOTES, 'UTF-8'); ?>
+                    <?php endif; ?>
+                </div>
+                <?php if (!$exhausted): ?><span class="game-play">开始游戏 →</span><?php endif; ?>
+            <?php echo $exhausted ? '</div>' : '</a>'; ?>
+        <?php endforeach; ?>
     </div>
 
     <p class="game-note">游戏时长按班级统一计算，每天 0 点重置。只支持内置游戏；外站游戏无法可靠限制时长，因此暂不接入。</p>
