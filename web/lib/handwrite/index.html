@@ -1826,27 +1826,43 @@
     </style>
 
 <style id="lw-embed-style">
+@font-face { font-family: 'LWHandwriteChinese'; src: url('fonts/ZCOOLKuaiLe-Regular.ttf') format('truetype'); font-display: swap; }
 html.lw-embed, html.lw-embed body { background: #f5f5f5 !important; }
+html.lw-embed body,
+html.lw-embed button,
+html.lw-embed input,
+html.lw-embed .card,
+html.lw-embed .tool-card,
+html.lw-embed .card-title span { font-family: 'LWHandwriteChinese', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', Arial, sans-serif !important; }
 html.lw-embed .startup-modal,
 html.lw-embed .left-tools-group,
 html.lw-embed #menu-card,
 html.lw-embed #save-card,
-html.lw-embed #select-card,
 html.lw-embed #more-card,
 html.lw-embed #back-button,
 html.lw-embed #time-display,
 html.lw-embed .floating-tools,
 html.lw-embed #floating-board,
-html.lw-embed .selection-toolbar,
 html.lw-embed #image-file-input,
 html.lw-embed .periodic-modal,
 html.lw-embed #embedded-page { display: none !important; }
 html.lw-embed #shapes-card { display: flex !important; }
 html.lw-embed .canvas-container { background: #f5f5f5 !important; }
 html.lw-embed #drawing-board { background: #fff !important; }
-html.lw-embed .header { justify-content: center !important; gap: 8px !important; }
-html.lw-embed .center-tools-group { margin: 0 auto !important; }
-html.lw-embed #page-card { margin-left: auto !important; }
+html.lw-embed .header {
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 7px 10px !important;
+    height: 64px !important;
+    background: #f5f5f5 !important;
+    border-top: 2px dashed #c9c2b8 !important;
+    box-sizing: border-box;
+}
+html.lw-embed .canvas-container { height: calc(100% - 64px) !important; flex: 0 0 calc(100% - 64px) !important; }
+html.lw-embed .center-tools-group { margin: 0 !important; }
+html.lw-embed #page-card { margin-left: auto !important; padding: 5px 10px !important; }
+html.lw-embed #select-card { display: flex !important; }
+html.lw-embed .selection-toolbar { bottom: 76px !important; }
 html.lw-embed .tool-card .card-title span { font-size: 12px !important; }
 html.lw-embed .tool-card { padding-left: 8px !important; padding-right: 8px !important; }
 html.lw-embed #page-card .page-info { gap: 4px !important; }
@@ -2224,6 +2240,8 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
     
     <!-- 套索选择操作栏（仅保留复制和取消） -->
     <div class="selection-toolbar" id="selection-toolbar">
+        <button class="sel-btn" id="sel-rotate-left" title="逆时针旋转 90°"><i class="fas fa-rotate-left"></i> 左转</button>
+        <button class="sel-btn" id="sel-rotate-right" title="顺时针旋转 90°"><i class="fas fa-rotate-right"></i> 右转</button>
         <button class="sel-btn primary" id="sel-copy"><i class="fas fa-copy"></i> 复制</button>
         <button class="sel-btn" id="sel-cancel"><i class="fas fa-times"></i> 取消</button>
     </div>
@@ -3342,6 +3360,12 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
             let currentPage = 0;
             let pages = [];
             let history = [];
+
+            function pushHistoryState() {
+                if (!pages[currentPage]) return;
+                history.push({ pages: JSON.parse(JSON.stringify(pages)), currentPage: currentPage });
+                if (history.length > PERFORMANCE_CONFIG.maxHistorySize) history.shift();
+            }
             let activeSubmenu = null;
             let isClearing = false;
             let canvasColor = DEFAULT_CANVAS_COLOR;
@@ -4176,7 +4200,7 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                 canvas.height = Math.max(1, containerHeight * dpr);
                 
                 enableHighQualityRendering();
-                redrawPage();
+                if (pages && pages[currentPage]) redrawPage();
             }
             
             function redrawPage() {
@@ -4291,7 +4315,9 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                     console.error('当前页面不存在:', currentPage);
                     return;
                 }
-                
+
+                pushHistoryState();
+
                 if (isDrawingShape && currentShape) {
                     shapeStartX = lastX;
                     shapeStartY = lastY;
@@ -4407,17 +4433,6 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                     }
                     
                     redrawPage();
-                }
-                
-                if (pages[currentPage] && pages[currentPage].elements.length > 0) {
-                    history.push({
-                        pages: JSON.parse(JSON.stringify(pages)),
-                        currentPage: currentPage
-                    });
-                    
-                    if (history.length > PERFORMANCE_CONFIG.maxHistorySize) {
-                        history.shift();
-                    }
                 }
                 
                 penPressureHistory = [];
@@ -4630,6 +4645,7 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
             function commitSelection() {
                 const obj = selectionState.object;
                 if (!obj || !pages[currentPage]) return;
+                pushHistoryState();
                 
                 const tmp = document.createElement('canvas');
                 tmp.width = Math.max(1, Math.round(obj.w * dpr));
@@ -4656,14 +4672,35 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                 hideSelectionToolbar();
                 redrawPage();
                 generatePageThumbnails();
-                
-                history.push({ pages: JSON.parse(JSON.stringify(pages)), currentPage: currentPage });
-                if (history.length > PERFORMANCE_CONFIG.maxHistorySize) history.shift();
             }
             
+            function rotateSelection(deg) {
+                const obj = selectionState.object;
+                if (!obj || !pages[currentPage]) return;
+                const old = obj.canvas;
+                const tmp = document.createElement('canvas');
+                tmp.width = old.height;
+                tmp.height = old.width;
+                const tctx = tmp.getContext('2d');
+                tctx.translate(tmp.width / 2, tmp.height / 2);
+                tctx.rotate(deg * Math.PI / 180);
+                tctx.drawImage(old, -old.width / 2, -old.height / 2);
+                const cx = obj.x + obj.w / 2;
+                const cy = obj.y + obj.h / 2;
+                const nw = obj.h;
+                const nh = obj.w;
+                obj.canvas = tmp;
+                obj.w = nw;
+                obj.h = nh;
+                obj.x = cx - nw / 2;
+                obj.y = cy - nh / 2;
+                redrawPage();
+            }
+
             function copySelection() {
                 const obj = selectionState.object;
                 if (!obj || !pages[currentPage]) return;
+                pushHistoryState();
                 
                 const tmp = document.createElement('canvas');
                 tmp.width = Math.max(1, Math.round(obj.w * dpr));
@@ -4695,9 +4732,6 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                 hideSelectionToolbar();
                 redrawPage();
                 generatePageThumbnails();
-                
-                history.push({ pages: JSON.parse(JSON.stringify(pages)), currentPage: currentPage });
-                if (history.length > PERFORMANCE_CONFIG.maxHistorySize) history.shift();
                 
                 window.performanceOptimizer.showMessage('已复制到画板', 'success');
             }
@@ -5295,6 +5329,7 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
             // ================ 清屏功能 ================
             function clearCurrentPage() {
                 if (!pages[currentPage]) return;
+                pushHistoryState();
                 
                 pages[currentPage].elements = [];
                 
@@ -5304,8 +5339,6 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                 selectionState.lassoPoints = [];
                 selectionState.isLassoing = false;
                 hideSelectionToolbar();
-                
-                history = [];
                 
                 redrawPage();
                 updatePageIndicator();
@@ -5722,6 +5755,7 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                         option.classList.add('active');
                         currentEraserSize = parseInt(option.getAttribute('data-eraser-size'));
                         switchToEraser();
+                        hideAllSubmenus();
                     });
                 });
                 
@@ -6000,6 +6034,14 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
                     hideBigTimeMode();
                 });
                 
+                document.getElementById('sel-rotate-left').addEventListener('click', () => {
+                    rotateSelection(-90);
+                });
+                
+                document.getElementById('sel-rotate-right').addEventListener('click', () => {
+                    rotateSelection(90);
+                });
+                
                 document.getElementById('sel-copy').addEventListener('click', () => {
                     copySelection();
                 });
@@ -6135,10 +6177,6 @@ html.lw-embed #page-card .page-info { gap: 4px !important; }
         } else {
             initApp();
         }
-        
-        window.addEventListener('load', function () {
-            initApp();
-        });
         
         window.debugApp = function() {
             console.log("=== 应用调试信息 ===");

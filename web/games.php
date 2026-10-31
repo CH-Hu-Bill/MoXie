@@ -34,6 +34,11 @@ require 'inc/head.php';
 .game-tile.disabled{opacity:.62;filter:grayscale(.35);cursor:not-allowed;}
 .game-tile.disabled:hover{transform:none;box-shadow:var(--shadow-md);}
 .game-icon{font-size:34px;line-height:1;margin-bottom:10px;}
+.game-icon-2048{width:76px;height:76px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;padding:6px;background:#faf8ef;border:2px solid var(--pencil);border-radius:14px 8px 16px 8px;box-shadow:3px 3px 0 var(--pencil);transform:rotate(-2deg);}
+.game-icon-2048 span{display:flex;align-items:center;justify-content:center;border-radius:6px;background:#edc22e;color:#fff;font-family:var(--font-heading);font-size:20px;font-weight:700;line-height:1;box-shadow:inset 0 -2px 0 rgba(0,0,0,.12);}
+.game-icon-2048 span:nth-child(2){background:#f2b179;}
+.game-icon-2048 span:nth-child(3){background:#f59563;}
+.game-icon-2048 span:nth-child(4){background:#f67c5f;}
 .game-tile h2{font-family:var(--font-heading);font-size:24px;color:var(--pencil);margin:0 0 6px;}
 .game-tile p{font-size:13px;color:#777;line-height:1.7;margin:0 0 14px;}
 .game-meta{font-size:12px;color:#8a857e;border-top:1.5px dashed var(--old-paper);padding-top:10px;}
@@ -63,7 +68,7 @@ require 'inc/head.php';
         <?php else: ?>
         <a class="game-tile" href="game.php?id=<?php echo urlencode($classId); ?>&amp;game=2048">
         <?php endif; ?>
-            <div class="game-icon">🔢</div>
+            <div class="game-icon game-icon-2048" aria-hidden="true"><span>2</span><span>0</span><span>4</span><span>8</span></div>
             <h2>2048</h2>
             <p>合并数字，冲击 2048。支持方向键和触屏滑动。</p>
             <div class="game-meta">
