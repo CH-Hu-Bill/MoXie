@@ -1126,6 +1126,32 @@ body { font-size: 17px; }
   transform: rotate(2deg);
 }
 
+.game-card {
+  position: relative;
+  background: linear-gradient(135deg, #ffffff 0%, #fffdf5 100%);
+  border-color: var(--red);
+}
+.game-card .icon svg {
+  transition: transform 0.22s ease;
+}
+.game-card:hover .icon svg {
+  transform: rotate(-6deg) scale(1.06);
+}
+.game-card::after {
+  content: '限时';
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  padding: 2px 8px;
+  border: 1.5px solid var(--red);
+  border-radius: 999px;
+  color: var(--red);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  line-height: 1.5;
+  transform: rotate(2deg);
+}
+
 body.music-page {
   min-height: 100dvh;
   overflow-x: hidden;

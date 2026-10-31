@@ -317,6 +317,11 @@ require 'inc/header.php';
             <div class="title">音乐播放器</div>
             <div class="desc">在线音乐 · 由班级配置</div>
         </a>
+        <a class="card menu-card game-card" href="games.php?id=<?php echo urlencode($classId); ?>">
+            <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M6 12h4M8 10v4"/><path d="M16 11h.01M18 13h.01"/></svg></div>
+            <div class="title">小游戏</div>
+            <div class="desc">课间放松 · 每班每日限时</div>
+        </a>
         <div class="card menu-card" onclick="showOkOverlayThen('download_app.php')">
             <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--pencil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
             <div class="title">下载 APP</div>

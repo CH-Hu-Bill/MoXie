@@ -4,6 +4,7 @@
  */
 require_once 'inc/db.php';
 require_once 'inc/security.php';
+require_once 'inc/game_time.php';
 // 后台页面一律禁止缓存：删除公告等操作后刷新必须拿到最新数据，
 // 避免浏览器缓存导致"删了还在/改了没变"的错觉。
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -116,6 +117,22 @@ if ($isAuthed) {
             });
             $msg = $updated ? '班级口令已重置（所有设备立即失效）' : '班级已不存在';
         } else { $msg = '口令格式错误（至少4位字母或数字）'; }
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'save_game_limits') {
+        $settings = Database::getSettings();
+        if (!is_array($settings)) $settings = [];
+        foreach ($classes as $cid => $c) {
+            $raw = $_POST['game_limit'][$cid] ?? '';
+            if (!is_scalar($raw)) $raw = '';
+            $raw = trim((string)$raw);
+            $minutes = ($raw !== '' && ctype_digit($raw)) ? (int)$raw : 0;
+            $minutes = max(0, min(GAME_TIME_MAX_MINUTES, $minutes));
+            if ($minutes > 0) $settings['game_limit_minutes_' . $cid] = $minutes;
+            else unset($settings['game_limit_minutes_' . $cid]);
+        }
+        if (Database::saveSettings($settings)) $msg = '小游戏时长已保存';
+        else $msg = '保存失败：服务器数据目录不可写';
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'publish_version') {
@@ -335,6 +352,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 <div style="position:sticky;top:0;z-index:100;display:flex;gap:8px;flex-wrap:wrap;background:var(--paper);padding:8px 0;margin-bottom:14px;border-bottom:2px solid var(--pencil);">
     <a href="#sec-classes" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🏫 班级管理</a>
     <a href="#sec-app" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">📱 APP 发布</a>
+    <a href="#sec-games" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🎮 小游戏时长</a>
     <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 公告管理</a>
     <a href="#sec-display" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🖥️ 大屏设置</a>
     <span style="flex:1;"></span>
@@ -359,6 +377,52 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
             </div>
         </div>
         <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<div class="card" id="sec-games" style="margin-bottom:16px;scroll-margin-top:60px;">
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">🎮 小游戏时长</h2>
+    <p style="font-size:13px;color:var(--pencil);opacity:0.75;line-height:1.7;margin-bottom:12px;">
+        按班级设置每日上限，单位分钟。留空或填 0 = 不限时。每天 0 点自动重置，周末同样限制。
+    </p>
+    <?php if (empty($classes)): ?>
+        <div class="empty-state"><p>暂无班级</p></div>
+    <?php else: ?>
+    <form method="post">
+        <input type="hidden" name="action" value="save_game_limits">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="background:var(--old-paper);color:var(--pencil);">
+                    <th style="text-align:left;padding:8px;">班级</th>
+                    <th style="text-align:left;padding:8px;">今日已玩</th>
+                    <th style="text-align:left;padding:8px;">今日剩余</th>
+                    <th style="text-align:left;padding:8px;">近 7 天</th>
+                    <th style="text-align:left;padding:8px;width:150px;">每日上限（分钟）</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($classes as $gid => $gc): ?>
+                    <?php
+                        $gLimit = game_limit_minutes($gid);
+                        $gUsed = game_today_seconds($gid);
+                        $gRemain = game_remaining_seconds($gid);
+                        $g7 = array_sum(array_column(game_recent_stats($gid, 7), 'seconds'));
+                    ?>
+                    <tr style="border-bottom:1.5px solid var(--old-paper);">
+                        <td style="padding:8px;font-weight:700;font-family:var(--font-heading);"><?php echo htmlspecialchars($gc['name']); ?></td>
+                        <td style="padding:8px;"><?php echo htmlspecialchars(game_format_seconds($gUsed)); ?></td>
+                        <td style="padding:8px;"><?php echo htmlspecialchars(game_format_seconds($gRemain)); ?></td>
+                        <td style="padding:8px;"><?php echo htmlspecialchars(game_format_seconds($g7)); ?></td>
+                        <td style="padding:8px;">
+                            <input type="number" name="game_limit[<?php echo htmlspecialchars($gid, ENT_QUOTES, 'UTF-8'); ?>]" class="input" min="0" max="<?php echo GAME_TIME_MAX_MINUTES; ?>" step="1" value="<?php echo $gLimit > 0 ? $gLimit : ''; ?>" placeholder="不限时" style="width:120px;">
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top:12px;"><button type="submit" class="btn btn-primary">保存小游戏时长</button></div>
+    </form>
     <?php endif; ?>
 </div>
 
