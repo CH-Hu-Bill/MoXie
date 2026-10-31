@@ -14,16 +14,6 @@ return [
         'auto_start' => true,
         'soft_controls' => false,
     ],
-    'pixel-clues' => [
-        'title' => '像素线索',
-        'desc' => '按行列数字推理涂格，12 张唯一解逻辑图鉴。',
-        'meta' => '逻辑 · 5–10 分钟',
-        'icon' => '<div class="game-icon game-icon-mini game-icon-pixel" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="11" y="11" width="42" height="42" rx="4" fill="#fef3c7" stroke="#2b2b2b"/><path d="M11 25h42M11 39h42M25 11v42M39 11v42" stroke="#d6c7a8"/><rect x="11" y="11" width="14" height="14" fill="#2b2b2b"/><rect x="25" y="25" width="14" height="14" fill="#2b2b2b"/><rect x="39" y="39" width="14" height="14" fill="#2b2b2b"/><rect x="39" y="11" width="14" height="14" fill="#2b2b2b"/></svg></div>',
-        'source' => __DIR__ . '/../games/mini/pixel-clues.html',
-        'base' => 'games/mini/',
-        'auto_start' => true,
-        'soft_controls' => false,
-    ],
     'sudoku' => [
         'title' => '数独工坊',
         'desc' => '经典、对角线和杀手数独，支持候选笔记、撤回和提示。',
@@ -31,7 +21,7 @@ return [
         'icon' => '<div class="game-icon game-icon-mini game-icon-sudoku" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="10" y="10" width="44" height="44" rx="4" fill="#e0f2fe" stroke="#2b2b2b"/><path d="M25 10v44M39 10v44M10 25h44M10 39h44" stroke="#2b2b2b"/><path d="M17 18h3M32 32h3M47 46h3" stroke="#2d5da1"/></svg></div>',
         'source' => __DIR__ . '/../games/mini/sudoku-studio.html',
         'base' => 'games/mini/',
-        'auto_start' => true,
+        'auto_start' => false,
         'soft_controls' => false,
     ],
 ];

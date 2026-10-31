@@ -39,11 +39,13 @@ $gameHtml = preg_replace_callback(
 $limit = game_limit_seconds($classId);
 $remaining = game_remaining_seconds($classId);
 $used = game_today_seconds($classId);
+$autoStart = !empty($game['auto_start']);
+$showGuide = ($gameId === 'sudoku');
 
 $pageTitle = $game['title'];
 $backUrl = 'games.php?id=' . urlencode($classId);
 $className = $class['name'];
-$rightContent = '<span id="gameTimeLabel" style="font-size:12px;font-weight:700;color:var(--red);white-space:nowrap;">' . htmlspecialchars($remaining === null ? '不限时' : '剩余 ' . game_format_seconds($remaining), ENT_QUOTES, 'UTF-8') . '</span>';
+$rightContent = '<span id="gameTimeLabel" style="font-size:12px;font-weight:700;color:var(--red);white-space:nowrap;">' . htmlspecialchars($showGuide ? '开始后计时' : ($remaining === null ? '不限时' : '剩余 ' . game_format_seconds($remaining)), ENT_QUOTES, 'UTF-8') . '</span>';
 require 'inc/head.php';
 ?>
 <style>
@@ -55,13 +57,40 @@ html,body{height:100%;overflow:hidden;}
 .game-timeup-card{max-width:460px;width:100%;text-align:center;background:var(--white);border:3px solid var(--pencil);border-radius:var(--wobbly-lg);box-shadow:var(--shadow-lg);padding:28px 24px;}
 .game-timeup-card h2{font-family:var(--font-heading);font-size:28px;color:var(--pencil);margin:0 0 10px;}
 .game-timeup-card p{font-size:14px;line-height:1.8;color:#6f6a63;margin:0 0 18px;}
-@media(max-width:600px){.game-wrap{height:calc(100dvh - 52px)}}
+.game-guide{display:none;position:absolute;inset:0;z-index:40;align-items:center;justify-content:center;background:rgba(250,248,239,.96);padding:20px;}
+.game-guide.show{display:flex;}
+.game-guide-card{max-width:520px;width:100%;background:var(--white);border:3px solid var(--pencil);border-radius:var(--wobbly-lg);box-shadow:var(--shadow-lg);padding:24px 26px;}
+.game-guide-kicker{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;color:var(--blue);font-weight:700;margin-bottom:6px;}
+.game-guide-card h2{font-family:var(--font-heading);font-size:26px;color:var(--pencil);margin:0 0 12px;}
+.game-guide-card ul{margin:0 0 18px;padding-left:22px;color:#5f5b55;font-size:14px;line-height:1.9;}
+.game-guide-card li{margin-bottom:4px;}
+.game-guide-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.game-guide-actions .btn{text-decoration:none;display:inline-block;}
+@media(max-width:600px){.game-wrap{height:calc(100dvh - 52px)}.game-guide{padding:12px}.game-guide-card{padding:20px 18px}.game-guide-card h2{font-size:23px}}
 </style>
 </head>
 <body>
 <?php require 'inc/header.php'; ?>
 <div class="game-wrap">
     <iframe id="gameFrame" class="game-frame" title="<?php echo htmlspecialchars($game['title'], ENT_QUOTES, 'UTF-8'); ?>" src="about:blank" allow="fullscreen; autoplay"></iframe>
+    <?php if ($showGuide): ?>
+    <div class="game-guide show" id="gameGuide">
+        <div class="game-guide-card">
+            <div class="game-guide-kicker">SUDOKU · 玩法</div>
+            <h2>先看 20 秒，再开始</h2>
+            <ul>
+                <li>每行、每列、每个 3×3 宫都要填 1–9，不能重复。</li>
+                <li>先找唯一候选，不要一上来就猜；卡住可以开候选笔记。</li>
+                <li>点格子后用数字键或屏幕数字填写；填错会高亮。</li>
+                <li>点「开始」后才会计入班级游戏时长。</li>
+            </ul>
+            <div class="game-guide-actions">
+                <button type="button" class="btn btn-primary" id="guideStart">我知道了，开始</button>
+                <a class="btn btn-secondary" href="games.php?id=<?php echo urlencode($classId); ?>">返回小游戏</a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 <div class="game-timeup" id="gameTimeUp">
     <div class="game-timeup-card">
@@ -78,6 +107,7 @@ html,body{height:100%;overflow:hidden;}
     var gameId = <?php echo json_encode($gameId, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     var csrf = <?php echo json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     var gameHtml = <?php echo json_encode($gameHtml, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    var autoStart = <?php echo $autoStart ? 'true' : 'false'; ?>;
     var frame = document.getElementById('gameFrame');
     var timeLabel = document.getElementById('gameTimeLabel');
     var overlay = document.getElementById('gameTimeUp');
@@ -93,7 +123,12 @@ html,body{height:100%;overflow:hidden;}
         return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
     function updateLabel() {
-        if (timeLabel) timeLabel.textContent = remaining === null ? '不限时' : '剩余 ' + fmt(remaining);
+        if (!timeLabel) return;
+        if (!autoStart && !sessionId && !ended) {
+            timeLabel.textContent = '开始后计时';
+            return;
+        }
+        timeLabel.textContent = remaining === null ? '不限时' : '剩余 ' + fmt(remaining);
     }
     function api(action, extra) {
         var fd = new FormData();
@@ -142,7 +177,12 @@ html,body{height:100%;overflow:hidden;}
             }).catch(function() {});
         }, 10000);
     }
-    function startGame() {
+    function loadGame() {
+        frame.srcdoc = gameHtml;
+        frame.style.display = 'block';
+    }
+    function beginSession(onReady) {
+        if (sessionId || ended) return;
         api('start').then(function(d) {
             if (!d.success || !d.allowed) {
                 showTimeUp((d && d.error) ? d.error : '今天的游戏时间已经用完，明天再来吧。');
@@ -152,11 +192,22 @@ html,body{height:100%;overflow:hidden;}
             sessionToken = d.session_token;
             remaining = d.remaining_seconds;
             updateLabel();
-            frame.srcdoc = gameHtml;
-            frame.style.display = 'block';
+            if (onReady) onReady();
             startTimers();
         }).catch(function() {
             showTimeUp('游戏时长服务暂时不可用，请刷新重试。');
+        });
+    }
+    function startGame() {
+        if (autoStart) beginSession(loadGame);
+        else loadGame();
+    }
+    var guideStart = document.getElementById('guideStart');
+    if (guideStart) {
+        guideStart.addEventListener('click', function() {
+            var guide = document.getElementById('gameGuide');
+            if (guide) guide.classList.remove('show');
+            beginSession(null);
         });
     }
     document.addEventListener('visibilitychange', function() {
