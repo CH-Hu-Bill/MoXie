@@ -59,7 +59,7 @@
 | PHP 扩展 | **GD**（图片安全处理与缩放）、**cURL**（调用 DeepSeek AI） |
 | Web 服务器 | Nginx / Apache，文档根指向本目录 |
 | 数据库 | 无，使用 JSON 文件存储（`inc/db.php` 封装，原子写入 + 文件锁） |
-| 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；中文字体 [ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（**自托管于 `web/fonts/`，无外部 CDN**）；可选英文字体 **Andika**（`web/fonts/Andika-*.ttf`，班级设置页切换）；富文本编辑器 [Quill 2.x](https://quilljs.com)（**本地 `web/lib/quill/`**） |
+| 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；中文字体 [ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（**自托管于 `web/fonts/`，无外部 CDN**）；可选英文字体 **Andika**（`web/fonts/Andika-*.ttf`，班级设置页切换）；富文本编辑器 [Quill 2.x](https://quilljs.com)（**本地 `web/lib/quill/`**）；手写板基于 **快捷白板 8.2.5 / ParkerStudio**（`web/lib/handwrite/`）；图标 **Font Awesome Free 6.5.0**（`web/lib/fontawesome/`）；内置 2048 来自 [gabrielecirulli/2048](https://github.com/gabrielecirulli/2048)（MIT，`web/games/2048/`） |
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 | 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |
 
