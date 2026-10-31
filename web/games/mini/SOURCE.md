@@ -5,13 +5,10 @@
 - 许可证：MIT（见同目录 `LICENSE`）
 - 作者：wangzifan396-wzf
 
-本目录只收录经过筛选的少量单文件游戏，不一次性打包全部 106 款：
+本目录只保留班级实际使用的两款单文件游戏，不一次性打包全部 106 款：
 
-- `garden-front.html` — 芽阵前线（塔防）
-- `snake-game.html` — 霓虹贪吃蛇
-- `gem-garden.html` — 晶糖花园
-- `pixel-clues.html` — 像素线索
-- `sudoku-studio.html` — 数独工坊
+- `pixel-clues.html` — 像素线索（逻辑）
+- `sudoku-studio.html` — 数独工坊（益智）
 
 这些文件是上游单文件 HTML 原样使用的，未改写游戏内部逻辑；ListenWrite 只负责
 外层游戏列表、班级每日时长和 iframe 包装。

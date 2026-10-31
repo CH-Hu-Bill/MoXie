@@ -41,9 +41,6 @@ require 'inc/head.php';
 .game-icon-2048 span:nth-child(4){background:#f67c5f;}
 .game-icon-mini{width:76px;height:76px;display:flex;align-items:center;justify-content:center;border:2px solid var(--pencil);border-radius:16px 9px 18px 9px;box-shadow:3px 3px 0 var(--pencil);}
 .game-icon-mini svg{width:58px;height:58px;display:block;}
-.game-icon-garden{background:#ecfdf5;transform:rotate(-2deg);}
-.game-icon-snake{background:#f0fdf4;transform:rotate(2deg);}
-.game-icon-gem{background:#f5f3ff;transform:rotate(-1deg);}
 .game-icon-pixel{background:#fffbeb;transform:rotate(2deg);}
 .game-icon-sudoku{background:#eff6ff;transform:rotate(-2deg);}
 .game-tile h2{font-family:var(--font-heading);font-size:24px;color:var(--pencil);margin:0 0 6px;}
