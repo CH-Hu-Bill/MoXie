@@ -135,23 +135,19 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_entry') {
 .unsaved-dot{display:none;width:auto;color:var(--red);font-size:12px;font-weight:600}
 .hw-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:5000;align-items:center;justify-content:center}
 .hw-modal.active{display:flex}
-.hw-box{background:var(--white);border-radius:var(--wobbly);padding:20px;width:95%;max-width:650px;box-shadow:var(--shadow-lg);border:2px solid var(--pencil)}
-.hw-box h4{text-align:center;margin-bottom:12px;color:var(--pencil);font-family:var(--font-heading)}
-.hw-tools{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-.hw-tools button{padding:6px 14px;border:1.5px solid var(--pencil);background:var(--white);border-radius:var(--wobbly-sm);cursor:pointer;font-size:12px;transition:all .12s;font-family:var(--font-heading)}
-.hw-tools button:hover{border-color:var(--blue);color:var(--blue)}
-.hw-tools button.active{background:var(--blue);color:var(--white);border-color:var(--blue)}
-.hw-tools input[type=color]{width:32px;height:32px;border:1.5px solid var(--pencil);cursor:pointer;border-radius:var(--wobbly-sm)}
-.hw-tools input[type=range]{width:80px}
-.hw-canvas-wrap{border:2px solid var(--pencil);border-radius:var(--wobbly);overflow:hidden;background:var(--white)}
-.hw-canvas-wrap canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
-.hw-tools button,.hw-tools input[type=color],.hw-tools input[type=range]{touch-action:manipulation}
-.hw-btns{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+.hw-box{background:var(--white);border-radius:var(--wobbly);padding:14px 16px 12px;width:96vw;max-width:1120px;height:90vh;max-height:900px;box-shadow:var(--shadow-lg);border:2px solid var(--pencil);display:flex;flex-direction:column}
+.hw-box h4{text-align:center;margin:0 0 8px;color:var(--pencil);font-family:var(--font-heading);font-size:16px;flex-shrink:0}
+.hw-frame-wrap{flex:1;min-height:0;border:2px solid var(--pencil);border-radius:var(--wobbly);overflow:hidden;background:#f5f5f5}
+.hw-frame-wrap iframe{display:block;width:100%;height:100%;border:0;background:#f5f5f5}
+.hw-credit{font-size:11px;color:#999;text-align:left;margin-top:6px;flex-shrink:0}
+.hw-btns{display:flex;gap:8px;margin-top:8px;justify-content:flex-end;align-items:center;flex-shrink:0}
 .hw-btns button{padding:8px 20px;border:1.5px solid var(--pencil);border-radius:var(--wobbly-sm);font-size:14px;cursor:pointer;font-weight:600;font-family:var(--font-heading);box-shadow:var(--shadow-sm)}
+.hw-btns button:disabled{opacity:.55;cursor:wait}
 .hw-btns .hw-insert{background:var(--blue);color:var(--white)}
 .hw-btns .hw-insert:hover{background:var(--pencil)}
 .hw-btns .hw-cancel{background:var(--white);color:var(--pencil)}
 .hw-btns .hw-cancel:hover{background:var(--old-paper)}
+@media(max-width:700px){.hw-box{width:100vw;height:100dvh;max-height:none;border-radius:0;border:0;padding:8px}.hw-credit{font-size:10px}}
 @media(max-width:800px){.app{flex-direction:column}.timeline{width:100%;position:static;max-height:none}}
 </style>
 </head>
@@ -252,20 +248,11 @@ require 'inc/header.php';
 <div class="hw-modal" id="hwModal">
 <div class="hw-box">
 <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 手写板</h4>
-<div class="hw-tools">
-<button type="button" onclick="setPenColor('#000000')" id="clrBlack" class="active">黑</button>
-<button type="button" onclick="setPenColor('#e53935')" id="clrRed">红</button>
-<button type="button" onclick="setPenColor('#2d5da1')" id="clrBlue">蓝</button>
-<input type="color" value="#000000" onchange="setPenColor(this.value)" oninput="setPenColor(this.value)" title="选色">
-<input type="range" min="1" max="10" value="3" id="penWidth" oninput="hwCtx.lineWidth=this.value" title="粗细">
-<button type="button" onclick="clearHandwrite()">清屏</button>
-<button type="button" onclick="undoStroke()">撤销</button>
-<button type="button" onclick="redoStroke()">重做</button>
-</div>
-<div class="hw-canvas-wrap"><canvas id="hwCanvas" width="560" height="360"></canvas></div>
+<div class="hw-frame-wrap"><iframe id="hwFrame" src="about:blank" title="手写板"></iframe></div>
+<div class="hw-credit">笔迹交互参考：快捷白板 8.2.5 / ParkerStudio</div>
 <div class="hw-btns">
 <button type="button" class="hw-cancel" onclick="closeHandwrite()">取消</button>
-<button type="button" class="hw-insert" onclick="insertHandwrite()">插入编辑器</button>
+<button type="button" class="hw-insert" id="hwInsertBtn" onclick="insertHandwrite()">插入所有页面</button>
 </div>
 </div>
 </div>
@@ -909,110 +896,78 @@ function compressHistoryImage(file) {
     });
 }
 
-var hwCanvas, hwCtx, hwStrokes = [], hwRedoStrokes = [], hwDrawing = false, hwCurrentStroke = [];
+var hwFrame = null;
 function openHandwrite() {
     if (!canEditClass()) { showToast('只能编辑今天的记录'); return; }
+    hwFrame = document.getElementById('hwFrame');
+    hwFrame.src = 'handwrite.php?id=' + encodeURIComponent(classId) + '&embed=1&t=' + Date.now();
     document.getElementById('hwModal').classList.add('active');
-    hwCanvas = document.getElementById('hwCanvas');
-    hwCtx = hwCanvas.getContext('2d');
-    // 高分屏：物理分辨率 = CSS 尺寸 × devicePixelRatio，绘制坐标系用 CSS 像素（setTransform）
-    var dpr = window.devicePixelRatio || 1;
-    var cssW = hwCanvas.parentElement.clientWidth - 0 || 560;
-    cssW = Math.min(cssW, 560);
-    var cssH = Math.round(cssW * 360 / 560);
-    hwCanvas.style.width = cssW + 'px';
-    hwCanvas.style.height = cssH + 'px';
-    hwCanvas.width = Math.round(cssW * dpr);
-    hwCanvas.height = Math.round(cssH * dpr);
-    hwCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    hwCtx.lineWidth = parseInt(document.getElementById('penWidth').value, 10) || 3;
-    hwCtx.lineCap = 'round';
-    hwCtx.strokeStyle = '#000000';
-    hwCtx.clearRect(0, 0, cssW, cssH);
-    hwStrokes = [];
-    hwRedoStrokes = [];
-    // Pointer Events 统一鼠标/触摸/触控笔；touch-action:none(CSS) 阻止浏览器接管手势滚动页面
-    hwCanvas.onpointerdown = function(e) {
-        if (e.pointerType === 'mouse' && e.button !== 0) return;
-        e.preventDefault();
-        if (hwDrawing) hwEndStroke(); // 上一笔 up 丢失时先落笔，防状态卡死
-        try { hwCanvas.setPointerCapture(e.pointerId); } catch (err) {}
-        hwDrawing = true;
-        var p = getHwPoint(e);
-        hwCurrentStroke = [{ x: p.x, y: p.y }];
-        hwCtx.beginPath();
-        hwCtx.moveTo(p.x, p.y);
-    };
-    hwCanvas.onpointermove = function(e) {
-        if (!hwDrawing) return;
-        e.preventDefault();
-        var p = getHwPoint(e);
-        hwCurrentStroke.push({ x: p.x, y: p.y });
-        hwCtx.lineTo(p.x, p.y);
-        hwCtx.stroke();
-    };
-    hwCanvas.onpointerup = hwEndStroke;
-    hwCanvas.onpointercancel = hwEndStroke;
-    // 弹窗期间锁住 body 滚动（防止弹窗后面的编辑器页面跟着滚）
     document.body.style.overflow = 'hidden';
+    var btn = document.getElementById('hwInsertBtn');
+    if (btn) { btn.disabled = false; btn.textContent = '插入所有页面'; }
 }
-function hwEndStroke(e) {
-    if (e && e.pointerId !== undefined) { try { hwCanvas.releasePointerCapture(e.pointerId); } catch (err) {} }
-    if (hwDrawing) {
-        hwStrokes.push({ color: hwCtx.strokeStyle, width: hwCtx.lineWidth, points: hwCurrentStroke });
-        hwRedoStrokes = [];
-        hwDrawing = false;
+function closeHandwrite() {
+    document.getElementById('hwModal').classList.remove('active');
+    document.body.style.overflow = '';
+    if (hwFrame) hwFrame.src = 'about:blank';
+    var btn = document.getElementById('hwInsertBtn');
+    if (btn) { btn.disabled = false; btn.textContent = '插入所有页面'; }
+}
+function dataUrlToBlob(dataUrl) {
+    try {
+        var parts = String(dataUrl).split(',');
+        var mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/png';
+        var binary = atob(parts[1]);
+        var len = binary.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+    } catch (e) {
+        return null;
     }
 }
-function getHwPoint(e) {
-    var r = hwCanvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-}
-function setPenColor(c) {
-    hwCtx.strokeStyle = c;
-    document.querySelectorAll('.hw-tools button[id^=clr]').forEach(function(b) { b.classList.remove('active'); });
-    var id = 'clr' + (c === '#000000' ? 'Black' : c === '#e53935' ? 'Red' : c === '#2d5da1' ? 'Blue' : '');
-    if (id && document.getElementById(id)) document.getElementById(id).classList.add('active');
-}
-function undoStroke() { if (hwStrokes.length) hwRedoStrokes.push(hwStrokes.pop()); redrawHw(); }
-function redoStroke() { if (hwRedoStrokes.length) hwStrokes.push(hwRedoStrokes.pop()); redrawHw(); }
-function clearHandwrite() {
-    hwCtx.clearRect(0, 0, hwCanvas.width, hwCanvas.height);
-    hwStrokes = [];
-    hwRedoStrokes = [];
-}
-function redrawHw() {
-    hwCtx.clearRect(0, 0, hwCanvas.width, hwCanvas.height);
-    hwStrokes.forEach(function(s) {
-        hwCtx.beginPath();
-        hwCtx.strokeStyle = s.color;
-        hwCtx.lineWidth = s.width;
-        if (s.points.length) {
-            hwCtx.moveTo(s.points[0].x, s.points[0].y);
-            s.points.forEach(function(p) { hwCtx.lineTo(p.x, p.y); });
-            hwCtx.stroke();
+async function insertHandwrite() {
+    var win = hwFrame && hwFrame.contentWindow;
+    var api = win && win.LWHandwrite;
+    if (!api || !api.ready()) {
+        showToast('手写板还在加载，请稍等一下');
+        return;
+    }
+    var images;
+    try { images = api.exportPages() || []; }
+    catch (e) { showToast('手写内容导出失败'); return; }
+    if (!images.length) { showToast('还没有手写内容'); return; }
+
+    var btn = document.getElementById('hwInsertBtn');
+    var oldText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '正在插入 0/' + images.length; }
+    try {
+        var urls = [];
+        for (var i = 0; i < images.length; i++) {
+            var blob = dataUrlToBlob(images[i]);
+            if (!blob) throw new Error('第 ' + (i + 1) + ' 页图片生成失败');
+            var file = blob;
+            try { file = new File([blob], 'handwriting-' + (i + 1) + '.png', { type: 'image/png' }); } catch (e) {}
+            urls.push(await uploadHistoryImage(file));
+            if (btn) btn.textContent = '正在插入 ' + (i + 1) + '/' + images.length;
         }
-    });
-}
-function closeHandwrite() { document.getElementById('hwModal').classList.remove('active'); document.body.style.overflow = ''; }
-function insertHandwrite() {
-    hwCanvas.toBlob(async function(blob) {
-        if (!blob) { showToast('手写图片生成失败'); return; }
-        try {
-            var url = await uploadHistoryImage(blob);
-            var range = quill.getSelection(true);
-            quill.insertEmbed(range.index, 'image', url);
-            quill.setSelection(range.index + 1);
-            hwCtx.clearRect(0, 0, hwCanvas.width, hwCanvas.height);
-            hwStrokes = [];
-            hwRedoStrokes = [];
-            closeHandwrite();
-            hasUnsavedChanges = true;
-            updateUnsavedDot();
-        } catch (e) {
-            showToast(e.message || '手写图片上传失败');
+        var range = quill.getSelection(true) || { index: quill.getLength() };
+        var idx = range.index;
+        for (var j = 0; j < urls.length; j++) {
+            quill.insertEmbed(idx, 'image', urls[j]);
+            idx += 1;
+            quill.insertText(idx, '\n', 'user');
+            idx += 1;
         }
-    }, 'image/png');
+        quill.setSelection(idx, 0);
+        closeHandwrite();
+        hasUnsavedChanges = true;
+        updateUnsavedDot();
+        showToast(urls.length > 1 ? '已插入 ' + urls.length + ' 页手写' : '已插入手写', 'success');
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = oldText; }
+        showToast(e.message || '手写图片上传失败');
+    }
 }
 
 initEditor();
