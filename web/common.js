@@ -125,8 +125,14 @@ function escHtml(s) {
 }
 
 // ---------- 单词卡片跑马灯初始化 ----------
+// 1000+ 词时不要对全部卡片做 scrollWidth/clientWidth 测量：
+// 只初始化视口附近的卡片，其余交给 IntersectionObserver 在滚动进入时处理。
 function initMarquee() {
-    document.querySelectorAll('.word-card').forEach(card => initMarqueeFor(card));
+    var vh = window.innerHeight || document.documentElement.clientHeight || 800;
+    document.querySelectorAll('.word-card').forEach(function(card) {
+        var r = card.getBoundingClientRect();
+        if (r.bottom > -240 && r.top < vh + 240) initMarqueeFor(card);
+    });
 }
 
 // 单张卡片跑马灯测量（供 content-visibility 下卡片进入视口时调用）

@@ -1056,7 +1056,7 @@ PROMPT;
          * persistent=true 时加持久定位高亮（locate-highlight），直到用户操作清除；
          * 否则为短暂高亮（highlight，1.5s 后自动消失）。
          */
-        function scrollCardToCenter(card, persistent) {
+        function scrollCardToCenter(card, persistent, instant) {
             if (!card) return;
             var content = document.getElementById('contentWrap');
             // #contentWrap 是页面唯一滚动容器；无条件优先，避免首屏尚未溢出时误用 body（overflow:hidden → 定位无效）
@@ -1068,18 +1068,23 @@ PROMPT;
             var sRect = scroller.getBoundingClientRect();
             var target = scroller.scrollTop + (rect.top - sRect.top) - scroller.clientHeight / 2 + rect.height / 2;
             target = Math.max(0, Math.min(target, scroller.scrollHeight - scroller.clientHeight));
-            var dist = Math.abs(target - scroller.scrollTop);
-            try {
-                if (dist > scroller.clientHeight * 1.5) {
-                    // 远距离定位：长距离 smooth 滚动中间会短暂空白（浏览器跟不上渲染）。
-                    // 先瞬时跳到目标上方一屏，再平滑滚完最后一段，视觉上几乎无感且不闪白。
-                    scroller.scrollTop = Math.max(0, target - scroller.clientHeight);
-                    scroller.scrollTo({ top: target, behavior: 'smooth' });
-                } else {
-                    scroller.scrollTo({ top: target, behavior: 'smooth' });
-                }
-            } catch (e) {
+            if (instant) {
+                // 首次进入/搜索定位：直接跳到目标，避免 1000+ 词时长距离 smooth 滚动耗时 2-3 秒。
                 scroller.scrollTop = target;
+            } else {
+                var dist = Math.abs(target - scroller.scrollTop);
+                try {
+                    if (dist > scroller.clientHeight * 1.5) {
+                        // 远距离定位：长距离 smooth 滚动中间会短暂空白（浏览器跟不上渲染）。
+                        // 先瞬时跳到目标上方一屏，再平滑滚完最后一段，视觉上几乎无感且不闪白。
+                        scroller.scrollTop = Math.max(0, target - scroller.clientHeight);
+                        scroller.scrollTo({ top: target, behavior: 'smooth' });
+                    } else {
+                        scroller.scrollTo({ top: target, behavior: 'smooth' });
+                    }
+                } catch (e) {
+                    scroller.scrollTop = target;
+                }
             }
             if (persistent) {
                 removeLocateHighlight();
@@ -1710,13 +1715,13 @@ PROMPT;
             const lid = lastIds[tab];
             if (lid) {
                 const c = cardOf(lid);
-                if (c) { setTimeout(() => scrollCardToCenter(c, true), 50); return; }
+                if (c) { setTimeout(() => scrollCardToCenter(c, true, true), 50); return; }
             }
             const li = lastPositions[tab];
             if (li >= 0) {
                 const sel = tab === 'word' ? '.word-card' : (tab === 'sentence' ? '.sentence-card' : '.essay-card');
                 const c = document.querySelector(sel + '[data-index="' + li + '"]');
-                if (c) setTimeout(() => scrollCardToCenter(c, true), 50);
+                if (c) setTimeout(() => scrollCardToCenter(c, true, true), 50);
             }
         }
 
@@ -1729,7 +1734,7 @@ PROMPT;
                 const t = it ? itemType(it) : 'word';
                 if (t !== currentTab) switchTab(t);
                 const hc = cardOf(highlightId);
-                if (hc) setTimeout(() => scrollCardToCenter(hc, true), 50);
+                if (hc) setTimeout(() => scrollCardToCenter(hc, true, true), 50);
                 return;
             }
             const ri = localStorage.getItem('recreate_word_ids');
@@ -1743,7 +1748,7 @@ PROMPT;
                     const firstIt = itemById(ids[0]);
                     if (firstIt && itemType(firstIt) !== currentTab) switchTab(itemType(firstIt), true);
                     const first = cardOf(ids[0]);
-                    if (first) setTimeout(() => scrollCardToCenter(first, true), 50);
+                    if (first) setTimeout(() => scrollCardToCenter(first, true, true), 50);
                     if (selectedIds.size > 0) showToast('已选择 ' + selectedIds.size + ' 个，可直接创建任务', 'success');
                 } catch (e) {}
                 return;
@@ -1766,7 +1771,7 @@ PROMPT;
         function relocalizeAfterLayout() {
             initMarquee(); initKbMarquee();
             const hl = document.querySelector('.locate-highlight');
-            if (hl) { setTimeout(() => { scrollCardToCenter(hl, true); }, 80); return; }
+            if (hl) { setTimeout(() => { scrollCardToCenter(hl, true, true); }, 80); return; }
             if (userInteracted) return;
             // 首屏因未溢出/字体未就绪导致首次定位未生效时，补一次定位（搜索高亮场景不覆盖）
             if (!new URLSearchParams(location.search).get('highlight')) locateForTab(currentTab);
