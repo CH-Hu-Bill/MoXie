@@ -7,7 +7,6 @@
     <title>人生重开模拟器</title>
     <link id="themeLink" rel="stylesheet" href="view/light.css">
     <link rel="stylesheet" href="view/landscape-fix.css">
-    <script src="vendor/jquery.min.js"></script>
 </head>
 <body style="margin: 0; height: 100%">
   <div class="banners-container">
@@ -30,26 +29,48 @@
     </div>
   </div>
   <div id="lifeBootError" style="display:none;position:fixed;inset:0;z-index:99;align-items:center;justify-content:center;background:#17171d;color:#eee;font-family:sans-serif;padding:24px;text-align:center;">
-    <div>
+    <div style="max-width:680px;width:100%;">
       <p style="font-size:18px;margin:0 0 12px;">游戏脚本没有加载成功</p>
-      <p style="font-size:13px;line-height:1.7;color:#aaa;margin:0 0 16px;">请刷新页面；如果仍然空白，请确认服务器上有<br><code style="color:#e8c06a;">web/games/life-restart/dist/bundle.js</code></p>
+      <p style="font-size:13px;line-height:1.7;color:#aaa;margin:0 0 12px;">请先按 Ctrl + F5 强制刷新。仍然空白时，把下面的错误信息发给管理员。</p>
+      <pre id="lifeBootDetail" style="max-height:180px;overflow:auto;text-align:left;white-space:pre-wrap;word-break:break-all;background:#0e0e13;border:1px solid #333;border-radius:4px;padding:10px;color:#ffb4a8;font-size:11px;line-height:1.5;margin:0 0 14px;"></pre>
       <button type="button" onclick="location.reload()" style="padding:8px 18px;border:1px solid #777;border-radius:4px;background:#2a2a33;color:#fff;font-size:14px;">刷新重试</button>
     </div>
   </div>
-  <script src="dist/bundle.js?v=2"></script>
   <script>
     (function () {
-      var timer = setTimeout(showBootError, 6000);
-      function showBootError() {
+      var detail = document.getElementById('lifeBootDetail');
+      var shown = false;
+      function addDetail(text) {
+        if (!detail) return;
+        detail.textContent += (detail.textContent ? '\n' : '') + text;
+      }
+      function showBootError(text) {
         if (window.__lifeLoaded) return;
+        if (text) addDetail(text);
         var el = document.getElementById('lifeBootError');
         if (el) el.style.display = 'flex';
+        shown = true;
       }
-      window.addEventListener('error', function () {
-        clearTimeout(timer);
-        setTimeout(showBootError, 300);
+      window.addEventListener('error', function (e) {
+        if (e && e.target && e.target !== window) {
+          var tag = e.target.tagName || '';
+          var url = e.target.src || e.target.href || '';
+          showBootError('资源加载失败：' + tag + ' ' + url);
+        } else {
+          showBootError('脚本错误：' + (e.message || '未知错误') + '\n位置：' + (e.filename || '') + ':' + (e.lineno || 0));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e && e.reason ? (e.reason.stack || e.reason.message || String(e.reason)) : '未知 Promise 错误';
+        showBootError('Promise 错误：' + reason);
       });
+      setTimeout(function () {
+        if (!window.__lifeLoaded && !shown) {
+          showBootError('脚本已请求，但 8 秒内没有完成初始化。请检查 dist/bundle.js 是否可访问、浏览器 Console 是否有报错。');
+        }
+      }, 8000);
     })();
   </script>
+  <script src="dist/bundle.js?v=3"></script>
 </body>
 </html>
