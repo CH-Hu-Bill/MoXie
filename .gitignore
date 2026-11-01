@@ -49,6 +49,8 @@ app/.env.local
 node_modules/
 dist/
 .npm/
+!web/games/life-restart/dist/
+!web/games/life-restart/dist/bundle.js
 
 # ── 编辑器 / IDE / 操作系统 ──
 .vscode/
