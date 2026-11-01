@@ -29,6 +29,27 @@
       </div>
     </div>
   </div>
-  <script type="module" src="src/index.js"></script>
+  <div id="lifeBootError" style="display:none;position:fixed;inset:0;z-index:99;align-items:center;justify-content:center;background:#17171d;color:#eee;font-family:sans-serif;padding:24px;text-align:center;">
+    <div>
+      <p style="font-size:18px;margin:0 0 12px;">游戏脚本没有加载成功</p>
+      <p style="font-size:13px;line-height:1.7;color:#aaa;margin:0 0 16px;">请刷新页面；如果仍然空白，请确认服务器上有<br><code style="color:#e8c06a;">web/games/life-restart/dist/bundle.js</code></p>
+      <button type="button" onclick="location.reload()" style="padding:8px 18px;border:1px solid #777;border-radius:4px;background:#2a2a33;color:#fff;font-size:14px;">刷新重试</button>
+    </div>
+  </div>
+  <script src="dist/bundle.js?v=2"></script>
+  <script>
+    (function () {
+      var timer = setTimeout(showBootError, 6000);
+      function showBootError() {
+        if (window.__lifeLoaded) return;
+        var el = document.getElementById('lifeBootError');
+        if (el) el.style.display = 'flex';
+      }
+      window.addEventListener('error', function () {
+        clearTimeout(timer);
+        setTimeout(showBootError, 300);
+      });
+    })();
+  </script>
 </body>
 </html>
