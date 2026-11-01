@@ -11,3 +11,4 @@
 - `data/*.json` 改名为 `data/*.txt`：内容仍是 JSON，但 ListenWrite 的本地路由会拦截 `.json` 直链，改名后才能被游戏读取。
 - 去掉 GitHub / Discord 外链、Google Fonts 外链、Service Worker 注册和 PWA manifest，保证离线运行。
 - 主题 CSS 改为 `view/light.css`、`view/dark.css` 的相对路径，适配 `game.php` 的 iframe。
+- 新增 `view/landscape-fix.css`：横屏且高度不足时重排天赋抽卡、属性分配、人生轨迹和总结页，避免列表被压扁或遮挡。

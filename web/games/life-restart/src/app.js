@@ -494,6 +494,7 @@ class App{
     switch(page) {
         const p = this.#pages[page];
         if(!p) return;
+        document.body.dataset.page = page;
         $('#main').detach();
         p.clear();
         p.page.appendTo('body');
