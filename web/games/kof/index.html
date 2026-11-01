@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>拳皇</title>
+    <link rel="stylesheet" href="./static/css/base.css">
+    <script src="./static/js/jquery-3.3.1.min.js"></script>
+</head>
+<body>
+<div class="kof-shell">
+    <div class="kof-stage" id="kofStage">
+        <div id="kof"></div>
+    </div>
+
+    <div class="kof-dock">
+        <div class="kof-pad kof-pad-p1" aria-label="玩家一控制">
+            <button type="button" class="pad-btn jump" data-key="w" aria-label="玩家一跳跃">跳</button>
+            <button type="button" class="pad-btn punch" data-key=" " aria-label="玩家一拳">拳</button>
+            <button type="button" class="pad-btn move" data-key="a" aria-label="玩家一向左">←</button>
+            <button type="button" class="pad-btn move" data-key="d" aria-label="玩家一向右">→</button>
+        </div>
+
+        <div class="kof-dock-center">
+            <span class="kof-vs">VS</span>
+            <button type="button" class="kof-restart" id="kofRestart">重开</button>
+            <span class="kof-rotate">横屏更清楚</span>
+        </div>
+
+        <div class="kof-pad kof-pad-p2" aria-label="玩家二控制">
+            <button type="button" class="pad-btn jump" data-key="ArrowUp" aria-label="玩家二跳跃">跳</button>
+            <button type="button" class="pad-btn punch" data-key="Enter" aria-label="玩家二拳">拳</button>
+            <button type="button" class="pad-btn move" data-key="ArrowLeft" aria-label="玩家二向左">←</button>
+            <button type="button" class="pad-btn move" data-key="ArrowRight" aria-label="玩家二向右">→</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { KOF } from './static/js/base.js';
+
+    let kof = new KOF('kof');
+    window.__kof = kof;
+</script>
+<script>
+(function () {
+    var stage = document.getElementById('kofStage');
+    var kofEl = document.getElementById('kof');
+    var ratio = 1280 / 700;
+
+    function fitStage() {
+        if (!stage || !kofEl) return;
+        var w = stage.clientWidth;
+        var h = stage.clientHeight;
+        if (!w || !h) return;
+        if (w / h > ratio) w = h * ratio;
+        else h = w / ratio;
+        kofEl.style.width = Math.floor(w) + 'px';
+        kofEl.style.height = Math.floor(h) + 'px';
+    }
+    window.addEventListener('resize', fitStage);
+    window.addEventListener('orientationchange', function () { setTimeout(fitStage, 120); });
+    fitStage();
+
+    function setKey(key, down) {
+        var kof = window.__kof;
+        if (!kof || !kof.game_map || !kof.game_map.controller) return;
+        var keys = kof.game_map.controller.pressed_keys;
+        if (down) keys.add(key);
+        else keys.delete(key);
+    }
+    function clearKeys() {
+        var kof = window.__kof;
+        if (!kof || !kof.game_map || !kof.game_map.controller) return;
+        kof.game_map.controller.pressed_keys.clear();
+    }
+
+    document.querySelectorAll('.pad-btn[data-key]').forEach(function (btn) {
+        var key = btn.getAttribute('data-key');
+        function down(e) {
+            e.preventDefault();
+            if (btn.setPointerCapture && e.pointerId !== undefined) {
+                try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+            }
+            btn.classList.add('is-down');
+            setKey(key, true);
+        }
+        function up(e) {
+            if (e) e.preventDefault();
+            btn.classList.remove('is-down');
+            setKey(key, false);
+        }
+        btn.addEventListener('pointerdown', down);
+        btn.addEventListener('pointerup', up);
+        btn.addEventListener('pointercancel', up);
+        btn.addEventListener('lostpointercapture', up);
+        btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+        btn.addEventListener('dragstart', function (e) { e.preventDefault(); });
+    });
+    window.addEventListener('blur', function () {
+        document.querySelectorAll('.pad-btn.is-down').forEach(function (b) { b.classList.remove('is-down'); });
+        clearKeys();
+    });
+
+    var restart = document.getElementById('kofRestart');
+    if (restart) restart.addEventListener('click', function () { location.reload(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>人生模拟器 · Life Simulator</title>
+<meta name="description" content="随机天赋，自由加点，从出生到终老，体验千百种人生可能。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎲</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="bg-glow glow-1"></div>
+<div class="bg-glow glow-2"></div>
+<div class="bg-glow glow-3"></div>
+
+<main id="app">
+
+  <!-- ① 标题界面 -->
+  <section id="screen-title" class="screen active">
+    <div class="title-card glass">
+      <img src="img/hero.jpg" alt="人生之路" class="hero-banner">
+      <h1 class="game-title">人生模拟器</h1>
+      <p class="subtitle">一念之间 · 人生百态</p>
+      <p class="desc">随机抽取天赋，自由分配属性，从呱呱坠地到生命终点，<br>体验千百种截然不同的人生可能。</p>
+      <div id="mode-switch" class="mode-switch">
+        <button class="mode-card" data-mode="raise">🌱 养成模式<span>每年自主安排，亲手养大自己</span></button>
+        <button class="mode-card" data-mode="casual">😌 休闲模式<span>自动推演人生，静观起伏</span></button>
+      </div>
+      <button id="btn-start" class="btn btn-primary btn-lg">开始新人生</button>
+      <div class="toolbar center">
+        <button id="btn-import" class="btn btn-ghost">📥 导入模板码</button>
+      </div>
+      <div id="ach-count" class="ach-count"></div>
+    </div>
+  </section>
+
+  <!-- ② 天赋抽取 -->
+  <section id="screen-talent" class="screen">
+    <div class="panel glass">
+      <h2 class="panel-title">天赋抽取 <span class="hint">最多可选择 3 个天赋</span></h2>
+      <div id="talent-list" class="talent-grid"></div>
+      <div class="toolbar center">
+        <button id="btn-reroll" class="btn btn-ghost">🔄 重新抽取</button>
+        <button id="btn-talent-ok" class="btn btn-primary" disabled>确认天赋 (0/3)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 属性分配 -->
+  <section id="screen-attr" class="screen">
+    <div class="panel glass">
+      <h2 class="panel-title">分配属性点 <span id="pts-left" class="hint badge-pts">剩余 20 点</span></h2>
+      <p class="panel-sub">每项 0 ~ 10 点，剩余点数将转化为初始快乐值加成。家境会影响起步资金与部分童年机遇。</p>
+      <div id="attr-list" class="attr-panel"></div>
+      <div class="toolbar center">
+        <button id="btn-attr-back" class="btn btn-ghost">← 重选天赋</button>
+        <button id="btn-export" class="btn btn-ghost">📤 导出模板码</button>
+        <button id="btn-begin" class="btn btn-primary btn-lg">开启人生 ✨</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ 人生进行 · 立绘舞台 -->
+  <section id="screen-life" class="screen">
+    <div id="life-stage" class="life-stage stage-baby">
+      <header class="stage-hud">
+        <div class="hud-age"><span id="age-num">0</span><small>岁</small><em id="stage-label">襁褓</em></div>
+        <div id="stat-bars" class="hud-stats"></div>
+        <div class="hud-side">
+          <span class="hud-money" id="val-mo">0 元</span>
+          <button id="btn-diary" class="icon-btn" type="button">📔</button>
+        </div>
+      </header>
+
+      <div id="char-zone" class="char-zone">
+        <div id="bubble" class="bubble hidden"></div>
+        <img id="char-sprite" class="char-sprite" src="img/char_baby.png" alt="我的小孩">
+        <div class="char-shadow"></div>
+      </div>
+
+      <div id="year-feed" class="year-feed"></div>
+      <div id="fx-layer" class="fx-layer"></div>
+    </div>
+
+    <footer class="action-bar">
+      <div id="action-grid" class="action-grid hidden"></div>
+      <div id="casual-bar" class="casual-bar hidden">
+        <button id="btn-next" class="btn btn-primary btn-lg">下一年 ▶</button>
+        <button id="btn-auto" class="btn btn-ghost">⏩ 自动播放</button>
+      </div>
+    </footer>
+
+    <div id="diary-mask" class="diary-mask hidden"></div>
+    <aside id="diary-drawer" class="diary-drawer">
+      <div class="diary-head">
+        <span>📔 成长日记</span>
+        <button id="btn-diary-close" class="icon-btn" type="button">✕</button>
+      </div>
+      <div id="life-log" class="life-log"></div>
+    </aside>
+
+    <div id="choice-modal" class="choice-modal-wrap hidden">
+      <div id="choice-box" class="choice-modal"></div>
+    </div>
+  </section>
+
+  <!-- ⑤ 人生总结 -->
+  <section id="screen-summary" class="screen">
+    <div class="panel glass" id="summary-panel"></div>
+  </section>
+
+</main>
+
+<div id="toast-wrap"></div>
+
+<div id="modal-wrap" class="modal-wrap hidden">
+  <div class="modal glass">
+    <div id="modal-body"></div>
+    <button id="modal-close" class="btn btn-ghost">关闭</button>
+  </div>
+</div>
+
+<script src="js/data/talents.js"></script>
+<script src="js/data/achievements.js"></script>
+<script src="js/data/events/childhood.js"></script>
+<script src="js/data/events/school.js"></script>
+<script src="js/data/events/career.js"></script>
+<script src="js/data/events/senior.js"></script>
+<script src="js/data/events/special.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
