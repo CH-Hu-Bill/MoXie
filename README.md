@@ -57,7 +57,8 @@
 │   ├── update.bat / update.ps1   # Windows 一键更新
 │   ├── uninstall.bat             # 移除开机自启
 │   ├── run.bat / run-hidden.vbs  # 手动 / 隐藏启动服务
-│   └── dev.sh                    # 开发机（Linux/macOS）一键启动
+│   ├── dev.sh                    # 开发机（Linux/macOS/Termux）启动/停止
+│   └── moxie                     # 快捷命令包装（默认后台启动）
 ├── .github/workflows/            # CI: APK 构建发布(build.yml) + Windows 安装脚本测试(install-windows.yml)
 └── LICENSE
 ```
@@ -71,11 +72,29 @@
 
 ## 快速开始
 
-### 方式一：开发机（Linux / macOS）
+### 方式一：开发机（Linux / macOS / Termux）
 
 ```bash
-./scripts/dev.sh    # 监听 0.0.0.0:8000，自动打印内网访问地址
+./scripts/dev.sh          # 前台启动，Ctrl+C 停止
+./scripts/dev.sh start    # 后台启动，并打印内网访问地址
+./scripts/dev.sh status   # 查看状态
+./scripts/dev.sh log      # 查看日志，log -f 持续跟随
+./scripts/dev.sh stop     # 停止服务
+./scripts/dev.sh restart  # 重启服务
 # 浏览器打开 http://127.0.0.1:8000 或 http://<内网IP>:8000
+```
+
+也可以把快捷命令装进 `PATH`，以后直接使用 `moxie`：
+
+```bash
+mkdir -p ~/.local/bin
+ln -sf "$PWD/scripts/moxie" ~/.local/bin/moxie
+
+moxie            # 后台启动（已在运行则显示地址）
+moxie status
+moxie log
+moxie stop
+moxie restart
 ```
 
 首次会在 `web/inc/config.php` 生成本地配置（已被 gitignore）。

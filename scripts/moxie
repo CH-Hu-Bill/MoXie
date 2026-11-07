@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# MoXie 快捷命令：默认后台启动网站服务。
+#   moxie            = 后台启动（已在运行则显示地址）
+#   moxie status     = 查看状态
+#   moxie log        = 查看日志
+#   moxie stop       = 停止
+#   moxie restart    = 重启
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+
+if [ "$#" -eq 0 ]; then
+    set -- start
+fi
+
+exec "$SCRIPT_DIR/dev.sh" "$@"

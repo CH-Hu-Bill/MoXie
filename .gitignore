@@ -49,6 +49,7 @@ app/.env.local
 node_modules/
 dist/
 .npm/
+.run/
 !web/games/life-restart/dist/
 !web/games/life-restart/dist/bundle.js
 
