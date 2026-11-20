@@ -350,7 +350,7 @@ if ($action === 'get_announcements') {
 
 if ($action === 'get_csrf_token') {
     list($userId, $authUser, $tokenHash) = appRequireAuth();
-    if (session_status() === PHP_SESSION_NONE) @session_start();
+    lwStartSession();
     $csrf = bin2hex(random_bytes(32));
     $_SESSION['app_csrf_' . $userId] = $csrf;
     appJson(['success' => true, 'data' => ['csrf_token' => $csrf]]);

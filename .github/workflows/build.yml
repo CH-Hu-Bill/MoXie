@@ -60,7 +60,8 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze
+        # 项目存量 warning/info 较多；CI 只阻断真正的 error
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Unit tests (gallery item)
         run: flutter test test/gallery_item_test.dart

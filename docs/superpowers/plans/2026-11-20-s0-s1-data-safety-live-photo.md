@@ -967,6 +967,12 @@ git commit -m "chore(app): 1.3.0 实况照片测试包"
 
 ---
 
+## 执行记录
+
+- 2026-11-20：S0 Task 1-7 完成并提交；PHP 测试 32 项检查通过；本机 HTTP/HTTPS 双入口验证；后台管理员密码已轮换（不在仓库记录）。
+- 2026-11-20：S1 Task 8-13 代码完成；Web 端用 fixture 验证 `motion_sample.jpg` 自动提取 MP4 并写入 `type=live`；APP 1.3.0 测试包走 GitHub Actions artifact。
+- 2026-11-20：用户确认公网采用方案 B（支持 HTTP，后台警告），代码保持 HTTP/HTTPS 双兼容。
+
 ## 执行方式
 
 - 用户已选择“分步完成、逐个验收”。本计划按 **S0（Task 1-7）→ 验收 → S1（Task 8-14）→ 验收** 执行。
