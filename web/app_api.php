@@ -4,6 +4,7 @@ date_default_timezone_set('Asia/Shanghai');
 
 require_once 'inc/db.php';
 require_once 'inc/history.php';
+require_once 'inc/security.php';
 $config = require 'inc/config.php';
 
 $allowedOrigins = $config['allowed_origins'] ?? [];
