@@ -2,7 +2,7 @@
 
 > 更新日期：2026-11-20
 > 当前分支：`feat/2.0`（**尚未合并到 `main`**）
-> 当前版本：Web **2.0.2**（本地工作树含 `01d214e` 状态接口修复）、APP **2.0.0**
+> 当前版本：Web **2.0.3**、APP **2.0.0**
 > 沟通语言：中文。先读本文件 + `docs/superpowers/specs/2026-11-20-v2-design.md` + 两份 plan。
 
 ---
@@ -39,11 +39,12 @@
 | Web | `web-v2.0.0` | 首个 2.0 源码包 |
 | Web | `web-v2.0.1` | 一键更新初版 |
 | Web | `web-v2.0.2` | 精简更新包 17.4 MB + 超时/CA/离线 CLI |
-| 本地 Web | 2.0.2 + `01d214e` | 比 tag `web-v2.0.2` 多一个状态接口鉴权修复 |
+| Web | `web-v2.0.3` | 2.0.2 + `01d214e` 状态接口鉴权；**当前最新，部署用这个** |
+| 本地 Web | 2.0.3 | 与 tag `web-v2.0.3` 一致 |
 
 `main` 仍是旧版本（`51bce3c`）；**所有 2.0 改动都在 `feat/2.0`**。下一位 Agent 先 `git switch feat/2.0 && git pull`，确认无误后再合并到 `main`。
 
-> 注意：`web-v2.0.2` 的 Release zip **不包含** `01d214e`（`update_status.php` 管理员会话校验）。若直接部署 2.0.2，`/update_status.php` 仍可匿名读状态（含本机备份路径）。建议下一位 Agent 发 **web-v2.0.3** 把该修复带上，或手动限制该端点。
+> 注意：`web-v2.0.2` 的 Release zip **不包含** `01d214e`（`update_status.php` 管理员会话校验），直接部署 2.0.2 会让该端点匿名可读（含本机备份路径）。**2026-11-20 已发 `web-v2.0.3` 带上该修复，部署请用 2.0.3。**
 
 ---
 
@@ -57,6 +58,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 stop
 ```
 
 - 默认地址：`http://127.0.0.1:8000`，内网 `http://<本机IP>:8000`（当前示例 `192.168.12.164`）。
+- 若 PowerShell 报 `已添加项。字典中的关键字:“HTTPS_PROXY”所添加的关键字:“https_proxy”`，是本机环境同时存在两种大小写的代理变量；在同一会话先执行 `$env:HTTPS_PROXY=$null; $env:https_proxy=$null; $env:HTTP_PROXY=$null; $env:http_proxy=$null` 再启动即可。bash 里用 `curl --noproxy '*'` 访问本地。
 - 后台：`/admin.php`；当前管理员密码由所有者保管，不在仓库。登录失败可用 `php scripts/rotate-secrets.php` 轮换（会同时换 `app_secret`，班级登录 Cookie 失效，APP token 不受影响）。
 - `dev.ps1` 会自动用 `-d extension=...` 开 `curl/gd/mbstring/exif/openssl/zip/fileinfo`；**直接跑 PATH 里的 `php` 默认没有 gd/zip**。
 
@@ -214,7 +216,7 @@ gh run watch <run-id> --exit-status
 
 1. **实况照片未真机验收**：用户手机不支持动态照片。需要一台支持 Motion Photo 的 Android 设备，或提供真实 Motion Photo JPEG（XMP `GCamera:MicroVideoOffset`）测试。`motion_photos` 检测/上传代码只过了 analyze/构建。
 2. **一键更新网络未完整演练**：开发机 GitHub 下载 ~25 KB/s，37 MB 包会长时间占维护模式；已改 17.4 MB 精简包 + 1800s 超时。用户网络下需再验一次；失败可用 CLI `apply_update.php`。
-3. **`update_status.php` 鉴权修复在 `01d214e`，未进 `web-v2.0.2` tag**：部署 2.0.2 前需发 2.0.3 或手动应用；否则状态接口匿名可读（含本机备份路径）。
+3. ~~**`update_status.php` 鉴权修复在 `01d214e`，未进 `web-v2.0.2` tag**~~：已由 `web-v2.0.3` 解决（2026-11-20 发布，匿名访问返回 403）；部署 2.0.2 仍会在旧包上复现，务必用 2.0.3。
 4. **Flutter/Gradle 版本**：Flutter 3.50.1 要求 Gradle >=9.3.1；项目 9.1.0，靠 `--android-skip-build-dependency-validation` 出包。建议升级 Gradle 到 9.3.1 后移除 flag，并固定 Flutter 版本/提交 `pubspec.lock`。
 5. **`flutter analyze` 存量 warning/info 多**：CI 用 `--no-fatal-warnings --no-fatal-infos`，只阻断 error；不要为了清 warning 大改无关代码。
 6. **`web/data/app_versions.json` 本地不存在**：后台“当前线上版本”可能显示 1.0；`check_version` 会回退到 `LW_MIN_APP_VERSION`（2.0.0）。正式部署建议在后台“发布版本”发布 2.0.0，或创建该文件。
@@ -223,7 +225,7 @@ gh run watch <run-id> --exit-status
 9. **`proc_open` 依赖**：迁移 CLI 用 `proc_open`；PHP-FPM 若禁用，一键更新会失败并保留维护模式。此时用 `web/bin/apply_update.php`（CLI）或手动复制。
 10. **CA bundle**：`web/inc/cacert.pem` 是 Mozilla CA；如 GitHub 证书链变化，更新该文件。
 11. **HTTP 明文**：用户已接受；后台常驻红字警告。若以后切 HTTPS，反代需传 `X-Forwarded-Proto/Host`，且 `trusted_proxies` 只信任 loopback/配置 IP。
-12. **`web-v2.0.2` Release 的 zip 不含 `01d214e`**（见 3）。
+12. ~~**`web-v2.0.2` Release 的 zip 不含 `01d214e`**（见 3）~~：同 3，已由 `web-v2.0.3` 修复。
 13. **旧 fat APK**：`apk-latest` 仍有 `app-release.apk`（1.2.2），下载页不再引用；如介意可删除该 asset。
 14. **本机 `runtime/cloudflared.exe`、`runtime/https-proxy.js`**：测试用，gitignored；`https-proxy.js` 是自签 HTTPS 测试反代，不是生产方案。
 15. **网络**：GitHub push/tag/CI 经常连接重置；命令需重试。`gh` 已登录。
@@ -285,9 +287,9 @@ gh run watch <run-id> --exit-status
 
 - [ ] `git switch feat/2.0 && git pull`；确认 `git status` 只剩用户本地 `HANDOVER.md`/`README.md`/`scripts/dev.ps1`。
 - [ ] 读 `docs/superpowers/specs/2026-11-20-v2-design.md`、`docs/superpowers/plans/2026-11-20-s0-s1-...md`、`docs/superpowers/plans/2026-11-20-s2-...md`、`docs/superpowers/plans/2026-11-20-s2b-...md`。
-- [ ] 启动 `dev.ps1 start -NoThumbs`，确认 `http://127.0.0.1:8000/version.php` 返回 2.0.2（或更新）。
+- [ ] 启动 `dev.ps1 start -NoThumbs`，确认 `http://127.0.0.1:8000/version.php` 返回 2.0.3（或更新）。
 - [ ] 跑 PHP 测试（含 `-d extension=zip`）。
-- [ ] 确认后台可登录、`Web v2.0.2`、“系统更新”卡片可见。
+- [ ] 确认后台可登录、`Web v2.0.3`、“系统更新”卡片可见。
 - [ ] 确认 `web/data/.maintenance` 不存在；`web/data/backups` 只保留需要的备份。
 - [ ] 确认 `web/data/app_versions.json` 是否要发布 2.0.0（否则后台显示 1.0）。
 - [ ] 与用户确认：先做 S3 还是先做 S4（侧边栏）/S5（图集限制）。
@@ -312,5 +314,6 @@ gh run watch <run-id> --exit-status
 - Releases：https://github.com/CH-Hu-Bill/MoXie/releases
 - APP 2.0.0：https://github.com/CH-Hu-Bill/MoXie/releases/tag/app-v2.0.0
 - Web 2.0.2：https://github.com/CH-Hu-Bill/MoXie/releases/tag/web-v2.0.2
+- Web 2.0.3（最新）：https://github.com/CH-Hu-Bill/MoXie/releases/tag/web-v2.0.3
 - 下载页：`http://<本机IP>:8000/download_app.php`
 - 设计文档：`docs/superpowers/specs/2026-11-20-v2-design.md`
