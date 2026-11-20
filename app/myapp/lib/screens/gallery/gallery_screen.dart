@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:motion_photos/motion_photos.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:video_player/video_player.dart';
@@ -25,12 +27,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
   static const _maxBytes = 12582912; // 静态图 12MB
   static const _gifMaxBytes = 16777216; // GIF 动图 16MB
   static const _mp4MaxBytes = 15728640; // MP4 视频 15MB
-  static const _allowedTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-    'image/gif',
-  ];
   static const _allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
   final _api = ApiService();
   final _storage = StorageService();
@@ -175,6 +171,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   _pickAndUploadVideo();
                 },
               ),
+              const SizedBox(height: 10),
+              _UploadMenuTile(
+                icon: Icons.motion_photos_on_outlined,
+                label: '上传实况照片（选原图，保留动图）',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndUploadLive();
+                },
+              ),
             ],
           ),
         ),
@@ -187,10 +192,41 @@ class _GalleryScreenState extends State<GalleryScreen> {
     // 不限制 maxWidth/maxHeight：避免 image_picker 重新采样导致 GIF 动图丢失动画
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
+    await _uploadPickedImage(File(image.path), image.name);
+  }
 
-    final ext = image.name.split('.').last.toLowerCase();
+  /// 兜底：直接选原图文件，确保 motion 元数据不被 image_picker 副本丢掉。
+  Future<void> _pickAndUploadLive() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      allowCompression: false,
+    );
+    final picked = result?.files.single;
+    final path = picked?.path;
+    if (path == null) return;
+    await _uploadPickedImage(File(path), picked!.name, preferLive: true);
+  }
+
+  Future<File?> _extractLiveVideo(String path) async {
+    try {
+      final motion = MotionPhotos(path);
+      if (!await motion.isMotionPhoto()) return null;
+      final video = await motion.getMotionVideoFile();
+      return File(video.path);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _uploadPickedImage(
+    File file,
+    String name, {
+    bool preferLive = false,
+  }) async {
+    final ext = name.split('.').last.toLowerCase();
     final isGif = ext == 'gif';
-    final fileSize = await image.length();
+    final fileSize = await file.length();
     final maxBytes = isGif ? _gifMaxBytes : _maxBytes;
     if (fileSize > maxBytes) {
       if (mounted) {
@@ -202,11 +238,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       }
       return;
     }
-
-    final mimeType = image.mimeType;
-    final typeOk = mimeType != null && _allowedTypes.contains(mimeType);
-    final extOk = _allowedExts.contains(ext);
-    if (!typeOk && !extOk) {
+    if (!_allowedExts.contains(ext)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('仅支持 JPEG、PNG、WebP 或 GIF 格式')),
@@ -215,7 +247,54 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    final descController = TextEditingController();
+    File? liveVideo = await _extractLiveVideo(file.path);
+    if (liveVideo != null) {
+      if (!mounted) return;
+      final useLive = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          scrollable: true,
+          backgroundColor: AppColors.background,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppTheme.wobblyRadius,
+            side: const BorderSide(color: AppColors.border, width: 2),
+          ),
+          title: Text('检测到实况照片', style: AppTheme.headingStyle),
+          content: Text(
+            '这张照片带有动态视频。可以一起上传为实况，也可以只上传静态图。',
+            style: AppTheme.bodyStyle,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('取消', style: AppTheme.bodyStyle),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('仅图片', style: AppTheme.bodyStyle),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('实况上传', style: AppTheme.bodyStyle),
+            ),
+          ],
+        ),
+      );
+      if (useLive == null) return;
+      if (!useLive) liveVideo = null;
+    } else if (preferLive && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未识别到实况视频，将按普通图片上传')),
+      );
+    }
+
+    final desc = await _askDescription('描述这张图片...');
+    if (desc == null || !mounted) return;
+    await _uploadFile(file, desc, liveVideo: liveVideo);
+  }
+
+  Future<String?> _askDescription(String hint) async {
+    final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -227,8 +306,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
         ),
         title: Text('添加描述', style: AppTheme.headingStyle),
         content: TextField(
-          controller: descController,
-          decoration: const InputDecoration(hintText: '描述这张图片...'),
+          controller: controller,
+          decoration: InputDecoration(hintText: hint),
           maxLines: 3,
         ),
         actions: [
@@ -237,15 +316,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
             child: Text('取消', style: AppTheme.bodyStyle),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, descController.text.trim()),
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: Text('上传', style: AppTheme.bodyStyle),
           ),
         ],
       ),
     );
-
-    if (result == null) return;
-    await _uploadFile(File(image.path), result);
+    controller.dispose();
+    return result;
   }
 
   Future<void> _pickAndUploadVideo() async {
@@ -307,7 +385,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     await _uploadFile(File(video.path), result);
   }
 
-  Future<void> _uploadFile(File file, String desc) async {
+  Future<void> _uploadFile(File file, String desc, {File? liveVideo}) async {
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId!;
 
@@ -318,13 +396,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
 
     try {
-      await _api.saveGallery(classId, file, desc);
+      final res = await _api.saveGallery(
+        classId,
+        file,
+        desc,
+        liveVideo: liveVideo,
+      );
       if (mounted) Navigator.pop(context);
       _loadGallery();
+      final data = res['data'] as Map<String, dynamic>?;
+      final warning = (data?['live_warning'] ?? '').toString();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('上传成功')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(warning.isNotEmpty ? warning : '上传成功')),
+        );
       }
     } on ApiException catch (e) {
       if (mounted) Navigator.pop(context);
@@ -472,8 +557,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Expanded(
-                              child: ClipRRect(
-                                borderRadius: const BorderRadius.only(
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: const BorderRadius.only(
                                   topLeft: Radius.circular(18),
                                   topRight: Radius.circular(18),
                                 ),
@@ -509,6 +597,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                           ),
                                         ),
                                       ),
+                                  ),
+                                  if (item.isLive)
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: _LiveBadge(),
+                                    ),
+                                ],
                               ),
                             ),
                             Padding(
@@ -535,6 +631,73 @@ class _GalleryScreenState extends State<GalleryScreen> {
         backgroundColor: AppColors.accent,
         child: const Icon(Icons.add, color: Colors.white),
       ),
+    );
+  }
+}
+
+class _LiveBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.blue,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+      child: const Text(
+        '实况',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveViewer extends StatelessWidget {
+  final GalleryItem item;
+  const _LiveViewer({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        InteractiveViewer(
+          child: CachedNetworkImage(
+            imageUrl: item.imageUrl,
+            fit: BoxFit.contain,
+            placeholder: (_, __) => const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+            errorWidget: (_, __, ___) => const Icon(
+              Icons.broken_image,
+              size: 64,
+              color: AppColors.muted,
+            ),
+          ),
+        ),
+        if (item.liveVideoUrl.isNotEmpty)
+          Material(
+            color: Colors.black45,
+            shape: const CircleBorder(),
+            child: IconButton(
+              iconSize: 42,
+              tooltip: '播放实况',
+              icon: const Icon(Icons.play_arrow, color: Colors.white),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => _VideoViewer(videoUrl: item.liveVideoUrl),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }
@@ -574,6 +737,8 @@ class _GalleryViewerScreen extends StatelessWidget {
               child: Center(
                 child: item.isVideo
                     ? _VideoViewer(videoUrl: item.imageUrl)
+                    : item.isLive
+                    ? _LiveViewer(item: item)
                     : InteractiveViewer(
                         child: Container(
                           decoration: BoxDecoration(

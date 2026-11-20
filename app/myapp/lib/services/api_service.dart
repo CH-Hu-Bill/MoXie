@@ -88,6 +88,42 @@ class ApiService {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> _postWithFiles(
+    String action,
+    Map<String, String> fields,
+    Map<String, File> files,
+  ) async {
+    final uri = Uri.parse(ApiConfig.apiEndpoint);
+    final request = http.MultipartRequest('POST', uri);
+
+    request.fields['action'] = action;
+    fields.forEach((key, value) {
+      request.fields[key] = value;
+    });
+    if (_token != null) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+    for (final entry in files.entries) {
+      final path = entry.value.path;
+      final segments = entry.value.uri.pathSegments;
+      final filename = segments.isNotEmpty
+          ? segments.last
+          : '${entry.key}_${DateTime.now().millisecondsSinceEpoch}';
+      request.files.add(await http.MultipartFile.fromPath(
+        entry.key,
+        path,
+        filename: filename,
+      ));
+    }
+
+    final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 60),
+          onTimeout: () => throw ApiException('上传超时，请重试'),
+        );
+    final response = await http.Response.fromStream(streamedResponse);
+    return _handleResponse(response);
+  }
+
   Map<String, dynamic> _handleResponse(http.Response response) {
     if (response.body.isEmpty) {
       throw ApiException('服务器返回空响应', statusCode: response.statusCode);
@@ -428,19 +464,21 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> saveGallery(
-      String classId, File image, String description) {
-    return _postWithFile(
-      'save_gallery',
-      {
-        'class_id': classId,
-        'description': description,
-      },
-      'image',
-      image,
-      image.uri.pathSegments.isNotEmpty
-          ? image.uri.pathSegments.last
-          : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
-    );
+    String classId,
+    File image,
+    String description, {
+    File? liveVideo,
+  }) {
+    final fields = <String, String>{
+      'class_id': classId,
+      'description': description,
+    };
+    final files = <String, File>{'image': image};
+    if (liveVideo != null) {
+      fields['is_live'] = '1';
+      files['live_video'] = liveVideo;
+    }
+    return _postWithFiles('save_gallery', fields, files);
   }
 
   Future<void> deleteGallery(String classId, String id) {

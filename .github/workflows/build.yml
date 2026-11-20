@@ -1,10 +1,7 @@
 name: Build APK
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'app/myapp/**'
+  # S1 测试阶段：只手动触发，避免测试版覆盖 apk-latest；S2 恢复 push 触发与正式发布
   workflow_dispatch:
 
 permissions:
@@ -43,7 +40,7 @@ jobs:
           class ApiConfig {
             static String baseUrl = '$API_BASE_URL';
             static String get apiEndpoint => '\$baseUrl/app_api.php';
-            static const String appVersion = '1.2.2';
+            static const String appVersion = '1.3.0';
           }
           EOF
           fi
@@ -62,6 +59,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Unit tests (gallery item)
+        run: flutter test test/gallery_item_test.dart
+
       - name: Build APK (release)
         env:
           KEYSTORE_FILE: moxie.jks
@@ -70,7 +73,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: flutter build apk --release
 
+      - name: Upload test APK
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: listenwrite-1.3.0-test
+          path: app/myapp/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
+
       - name: Release APK
+        if: github.event_name != 'workflow_dispatch'
         # 发布到 GitHub Release 而非 Artifact：Release 资产不占 Actions 存储配额
         # （私有仓库免费额度仅 500MB，Artifact 上传常被 "storage quota has been hit" 拦截；
         #  固定 tag=apk-latest 覆盖式发布，保留最新一版 APK，下载入口 = Releases 页）

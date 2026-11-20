@@ -6,6 +6,8 @@ class GalleryItem {
   final String uploadedAt;
   final bool isGif;
   final bool isVideo;
+  final bool isLive;
+  final String liveVideoUrl;
 
   GalleryItem({
     required this.id,
@@ -15,11 +17,14 @@ class GalleryItem {
     this.uploadedAt = '',
     this.isGif = false,
     this.isVideo = false,
+    this.isLive = false,
+    this.liveVideoUrl = '',
   });
 
   factory GalleryItem.fromJson(Map<String, dynamic> json) {
     final type = json['type'] ?? '';
     final imageUrl = json['image_url'] ?? '';
+    final liveVideoUrl = (json['live_video_url'] ?? '').toString();
     return GalleryItem(
       id: json['id'] ?? '',
       imageUrl: imageUrl,
@@ -30,6 +35,8 @@ class GalleryItem {
           type == 'gif' || (imageUrl as String).toLowerCase().contains('.gif'),
       isVideo:
           type == 'mp4' || (imageUrl as String).toLowerCase().contains('.mp4'),
+      isLive: type == 'live' || liveVideoUrl.isNotEmpty,
+      liveVideoUrl: liveVideoUrl,
     );
   }
 
@@ -37,7 +44,10 @@ class GalleryItem {
         'id': id,
         'image_url': imageUrl,
         'thumb_url': thumbUrl,
-        'type': isVideo ? 'mp4' : (isGif ? 'gif' : 'static'),
+        'type': isLive
+            ? 'live'
+            : (isVideo ? 'mp4' : (isGif ? 'gif' : 'static')),
+        'live_video_url': liveVideoUrl,
         'description': description,
         'uploaded_at': uploadedAt,
       };
