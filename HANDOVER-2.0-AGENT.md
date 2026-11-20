@@ -263,6 +263,24 @@ gh run watch <run-id> --exit-status
 
 ---
 
+## 8.1 如果换机器 / 换 Agent（非常重要）
+
+仓库**不包含**运行时数据、配置和 PHP/ffmpeg 运行时。换机器时必须从旧机器复制：
+
+- `web/data/`（`classes.json`、`settings.json`、`announcements.json`、`app_versions.json`、`users/`、`classes/`、`uploads/` 等）
+- `web/inc/config.php`（`admin_password_hash`、`app_secret`；**不要提交**）
+- `runtime/`（便携 PHP + ffmpeg；或在目标机重新运行 `scripts\install.bat`）
+- 可选：`dist/` 里的测试 APK、`offline/` 离线包
+
+同时需要：
+
+- 管理员密码**私下**交给新 Agent（不要写进仓库）；忘记可运行 `php scripts/rotate-secrets.php`。
+- 新机器安装 GitHub CLI 并 `gh auth login`，确认有仓库写权限；Actions Secrets（`API_BASE_URL`、`KEYSTORE_BASE64`、`KEY_STORE_PASS`、`KEY_KEY_PASS`、`KEY_ALIAS`）已在仓库设置里，不要在本地重建 keystore。
+- 新 Agent 先 `git switch feat/2.0 && git pull`，确认 `HANDOVER-2.0-AGENT.md` 在；启动 `dev.ps1 start -NoThumbs`；访问 `/version.php`、`/admin.php`、图集，确认数据在。
+- 如果只换 Agent、不换机器：直接在当前目录继续，先 `dev.ps1 status`，不要重复 `install.bat`。
+
+---
+
 ## 9. 交接检查清单（下一位 Agent 开始前）
 
 - [ ] `git switch feat/2.0 && git pull`；确认 `git status` 只剩用户本地 `HANDOVER.md`/`README.md`/`scripts/dev.ps1`。
