@@ -198,11 +198,21 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   /// 兜底：直接选原图文件，确保 motion 元数据不被 image_picker 副本丢掉。
   Future<void> _pickAndUploadLive() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-      allowCompression: false,
-    );
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        allowCompression: false,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('打开文件选择器失败，请重试')),
+        );
+      }
+      return;
+    }
     if (!mounted) return;
     final picked = result?.files.single;
     final path = picked?.path;
@@ -265,9 +275,29 @@ class _GalleryScreenState extends State<GalleryScreen> {
             side: const BorderSide(color: AppColors.border, width: 2),
           ),
           title: Text('检测到实况照片', style: AppTheme.headingStyle),
-          content: Text(
-            '这张照片带有动态视频。可以一起上传为实况，也可以只上传静态图。',
-            style: AppTheme.bodyStyle,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: AppTheme.wobblyRadius,
+                    child: Image.file(
+                      file,
+                      height: 180,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(top: 8, right: 8, child: _LiveBadge()),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '这张照片带有动态视频。可以一起上传为实况，也可以只上传静态图。',
+                style: AppTheme.bodyStyle,
+              ),
+            ],
           ),
           actions: [
             TextButton(
