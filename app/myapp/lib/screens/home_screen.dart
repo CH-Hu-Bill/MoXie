@@ -86,7 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkVersionGate() async {
-    final info = await context.read<AuthProvider>().checkVersion();
+    final auth = context.read<AuthProvider>();
+    final info = await auth.checkVersion();
     if (!mounted || info == null) return;
     final webVersion = (info['web_version'] ?? '').toString();
     final minWeb = (info['min_web_version'] ?? ApiConfig.minWebVersion).toString();
