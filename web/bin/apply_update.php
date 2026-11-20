@@ -1,7 +1,7 @@
 <?php
 /**
  * 手动/离线更新入口：
- *   php web/bin/apply_update.php --zip=path/to/ListenWrite-web-2.0.2.zip --version=2.0.2 [--sha=<64hex>]
+ *   php web/bin/apply_update.php --zip=path/to/ListenWrite-web-2.0.3.zip --version=2.0.3 [--sha=<64hex>]
  *
  * 与后台一键更新共用同一套备份/迁移/替换/回滚逻辑。
  */
