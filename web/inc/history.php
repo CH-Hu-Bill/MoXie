@@ -334,11 +334,74 @@ function historyExtractImageRefs($content) {
 }
 
 /**
- * 清理该班级史记不再引用的图片文件
- * 扫描 data/classes/{classId}/uploads/ 目录，删除不在任何史记条目引用列表中的图片
+ * 收集所有可能引用上传文件的文件名（史记 + 图集 + 回收站）。
+ * 图集与史记共用 uploads/；只按史记引用清理会误删图集图片。
+ *
+ * @param array $history 史记条目
+ * @param array $gallery 图集条目
+ * @param array $trash 图集回收站条目
+ * @return array filename => true
+ */
+function historyCollectReferencedUploadNames(array $history, array $gallery, array $trash): array {
+    $referenced = [];
+    foreach ($history as $entry) {
+        $content = (string)($entry['content'] ?? '');
+        foreach (historyExtractImageRefs($content) as $file) $referenced[$file] = true;
+    }
+    foreach (array_merge($gallery, $trash) as $item) {
+        if (!is_array($item)) continue;
+        $file = (string)($item['image'] ?? '');
+        if ($file !== '') $referenced[$file] = true;
+        $live = (string)($item['live_video'] ?? '');
+        if ($live !== '') $referenced[$live] = true;
+    }
+    return $referenced;
+}
+
+/**
+ * 删除 uploads 目录中不再被引用的静态图片。
+ * 只处理 32 位 hex 的 jpg/png/webp；GIF/MP4/缩略图不在此处清理。
+ *
+ * @param string $uploadsDir
+ * @param array $referenced
+ * @return array 被删除的文件名
+ */
+function historyPruneUploads(string $uploadsDir, array $referenced): array {
+    if (!is_dir($uploadsDir)) return [];
+    $deleted = [];
+    $items = @scandir($uploadsDir);
+    if ($items === false) return $deleted;
+    foreach ($items as $filename) {
+        if ($filename === '.' || $filename === '..') continue;
+        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp)\z/D', $filename)) continue;
+        if (isset($referenced[$filename])) continue;
+        $path = $uploadsDir . DIRECTORY_SEPARATOR . $filename;
+        if (is_file($path) && @unlink($path)) $deleted[] = $filename;
+    }
+    return $deleted;
+}
+
+/**
+ * 清理该班级史记不再引用的图片文件。
+ * 注意：uploads/ 与图集共用，必须同时检查 gallery/gallery_trash。
  * @param string $classId 班级ID
  * @param string $historyKey 史记数据键 (如 'history')
  */
+function historyCleanupOrphanImages($classId, $historyKey) {
+    $uploadsDir = Database::getUploadsDirectory($classId);
+    if (!is_dir($uploadsDir)) return;
+
+    $history = Database::getClassData($classId, $historyKey);
+    $gallery = Database::getClassData($classId, 'gallery');
+    $trash = Database::getClassData($classId, 'gallery_trash');
+    $referenced = historyCollectReferencedUploadNames(
+        is_array($history) ? $history : [],
+        is_array($gallery) ? $gallery : [],
+        is_array($trash) ? $trash : []
+    );
+    historyPruneUploads($uploadsDir, $referenced);
+}
+
 /**
  * 把 HTML 中的 upload.php?class_id=xxx&file=xxx 图片 URL
  * 转换为 data URI base64 内嵌，用于 HTML 导出和长图导出。
@@ -401,34 +464,6 @@ function historyExtractBlocks($node, &$blocks) {
     // 其他标签当文本
     $text = trim($node->textContent);
     if ($text !== '') $blocks[] = ['type' => 'text', 'text' => $text];
-}
-
-function historyCleanupOrphanImages($classId, $historyKey) {
-    $uploadsDir = Database::getUploadsDirectory($classId);
-    if (!is_dir($uploadsDir)) return;
-
-    // 收集所有史记条目引用的图片
-    $history = Database::getClassData($classId, $historyKey);
-    $referenced = [];
-    foreach ($history as $entry) {
-        $content = (string)($entry['content'] ?? '');
-        foreach (historyExtractImageRefs($content) as $file) {
-            $referenced[$file] = true;
-        }
-    }
-
-    // 扫描目录，删除不再引用的图片文件
-    $items = @scandir($uploadsDir);
-    if ($items === false) return;
-    foreach ($items as $filename) {
-        if ($filename === '.' || $filename === '..') continue;
-        // 只清理已知格式的图片文件
-        if (!preg_match('/\A[a-f0-9]{32}\.(jpg|png|webp)\z/D', $filename)) continue;
-        if (!isset($referenced[$filename])) {
-            $path = $uploadsDir . DIRECTORY_SEPARATOR . $filename;
-            if (is_file($path)) @unlink($path);
-        }
-    }
 }
 
 /**
