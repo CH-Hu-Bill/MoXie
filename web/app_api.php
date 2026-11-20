@@ -23,6 +23,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204);
 require_once 'inc/api.php';
 require_once 'inc/app_auth.php';
 require_once 'inc/ratelimit.php';
+require_once 'inc/app_lib.php';
 
 Database::migrateAppData();
 
@@ -574,7 +575,11 @@ switch ($action) {
         $wrongMap = $user['wrong_words'][$classId] ?? [];
         $list = [];
         foreach ($wrongMap as $wid => $info) if (isset($map[$wid])) {
-            $list[] = array_merge(appWordOut($map[$wid]), ['word_id' => $wid, 'marked_at' => $info['marked_at'] ?? '']);
+            $list[] = array_merge(appWordOut($map[$wid]), [
+                'word_id' => $wid,
+                'marked_at' => $info['marked_at'] ?? '',
+                'is_wrong' => true,
+            ]);
         }
         $total = count($list);
         $page = max(1, (int)($_POST['page'] ?? 1));
@@ -599,15 +604,19 @@ switch ($action) {
         $query = trim(reqPost('query'));
         if ($query === '') appError('参数不全');
         $words = Database::getWords($classId); $map = []; $wordMatches = [];
+        $user = Database::getUser($userId);
+        $wrongMap = $user['wrong_words'][$classId] ?? [];
         foreach ($words as $word) {
             $map[(string)$word['id']] = $word;
             if (mb_stripos($word['word'], $query) !== false || mb_stripos($word['meaning'], $query) !== false) $wordMatches[] = array_merge(appWordOut($word), ['matched' => 'word']);
         }
+        $wordMatches = appApplyWrongFlags($wordMatches, $wrongMap);
         $pending = []; $history = [];
         foreach (Database::getTasks($classId) as $tid => $task) {
             $matched = [];
             foreach (($task['word_ids'] ?? []) as $wid) if (isset($map[$wid]) && (mb_stripos($map[$wid]['word'], $query) !== false || mb_stripos($map[$wid]['meaning'], $query) !== false)) $matched[] = array_merge(appWordOut($map[$wid]), ['matched' => 'word']);
             if (!$matched) continue;
+            $matched = appApplyWrongFlags($matched, $wrongMap);
             $item = ['id' => $task['id'] ?? $tid, 'date' => $task['date'], 'label' => $task['label'] ?? '', 'status' => $task['status'] ?? '', 'matched_words' => $matched, 'matched' => 'word'];
             if (($task['status'] ?? '') === 'pending') { $item['type'] = 'pending_task'; $pending[] = $item; }
             elseif (in_array($task['status'] ?? '', ['completed', 'cancelled'], true)) { $item['type'] = 'history_task'; $history[] = $item; }

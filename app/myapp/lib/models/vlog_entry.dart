@@ -88,6 +88,7 @@ class WordMatch {
   final String pos;
   final String type;
   final String title;
+  final bool isWrong;
 
   WordMatch({
     required this.id,
@@ -96,6 +97,7 @@ class WordMatch {
     this.pos = '',
     this.type = 'word',
     this.title = '',
+    this.isWrong = false,
   });
 
   factory WordMatch.fromJson(Map<String, dynamic> json) {
@@ -107,6 +109,7 @@ class WordMatch {
       pos: json['pos'] ?? '',
       type: (rawType == 'sentence' || rawType == 'essay') ? rawType : 'word',
       title: (json['title'] ?? '').toString(),
+      isWrong: json['is_wrong'] == true,
     );
   }
 }

@@ -94,8 +94,20 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final res = await _api.searchAll(classId, query);
       if (!mounted) return;
+      final result = SearchResult.fromJson(res['data'] as Map<String, dynamic>);
       setState(() {
-        _result = SearchResult.fromJson(res['data'] as Map<String, dynamic>);
+        _wrongWordIds
+          ..clear()
+          ..addAll(result.words.where((w) => w.isWrong).map((w) => w.id))
+          ..addAll(result.pendingTasks
+              .expand((t) => t.matchedWords)
+              .where((w) => w.isWrong)
+              .map((w) => w.id))
+          ..addAll(result.historyTasks
+              .expand((t) => t.matchedWords)
+              .where((w) => w.isWrong)
+              .map((w) => w.id));
+        _result = result;
         _loading = false;
       });
     } catch (e) {
@@ -182,7 +194,7 @@ class _SearchScreenState extends State<SearchScreen> {
       return SentenceCard(
         english: w.word,
         meaning: w.meaning,
-        isWrong: _wrongWordIds.contains(w.id),
+        isWrong: _wrongWordIds.contains(w.id) || w.isWrong,
         highlight: true,
         onToggleWrong: () => _toggleWrong(w),
         onTap: onTap,
@@ -192,7 +204,7 @@ class _SearchScreenState extends State<SearchScreen> {
       return EssayCard(
         english: w.word,
         title: w.title,
-        isWrong: _wrongWordIds.contains(w.id),
+        isWrong: _wrongWordIds.contains(w.id) || w.isWrong,
         highlight: true,
         onToggleWrong: () => _toggleWrong(w),
         onTap: () => Navigator.push(
@@ -216,7 +228,7 @@ class _SearchScreenState extends State<SearchScreen> {
       meaning: w.meaning,
       pos: w.pos,
       highlight: true,
-      isWrong: _wrongWordIds.contains(w.id),
+      isWrong: _wrongWordIds.contains(w.id) || w.isWrong,
       onToggleWrong: () => _toggleWrong(w),
       onTap: onTap,
       classId: auth.currentClassId,

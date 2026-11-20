@@ -438,7 +438,8 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
       final res = await _api.getWrongWords(classId, perPage: 100);
       final data = res['data'] as Map<String, dynamic>;
       final words = (data['words'] as List)
-          .map((w) => Word.fromJson(w as Map<String, dynamic>))
+          .map((w) => Word.fromJson(w as Map<String, dynamic>)
+              .copyWith(isWrong: true))
           .toList();
       if (!mounted) return;
       if (!_sameWordList(_wrongWords, words)) {
