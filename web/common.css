@@ -746,6 +746,8 @@ body {
   max-width: none !important;
   padding: 0 !important;
   height: calc(100vh - 52px);
+  max-height: calc(100vh - 52px);
+  flex: 1 1 auto;
   min-height: 0;
 }
 .sidebar { width: 260px; background: var(--white); border-right: 2px solid var(--pencil); overflow-y: auto; flex-shrink: 0; min-height: 0; }
