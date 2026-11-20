@@ -1054,6 +1054,7 @@ PROMPT;
         }
 
         function showEssayDetail(id) {
+            clearLocateHighlight(true);
             const e = itemById(id); if (!e) return;
             document.getElementById('essayDetailTitle').textContent = e.title || '作文';
             document.getElementById('essayDetailEn').textContent = e.word || '';
@@ -1072,7 +1073,7 @@ PROMPT;
             document.getElementById('essayDetailModal').classList.add('active');
         }
 
-        function showAddModal() { document.getElementById('addForm').reset(); document.getElementById('addModal').classList.add('active'); }
+        function showAddModal() { clearLocateHighlight(true); document.getElementById('addForm').reset(); document.getElementById('addModal').classList.add('active'); }
 
         /**
          * 将单词卡片滚动到可视区域居中。
@@ -1125,12 +1126,23 @@ PROMPT;
         let userInteracted = false;
         let _locateGraceUntil = 0;
         function removeLocateHighlight() {
-            document.querySelectorAll('.locate-highlight').forEach(function(c) { c.classList.remove('locate-highlight'); });
+            document.querySelectorAll('.locate-highlight, .follow-highlight').forEach(function(c) {
+                c.classList.remove('locate-highlight');
+                c.classList.remove('follow-highlight');
+            });
         }
-        function clearLocateHighlight() {
-            if (Date.now() < _locateGraceUntil) return; // 初始定位后短暂宽限期：忽略误触
+        function clearLocateHighlight(force) {
+            if (!force && Date.now() < _locateGraceUntil) return; // 初始定位后短暂宽限期：忽略误触
             userInteracted = true;
             removeLocateHighlight();
+            // 搜索高亮是一次性的：用户操作后从 URL 去掉 highlight，刷新不再复现
+            try {
+                const u = new URL(location.href);
+                if (u.searchParams.has('highlight')) {
+                    u.searchParams.delete('highlight');
+                    history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+                }
+            } catch (e) {}
         }
         // 用户主动操作（滚动/点击/触摸/按键）→ 清除定位高亮。
         ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function(evt) {
@@ -1138,7 +1150,7 @@ PROMPT;
         });
         document.addEventListener('click', function() { clearLocateHighlight(); }, { passive: true });
 
-        function showBatchModal() { document.getElementById('batchTextarea').value = ''; document.getElementById('batchModal').classList.add('active'); }
+        function showBatchModal() { clearLocateHighlight(true); document.getElementById('batchTextarea').value = ''; document.getElementById('batchModal').classList.add('active'); }
 
         // ==================== AI Batch Import ====================
         async function submitBatchPreview() {
@@ -1539,7 +1551,7 @@ PROMPT;
         }
 
         // ==================== Create Task ====================
-        function createTask() { if (selectedIds.size === 0) { showToast('请先选择单词', 'error'); return; } document.getElementById('taskDate').value = '<?php echo date('Y-m-d'); ?>'; document.getElementById('overwriteInput').value = '0'; document.getElementById('taskDateModal').classList.add('active'); }
+        function createTask() { clearLocateHighlight(true); if (selectedIds.size === 0) { showToast('请先选择单词', 'error'); return; } document.getElementById('taskDate').value = '<?php echo date('Y-m-d'); ?>'; document.getElementById('overwriteInput').value = '0'; document.getElementById('taskDateModal').classList.add('active'); }
 
         async function confirmCreateTask() {
             const date = document.getElementById('taskDate').value;

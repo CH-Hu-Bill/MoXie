@@ -186,6 +186,21 @@ if ($selectedTask) {
             if (highlightId && card) { card.classList.add('follow-highlight'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
         });
 
+        // 搜索高亮一次性：用户操作后清除，并从 URL 去掉 highlight
+        function clearFollowHighlight() {
+            document.querySelectorAll('.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
+            try {
+                const u = new URL(location.href);
+                if (u.searchParams.has('highlight')) {
+                    u.searchParams.delete('highlight');
+                    history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+                }
+            } catch (e) {}
+        }
+        ['pointerdown', 'wheel', 'keydown', 'touchstart'].forEach(function(evt) {
+            document.addEventListener(evt, clearFollowHighlight, { passive: true });
+        });
+
         function recreateTask() {
             if (selectedTaskWordIds.length === 0) return;
             localStorage.setItem('recreate_word_ids', JSON.stringify(selectedTaskWordIds));

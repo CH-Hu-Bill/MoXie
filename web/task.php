@@ -383,6 +383,21 @@ require 'inc/header.php';
         if (highlightId && card) { card.classList.add('follow-highlight'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     });
 
+    // 搜索高亮是一次性的：用户一操作就清除，并从 URL 去掉 highlight（刷新不再复现）
+    function clearFollowHighlight() {
+        document.querySelectorAll('.word-card.follow-highlight').forEach(function(c) { c.classList.remove('follow-highlight'); });
+        try {
+            const u = new URL(location.href);
+            if (u.searchParams.has('highlight')) {
+                u.searchParams.delete('highlight');
+                history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+            }
+        } catch (e) {}
+    }
+    ['pointerdown', 'wheel', 'keydown', 'touchstart'].forEach(function(evt) {
+        document.addEventListener(evt, clearFollowHighlight, { passive: true });
+    });
+
 
 
     function setMode(mode) {
