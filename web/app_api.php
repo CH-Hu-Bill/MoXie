@@ -535,7 +535,12 @@ switch ($action) {
             $status = $task['status'] ?? '';
             if ($type === 'pending' && $status !== 'pending') continue;
             if ($type === 'history' && !in_array($status, ['completed', 'cancelled'], true)) continue;
-            $list[] = ['id' => $task['id'] ?? $tid, 'date' => $task['date'] ?? '', 'label' => $task['label'] ?? '', 'status' => $status, 'word_count' => count($task['word_ids'] ?? []), 'weekend_week' => $task['weekend_week'] ?? '', 'created_at' => $task['created_at'] ?? ''];
+            // 兼容旧数据：任务引用的条目可能已被删除；为空的任务不再展示
+            $wordIds = array_values(array_filter($task['word_ids'] ?? [], function($wid) use ($map) {
+                return isset($map[(string)$wid]);
+            }));
+            if (count($wordIds) === 0) continue;
+            $list[] = ['id' => $task['id'] ?? $tid, 'date' => $task['date'] ?? '', 'label' => $task['label'] ?? '', 'status' => $status, 'word_count' => count($wordIds), 'weekend_week' => $task['weekend_week'] ?? '', 'created_at' => $task['created_at'] ?? ''];
         }
         if ($type === 'pending') usort($list, function($a, $b) { return $a['date'] <=> $b['date']; });
         else usort($list, function($a, $b) { return $b['date'] <=> $a['date']; });

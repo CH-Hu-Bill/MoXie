@@ -30,6 +30,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/api.php';
+require_once 'inc/tasks.php';
 $csrfToken = csrfToken(); // CSRF令牌，供前端POST使用
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
@@ -218,7 +219,30 @@ if (isset($_POST['action'])) {
         header('Content-Type: application/json');
         $wordId = reqPost('word_id');
         $found = false;
-        foreach ($words as $idx => $w) { if ($w['id'] === $wordId) { $found = true; array_splice($words, $idx, 1); Database::saveWords($classId, $words); echo json_encode(['success' => true]); break; } }
+        foreach ($words as $idx => $w) {
+            if ($w['id'] !== $wordId) continue;
+            $found = true;
+            array_splice($words, $idx, 1);
+            Database::saveWords($classId, $words);
+
+            // 同步从所有任务移除该条目；移除后为空的任务直接删除（不进入历史）
+            $prune = ['removed_ids' => []];
+            Database::updateClassData($classId, 'tasks', function($tasks) use ($wordId, &$prune) {
+                $r = tasksRemoveWordAndPrune(is_array($tasks) ? $tasks : [], $wordId);
+                $prune = $r;
+                return $r['tasks'];
+            });
+            $lastKey = 'last_task_id_' . $classId;
+            foreach ($prune['removed_ids'] as $removedTaskId) {
+                if (($settings[$lastKey] ?? '') === $removedTaskId) {
+                    unset($settings[$lastKey]);
+                    Database::saveSettings($settings);
+                    break;
+                }
+            }
+            echo json_encode(['success' => true]);
+            break;
+        }
         if (!$found) { echo json_encode(['success' => false, 'error' => '内容不存在']); }
         exit;
     }
