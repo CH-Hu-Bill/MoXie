@@ -6,14 +6,13 @@ require_once 'inc/db.php';
 require_once 'inc/history.php';
 $config = require 'inc/config.php';
 
-$allowedOrigins = $config['allowed_origins'] ?? ['*'];
+$allowedOrigins = $config['allowed_origins'] ?? [];
 if (!is_array($allowedOrigins)) $allowedOrigins = [$allowedOrigins];
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (in_array('*', $allowedOrigins, true)) {
-    header('Access-Control-Allow-Origin: *');
-} elseif ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Vary: Origin');
+$origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
+$allowOrigin = lwAllowedOrigin($origin, $allowedOrigins);
+if ($allowOrigin !== null) {
+    header('Access-Control-Allow-Origin: ' . $allowOrigin);
+    if ($allowOrigin !== '*') header('Vary: Origin');
 }
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
@@ -1077,7 +1076,7 @@ switch ($action) {
         $perPage = min(50, max(1, (int)($_POST['per_page'] ?? 10)));
         $total = count($gallery);
         $items = array_slice($gallery, ($page - 1) * $perPage, $perPage);
-        $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '');
+        $base = lwBaseUrl();
         $result = [];
         foreach ($items as $item) {
             $imgFile = (string)($item['image'] ?? '');

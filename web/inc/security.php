@@ -13,9 +13,81 @@ function appSecret() {
     return $secret;
 }
 
+/**
+ * 可信反向代理/隧道地址。只信任这些来源发来的 X-Forwarded-* 头。
+ * 默认只信任本机（Caddy/Nginx/cloudflared 通常从 127.0.0.1 转发）。
+ *
+ * @return string[]
+ */
+function lwTrustedProxies(): array {
+    static $proxies = null;
+    if ($proxies !== null) return $proxies;
+    $file = __DIR__ . '/config.php';
+    $config = is_file($file) ? require $file : [];
+    $value = $config['trusted_proxies'] ?? ['127.0.0.1', '::1'];
+    $proxies = is_array($value) ? array_values(array_filter(array_map('strval', $value))) : [];
+    return $proxies;
+}
+
 function isHttpsRequest() {
-    return (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
-        || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443);
+    if ((!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)) {
+        return true;
+    }
+    $remote = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($remote !== '' && in_array($remote, lwTrustedProxies(), true)) {
+        $proto = (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '');
+        if ($proto !== '' && strtolower(trim(explode(',', $proto)[0])) === 'https') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * 当前请求的站点根地址（不带末尾斜杠）。
+ * HTTPS 反向代理/隧道下用可信的 X-Forwarded-Host 生成绝对 URL，避免混合内容。
+ */
+function lwBaseUrl(): string {
+    $scheme = isHttpsRequest() ? 'https' : 'http';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $remote = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($remote !== '' && in_array($remote, lwTrustedProxies(), true)) {
+        $fwdHost = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? '');
+        if ($fwdHost !== '') $host = trim(explode(',', $fwdHost)[0]);
+    }
+    $host = preg_replace('/[^A-Za-z0-9.\-:\[\]]/', '', $host);
+    if ($host === '') $host = 'localhost';
+    return $scheme . '://' . $host;
+}
+
+/**
+ * 计算允许的 CORS Origin；空列表表示只允许同源。
+ *
+ * @param string $origin 请求 Origin
+ * @param string[] $allowedOrigins 配置
+ * @return string|null
+ */
+function lwAllowedOrigin(string $origin, array $allowedOrigins): ?string {
+    if ($origin === '') return null;
+    if (in_array('*', $allowedOrigins, true)) return '*';
+    return in_array($origin, $allowedOrigins, true) ? $origin : null;
+}
+
+/**
+ * 统一的会话启动：严格模式 + HttpOnly/SameSite/Secure。
+ */
+function lwStartSession(): void {
+    if (session_status() === PHP_SESSION_ACTIVE) return;
+    ini_set('session.use_strict_mode', '1');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => isHttpsRequest(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
 }
 
 function base64UrlEncode($value) {
@@ -79,7 +151,7 @@ function requireClassAuth($classId, $class) {
 }
 
 function ensureSecuritySession() {
-    if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+    if (session_status() !== PHP_SESSION_ACTIVE) lwStartSession();
 }
 
 function csrfToken() {

@@ -8,6 +8,7 @@
  * 班级未设置密钥则免验证。
  */
 require_once 'inc/db.php';
+require_once 'inc/security.php';
 
 $classId = trim(reqGet('class_id'));
 if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/D', $classId)) {
@@ -59,9 +60,7 @@ if ($cleaned) {
 }
 
 $total = count($gallery);
-$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-    . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
-    . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/';
+$baseUrl = lwBaseUrl() . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');

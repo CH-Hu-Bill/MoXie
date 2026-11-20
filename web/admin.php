@@ -18,10 +18,11 @@ function self_FormatBytes($bytes) {
     if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
     return round($bytes / 1048576, 1) . ' MB';
 }
-$adminPassword = $config['admin_password'] ?? 'change-this-password';
+$adminPassword = (string)($config['admin_password'] ?? '');
+$adminPasswordHash = (string)($config['admin_password_hash'] ?? '');
 $sessionTtl = $config['admin_session_ttl'] ?? 1800;
 
-if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+lwStartSession();
 if (empty($_SESSION['admin_csrf'])) $_SESSION['admin_csrf'] = bin2hex(random_bytes(32));
 $csrfToken = $_SESSION['admin_csrf'];
 
@@ -44,10 +45,17 @@ if (!$isAuthed && ($_POST['action'] ?? '') === 'admin_login') {
     $failures = array_values(array_filter($_SESSION['admin_login_failures'] ?? [], function($t) use ($now, $failWindow) {
         return is_int($t) && $t > $now - $failWindow;
     }));
+    $submittedPassword = (string)reqPost('password');
+    $adminConfigured = $adminPasswordHash !== '' || $adminPassword !== '';
+    $loginOk = $adminPasswordHash !== ''
+        ? password_verify($submittedPassword, $adminPasswordHash)
+        : ($adminPassword !== '' && hash_equals($adminPassword, $submittedPassword));
     if (count($failures) >= $maxFailures) {
         $_SESSION['admin_login_failures'] = $failures;
         $loginError = '登录失败次数过多，请10分钟后重试';
-    } elseif (hash_equals((string)$adminPassword, (string)reqPost('password'))) {
+    } elseif (!$adminConfigured) {
+        $loginError = '后台未配置管理员密码，请运行 scripts/rotate-secrets.php';
+    } elseif ($loginOk) {
         session_regenerate_id(true);
         $_SESSION['admin_authed'] = true; $_SESSION['admin_time'] = $now;
         unset($_SESSION['admin_login_failures']);
