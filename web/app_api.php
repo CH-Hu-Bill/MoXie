@@ -320,6 +320,8 @@ if ($action === 'check_version') {
     $latest = (string)($versions['latest'] ?? LW_MIN_APP_VERSION);
     $minSupported = (string)($versions['min_supported'] ?? LW_MIN_APP_VERSION);
     $minWeb = (string)($versions['min_web_version'] ?? LW_MIN_WEB_VERSION);
+    // 旧 app_versions.json 可能还停留在 1.x：最低支持版本不能低于 2.0.0
+    if (version_compare($latest, $minSupported, '<')) $latest = $minSupported;
     $gate = appVersionGate($current, $latest, $minSupported, LW_WEB_VERSION, $minWeb);
     $notes = '';
     foreach (($versions['history'] ?? []) as $v) {
