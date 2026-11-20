@@ -6,6 +6,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/history.php';
+require_once 'inc/motion_photo.php';
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
@@ -23,6 +24,12 @@ $cleaned = false;
 foreach ($gallery as $item) {
     $imgFile = $item['image'] ?? '';
     if ($imgFile !== '' && Database::getUploadedImagePath($classId, $imgFile) !== null) {
+        $live = (string)($item['live_video'] ?? '');
+        if ($live !== '' && Database::getUploadedImagePath($classId, $live) === null) {
+            unset($item['live_video']);
+            $item['type'] = 'image';
+            $cleaned = true;
+        }
         $validGallery[] = $item;
     } else {
         $cleaned = true;
@@ -35,6 +42,11 @@ if ($cleaned) {
         foreach ($latest as $item) {
             $imgFile = $item['image'] ?? '';
             if ($imgFile !== '' && Database::getUploadedImagePath($classId, $imgFile) !== null) {
+                $live = (string)($item['live_video'] ?? '');
+                if ($live !== '' && Database::getUploadedImagePath($classId, $live) === null) {
+                    unset($item['live_video']);
+                    $item['type'] = 'image';
+                }
                 $valid[] = $item;
             }
         }
@@ -77,19 +89,46 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
         if (($image['size'] ?? 0) > $maxBytes) { echo json_encode(['success' => false, 'error' => $isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB']); exit; }
     }
 
+    $liveTmp = null;
+    $liveWarning = '';
+    if (!$isGif && !$isMp4 && isset($image['tmp_name']) && is_file($image['tmp_name'])) {
+        $liveTmp = motionPhotoExtractVideo($image['tmp_name']);
+    }
+
     try {
         $filename = Database::saveUploadedImage($classId, $image['tmp_name']);
     } catch (RuntimeException $e) {
+        if ($liveTmp) @unlink($liveTmp);
         echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit;
+    }
+
+    $liveFile = null;
+    if ($liveTmp) {
+        try {
+            $liveFile = Database::saveMp4Image($classId, $liveTmp);
+        } catch (Throwable $e) {
+            $liveWarning = '实况视频保存失败，已按普通图片上传';
+        } finally {
+            @unlink($liveTmp);
+        }
     }
     // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 禁用了 exec/proc_open，
     // 这里不再内联调用，避免在请求路径加载 composer/php-ffmpeg 引发偶发超时或 PHP 警告污染 JSON）
 
     $id = bin2hex(random_bytes(16));
     try {
-        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4) {
             if (!is_array($latest)) $latest = [];
-            array_unshift($latest, ['id' => $id, 'image' => $filename, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
+            $item = [
+                'id' => $id,
+                'image' => $filename,
+                'description' => $desc,
+                'uploaded_at' => date('Y-m-d H:i:s'),
+                'type' => $liveFile ? 'live' : ($isMp4 ? 'video' : 'image'),
+                'uploader_name' => '网页',
+            ];
+            if ($liveFile) $item['live_video'] = $liveFile;
+            array_unshift($latest, $item);
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
@@ -97,9 +136,13 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
         // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
         Database::deleteUploadedImage($classId, $filename);
         Database::deleteVideoThumb($classId, $filename);
+        if ($liveFile) {
+            Database::deleteUploadedImage($classId, $liveFile);
+            Database::deleteVideoThumb($classId, $liveFile);
+        }
         echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
     }
-    echo json_encode(['success' => true, 'id' => $id]); exit;
+    echo json_encode(['success' => true, 'id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null]); exit;
 }
 
 // ========== update_gallery ==========
@@ -138,6 +181,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
             if (($item['id'] ?? '') === $id) {
                 Database::deleteUploadedImage($classId, $item['image'] ?? '');
                 Database::deleteVideoThumb($classId, $item['image'] ?? '');
+                if (!empty($item['live_video'])) {
+                    Database::deleteUploadedImage($classId, $item['live_video']);
+                    Database::deleteVideoThumb($classId, $item['live_video']);
+                }
                 array_splice($latest, $i, 1);
                 return $latest;
             }
@@ -221,6 +268,11 @@ function renderGallery() {
         var dateText = formatDate(item.uploaded_at);
         var isGif = /\.gif$/i.test(item.image);
         var isMp4 = /\.mp4$/i.test(item.image);
+        var isLive = item.type === 'live' && !!item.live_video;
+        var liveUrl = isLive ? ('upload.php?class_id=' + classId + '&file=' + item.live_video) : '';
+        var detailUrl = isLive ? liveUrl : url;
+        var detailIsMp4 = isMp4 || isLive;
+        var detailThumb = isMp4 ? ('video_thumb.php?class_id=' + classId + '&file=' + item.image) : (isLive ? url : '');
         var media;
         // 占位层 z-index:2 位于媒体之上；媒体加载完成后由 hideGalleryPlaceholder 隐藏
         var placeholder = '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;pointer-events:none;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:11px;color:#bbb;margin-top:4px;">加载中…</span></div>';
@@ -237,12 +289,13 @@ function renderGallery() {
         } else {
             media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.style.opacity=0;markGalleryError(this)">';
         }
-        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + url + '\', \'' + item.id + '\', ' + isMp4 + ', \'' + (isMp4 ? thumbUrl : '') + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + detailUrl + '\', \'' + item.id + '\', ' + detailIsMp4 + ', \'' + detailThumb + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
             + placeholder
             + media
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
             + (isMp4 ? '<span class="gif-badge mp4-badge">MP4</span>' : '')
+            + (isLive ? '<span class="gif-badge" style="background:var(--blue);">实况</span>' : '')
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'

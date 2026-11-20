@@ -24,6 +24,7 @@ require_once 'inc/api.php';
 require_once 'inc/app_auth.php';
 require_once 'inc/ratelimit.php';
 require_once 'inc/app_lib.php';
+require_once 'inc/motion_photo.php';
 
 Database::migrateAppData();
 
@@ -1056,6 +1057,12 @@ switch ($action) {
         $cleaned = false;
         foreach ($gallery as $item) {
             if (($item['image'] ?? '') !== '' && Database::getUploadedImagePath($classId, $item['image']) !== null) {
+                $live = (string)($item['live_video'] ?? '');
+                if ($live !== '' && Database::getUploadedImagePath($classId, $live) === null) {
+                    unset($item['live_video']);
+                    $item['type'] = 'image';
+                    $cleaned = true;
+                }
                 $valid[] = $item;
             } else { $cleaned = true; }
         }
@@ -1066,6 +1073,11 @@ switch ($action) {
                 $valid = [];
                 foreach ($latest as $item) {
                     if (($item['image'] ?? '') !== '' && Database::getUploadedImagePath($classId, $item['image']) !== null) {
+                        $live = (string)($item['live_video'] ?? '');
+                        if ($live !== '' && Database::getUploadedImagePath($classId, $live) === null) {
+                            unset($item['live_video']);
+                            $item['type'] = 'image';
+                        }
                         $valid[] = $item;
                     }
                 }
@@ -1080,18 +1092,7 @@ switch ($action) {
         $base = lwBaseUrl();
         $result = [];
         foreach ($items as $item) {
-            $imgFile = (string)($item['image'] ?? '');
-            $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
-            $isMp4 = $ext === 'mp4';
-            $result[] = [
-                'id' => $item['id'] ?? '',
-                'image_url' => $base . '/upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
-                'type' => $ext === 'gif' ? 'gif' : ($isMp4 ? 'mp4' : 'static'),
-                'description' => (string)($item['description'] ?? ''),
-                'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
-                // MP4 首帧缩略图：APP 端视频卡片直接显示该图（缓存命中秒开），点进去才加载真视频
-                'thumb_url' => $isMp4 ? ($base . '/video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile)) : null,
-            ];
+            $result[] = appGalleryItemOut($item, $classId, $base);
         }
         appJson(['success' => true, 'data' => ['items' => $result, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
 
@@ -1115,18 +1116,64 @@ switch ($action) {
         }
         $desc = sanitizePlainText(reqPost('description'));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
+
+        $isLiveRequested = reqPost('is_live') === '1';
+        $liveWarning = '';
+        $liveTmp = null;
+        $liveUpload = $_FILES['live_video'] ?? null;
+        $hasLiveUpload = is_array($liveUpload) && ($liveUpload['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+        if ($hasLiveUpload && ($liveUpload['size'] ?? 0) > Database::MP4_MAX_BYTES) {
+            $hasLiveUpload = false;
+            $liveWarning = '实况视频超过 15MB，已按普通图片上传';
+        }
+        if (!$hasLiveUpload && !$isMp4 && !$isGif && is_string($tmpName) && is_file($tmpName)) {
+            $liveTmp = motionPhotoExtractVideo($tmpName);
+        }
+
         try {
             $fname = Database::saveUploadedImage($classId, $img['tmp_name']);
         } catch (RuntimeException $e) {
+            if ($liveTmp) @unlink($liveTmp);
             $msg = $e->getMessage();
             appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500);
         }
+
+        $liveFile = null;
+        if ($hasLiveUpload) {
+            try {
+                $liveFile = Database::saveMp4Image($classId, $liveUpload['tmp_name']);
+            } catch (Throwable $e) {
+                $liveWarning = '实况视频保存失败，已按普通图片上传';
+            }
+        } elseif ($liveTmp) {
+            try {
+                $liveFile = Database::saveMp4Image($classId, $liveTmp);
+            } catch (Throwable $e) {
+                $liveWarning = '实况视频保存失败，已按普通图片上传';
+            } finally {
+                @unlink($liveTmp);
+            }
+        } elseif ($isLiveRequested && !$isMp4) {
+            $liveWarning = '未识别到实况视频，已按普通图片上传';
+        }
+
         $id = bin2hex(random_bytes(16));
+        $user = Database::getUser($userId);
         // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 无法 exec，此处不内联调用）
         try {
-            $res = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc) {
+            $res = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc, $liveFile, $isMp4, $isGif, $userId, $user) {
                 if (!is_array($latest)) $latest = [];
-                array_unshift($latest, ['id' => $id, 'image' => $fname, 'description' => $desc, 'uploaded_at' => date('Y-m-d H:i:s')]);
+                $item = [
+                    'id' => $id,
+                    'image' => $fname,
+                    'description' => $desc,
+                    'uploaded_at' => date('Y-m-d H:i:s'),
+                    'type' => $liveFile ? 'live' : ($isMp4 ? 'video' : 'image'),
+                    'uploader_id' => (string)$userId,
+                    'uploader_name' => (string)($user['name'] ?? ''),
+                ];
+                if ($liveFile) $item['live_video'] = $liveFile;
+                array_unshift($latest, $item);
                 return $latest;
             });
             if ($res === false) throw new RuntimeException('数据保存失败');
@@ -1134,9 +1181,13 @@ switch ($action) {
             // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
             Database::deleteUploadedImage($classId, $fname);
             Database::deleteVideoThumb($classId, $fname);
+            if ($liveFile) {
+                Database::deleteUploadedImage($classId, $liveFile);
+                Database::deleteVideoThumb($classId, $liveFile);
+            }
             appError('保存失败，请重试');
         }
-        appJson(['success' => true, 'data' => ['id' => $id]]);
+        appJson(['success' => true, 'data' => ['id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null]]);
 
     case 'delete_gallery':
         $gid = appStrictId($_POST['id'] ?? '', 'id');
@@ -1145,6 +1196,10 @@ switch ($action) {
             foreach ($latest as $i => $item) if (($item['id'] ?? '') === $gid) {
                 Database::deleteUploadedImage($classId, $item['image'] ?? '');
                 Database::deleteVideoThumb($classId, $item['image'] ?? '');
+                if (!empty($item['live_video'])) {
+                    Database::deleteUploadedImage($classId, $item['live_video']);
+                    Database::deleteVideoThumb($classId, $item['live_video']);
+                }
                 array_splice($latest, $i, 1);
                 return $latest;
             }
