@@ -698,41 +698,28 @@ class _LiveViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        InteractiveViewer(
-          child: CachedNetworkImage(
-            imageUrl: item.imageUrl,
-            fit: BoxFit.contain,
-            placeholder: (_, __) => const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-            errorWidget: (_, __, ___) => const Icon(
-              Icons.broken_image,
-              size: 64,
-              color: AppColors.muted,
-            ),
+    // 没有实况视频（提取失败/旧数据）：按普通图片处理
+    if (item.liveVideoUrl.isEmpty) {
+      return InteractiveViewer(
+        child: CachedNetworkImage(
+          imageUrl: item.imageUrl,
+          fit: BoxFit.contain,
+          placeholder: (_, __) => const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          ),
+          errorWidget: (_, __, ___) => const Icon(
+            Icons.broken_image,
+            size: 64,
+            color: AppColors.muted,
           ),
         ),
-        if (item.liveVideoUrl.isNotEmpty)
-          Material(
-            color: Colors.black45,
-            shape: const CircleBorder(),
-            child: IconButton(
-              iconSize: 42,
-              tooltip: '播放实况',
-              icon: const Icon(Icons.play_arrow, color: Colors.white),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => _VideoViewer(videoUrl: item.liveVideoUrl),
-                  ),
-                );
-              },
-            ),
-          ),
-      ],
+      );
+    }
+    // 打开实况卡片即自动播放：静态封面先占位，视频首帧出现后淡出，避免黑屏闪一下
+    return _VideoViewer(
+      videoUrl: item.liveVideoUrl,
+      posterUrl: item.imageUrl,
+      live: true,
     );
   }
 }
@@ -1299,7 +1286,18 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
 /// 大图查看 MP4：完整播放器（播放/暂停/进度/音量开关），静音循环自动播放。
 class _VideoViewer extends StatefulWidget {
   final String videoUrl;
-  const _VideoViewer({required this.videoUrl});
+
+  /// 实况照片用：先显示静态封面，视频出首帧后再淡出，避免黑屏闪一下
+  final String? posterUrl;
+
+  /// 实况样式：显示“实况”角标，点击画面可暂停/继续
+  final bool live;
+
+  const _VideoViewer({
+    required this.videoUrl,
+    this.posterUrl,
+    this.live = false,
+  });
 
   @override
   State<_VideoViewer> createState() => _VideoViewerState();
@@ -1308,6 +1306,7 @@ class _VideoViewer extends StatefulWidget {
 class _VideoViewerState extends State<_VideoViewer> {
   VideoPlayerController? _controller;
   bool _soundOn = false;
+  bool _started = false; // 视频已出首帧：用于淡出封面
 
   @override
   void initState() {
@@ -1315,6 +1314,27 @@ class _VideoViewerState extends State<_VideoViewer> {
     // 大图播放时停掉缩略图的解码器，避免双实例竞争
     _VideoThumbPool.stopAll();
     _init();
+  }
+
+  void _onControllerUpdate() {
+    if (_started || !mounted) return;
+    final c = _controller;
+    if (c == null) return;
+    final v = c.value;
+    if (v.isInitialized && (v.isPlaying || v.position > Duration.zero)) {
+      setState(() => _started = true);
+    }
+  }
+
+  void _togglePlay() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    if (c.value.isPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+    setState(() {});
   }
 
   Future<void> _init() async {
@@ -1325,6 +1345,7 @@ class _VideoViewerState extends State<_VideoViewer> {
       if (hit != null && hit.file.existsSync() && mounted) {
         final cf = VideoPlayerController.file(hit.file);
         _controller = cf;
+        cf.addListener(_onControllerUpdate);
         await cf.initialize();
         if (!mounted) {
           cf.dispose();
@@ -1346,6 +1367,7 @@ class _VideoViewerState extends State<_VideoViewer> {
     try {
       c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
       _controller = c;
+      c.addListener(_onControllerUpdate);
       await c.initialize();
       if (!mounted) {
         c.dispose();
@@ -1388,6 +1410,8 @@ class _VideoViewerState extends State<_VideoViewer> {
   Widget build(BuildContext context) {
     final c = _controller;
     final initialized = c != null && c.value.isInitialized;
+    final poster = widget.posterUrl ?? '';
+    final showPoster = poster.isNotEmpty && !_started;
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border, width: 3),
@@ -1395,73 +1419,100 @@ class _VideoViewerState extends State<_VideoViewer> {
       ),
       clipBehavior: Clip.antiAlias,
       child: initialized
-          ? Stack(
+          ? GestureDetector(
+              onTap: widget.live ? _togglePlay : null,
+              behavior: HitTestBehavior.opaque,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AspectRatio(
+                    aspectRatio: c.value.aspectRatio,
+                    child: VideoPlayer(c),
+                  ),
+                  // 实况封面：首帧出现前盖在视频上，出帧后立即移除（不闪黑）
+                  if (showPoster)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CachedNetworkImage(
+                          imageUrl: poster,
+                          fit: BoxFit.contain,
+                          placeholder: (_, __) => const SizedBox.shrink(),
+                          errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  if (widget.live)
+                    Positioned(top: 10, left: 10, child: _LiveBadge()),
+                  // 底部悬浮控制条：播放/暂停 + 声音开关（点击事件不会被视频吞掉）
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      color: Colors.black45,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 8,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            onPressed: _togglePlay,
+                            icon: Icon(
+                              c.value.isPlaying
+                                  ? Icons.pause_circle
+                                  : Icons.play_circle,
+                              color: Colors.white,
+                              size: 36,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _toggleSound,
+                            icon: Icon(
+                              _soundOn ? Icons.volume_up : Icons.volume_off,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : Stack(
               alignment: Alignment.center,
               children: [
-                AspectRatio(
-                  aspectRatio: c.value.aspectRatio,
-                  child: VideoPlayer(c),
-                ),
-                // 底部悬浮控制条：播放/暂停 + 声音开关（点击事件不会被视频吞掉）
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    color: Colors.black45,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 8,
+                if (poster.isNotEmpty)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CachedNetworkImage(
+                        imageUrl: poster,
+                        fit: BoxFit.contain,
+                        placeholder: (_, __) => const SizedBox.shrink(),
+                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  ),
+                const AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          onPressed: () {
-                            if (c.value.isPlaying) {
-                              c.pause();
-                            } else {
-                              c.play();
-                            }
-                            setState(() {});
-                          },
-                          icon: Icon(
-                            c.value.isPlaying
-                                ? Icons.pause_circle
-                                : Icons.play_circle,
-                            color: Colors.white,
-                            size: 36,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _toggleSound,
-                          icon: Icon(
-                            _soundOn ? Icons.volume_up : Icons.volume_off,
-                            color: Colors.white,
-                            size: 30,
-                          ),
+                        CircularProgressIndicator(color: Colors.white),
+                        SizedBox(height: 10),
+                        Text(
+                          '视频加载中…',
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
                         ),
                       ],
                     ),
                   ),
                 ),
               ],
-            )
-          : const AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 10),
-                    Text(
-                      '视频加载中…',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
             ),
     );
   }

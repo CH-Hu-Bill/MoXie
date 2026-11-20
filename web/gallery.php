@@ -286,6 +286,13 @@ function renderGallery() {
             var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + item.image;
             media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)">'
                 + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop playsinline preload="metadata" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onplaying="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)"></video>';
+        } else if (isLive) {
+            // 实况卡片：静态图打底 + 实况视频叠在上层，进视口静音循环播放（与 MP4 卡片共用同一套调度）。
+            // - 视频未出首帧前 opacity:0，仍显示静态图，不会黑屏；
+            // - 播放失败（onerror）直接隐藏视频层，退回静态图；
+            // - pointer-events:none，点击仍然整卡打开灯箱。
+            media = '<img src="' + url + '" alt="" loading="lazy" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)">'
+                + '<video src="' + liveUrl + '" muted loop playsinline preload="none" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;opacity:0;transition:opacity .25s ease;" onplaying="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.hidden=true"></video>';
         } else {
             media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.style.opacity=0;markGalleryError(this)">';
         }
@@ -668,6 +675,15 @@ function editGallery(id) {
                 galleryData = galleryData.map(function(item) {
                     return item.id === id ? Object.assign({}, item, { description: newDesc }) : item;
                 });
+                renderGallery();
+                showToast('描述已更新');
+            } else {
+                showToast(r.error || '更新失败');
+            }
+        })
+        .catch(function() { showToast('网络异常'); });
+}
+
 // 上传区拖拽 / Ctrl+V 粘贴（绕开 Windows 触屏设备文件选择对话框卡死问题）
 function setupUploadHelpers() {
     var input = document.getElementById('galleryImage');
@@ -719,15 +735,6 @@ function setupUploadHelpers() {
     });
 }
 setupUploadHelpers();
-
-renderGallery();
-                showToast('描述已更新');
-            } else {
-                showToast(r.error || '更新失败');
-            }
-        })
-        .catch(function() { showToast('网络异常'); });
-}
 
 renderGallery();
 </script>

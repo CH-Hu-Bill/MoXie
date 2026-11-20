@@ -134,11 +134,20 @@ function displayGallery($classId) {
             if (empty($it['image'])) continue;
             $imgFile = (string)$it['image'];
             $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
+            $stillUrl = 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile);
+            // 实况：展示页按视频播放（静态图作 poster），与 MP4 共用同一条轮播路径
+            $liveFile = (string)($it['live_video'] ?? '');
+            $isLive = ($it['type'] ?? '') === 'live' && $liveFile !== '';
+            $isVideo = $isLive || $ext === 'mp4';
             $out[] = [
-                'url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile),
-                'type' => $ext === 'gif' ? 'gif' : ($ext === 'mp4' ? 'mp4' : 'static'),
+                'url' => $isLive
+                    ? ('upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($liveFile))
+                    : $stillUrl,
+                'type' => $ext === 'gif' ? 'gif' : ($isVideo ? 'mp4' : 'static'),
                 'description' => (string)($it['description'] ?? ''),
-                'thumb_url' => $ext === 'mp4' ? 'video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile) : null,
+                'thumb_url' => $isLive
+                    ? $stillUrl
+                    : ($ext === 'mp4' ? 'video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile) : null),
             ];
         }
         return $out;
