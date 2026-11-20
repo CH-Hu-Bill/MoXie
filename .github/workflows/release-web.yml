@@ -25,7 +25,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           ZIP="ListenWrite-web-${VERSION}.zip"
-          git archive --format=zip --prefix="ListenWrite-web-${VERSION}/" -o "$ZIP" HEAD
+          # 只打包 web/：更新器不需要 app/tests/.github；同时去掉大体积文档截图与 Word 版
+          git archive --format=zip --prefix="ListenWrite-web-${VERSION}/web/" -o "$ZIP" HEAD:web
+          zip -d "$ZIP" '*/web/docs/images/*' '*/web/docs/*.docx' >/dev/null 2>&1 || true
           # 防御性检查：数据、配置、APK 不能进入源码包
           if unzip -l "$ZIP" | grep -E 'web/inc/config\.php|web/data/classes/|web/apk/|/runtime/|/offline/'; then
             echo "Forbidden files found in source zip" >&2

@@ -25,17 +25,27 @@ function lwHttpGet(string $url, int $timeout = 60): ?string {
     return ($body !== false && $code === 200) ? (string)$body : null;
 }
 
-function lwDownloadFile(string $url, string $dest, int $timeout = 300): bool {
-    if (!lwIsAllowedAssetUrl($url)) return false;
+function lwDownloadFile(string $url, string $dest, int $timeout = 1800): bool {
+    $GLOBALS['lw_last_download_error'] = '';
+    if (!lwIsAllowedAssetUrl($url)) {
+        $GLOBALS['lw_last_download_error'] = '下载地址不合法';
+        return false;
+    }
     $dir = dirname($dest);
     if (!is_dir($dir)) @mkdir($dir, 0750, true);
     $fh = @fopen($dest, 'wb');
-    if (!$fh) return false;
+    if (!$fh) {
+        $GLOBALS['lw_last_download_error'] = '无法写入临时文件';
+        return false;
+    }
     $ch = curl_init($url);
     $options = [
         CURLOPT_FILE => $fh,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_LOW_SPEED_LIMIT => 512,
+        CURLOPT_LOW_SPEED_TIME => 180,
         CURLOPT_USERAGENT => 'ListenWrite/' . LW_WEB_VERSION,
     ];
     $ca = lwCaBundle();
@@ -43,9 +53,11 @@ function lwDownloadFile(string $url, string $dest, int $timeout = 300): bool {
     curl_setopt_array($ch, $options);
     $ok = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
     curl_close($ch);
     fclose($fh);
     if ($ok === false || $code !== 200 || !is_file($dest) || filesize($dest) === 0) {
+        $GLOBALS['lw_last_download_error'] = 'HTTP ' . $code . ($err !== '' ? '：' . $err : '');
         @unlink($dest);
         return false;
     }
@@ -236,14 +248,22 @@ function lwApplyWebUpdate(array $release, string $webDir = ''): array {
     $webDir = $webDir !== '' ? $webDir : dirname(__DIR__);
     $dataDir = $webDir . DIRECTORY_SEPARATOR . 'data';
     $version = (string)($release['version'] ?? '');
+    $localZip = (string)($release['local_zip'] ?? '');
+    $localSha = (string)($release['local_sha'] ?? '');
     $result = ['ok' => false, 'version' => $version, 'message' => '', 'backup_dir' => ''];
-    if ($version === '' || empty($release['zip_url']) || empty($release['sha_url'])) {
+    if ($version === '') {
         $result['message'] = '更新信息不完整';
         return $result;
     }
-    if (!lwIsAllowedAssetUrl($release['zip_url']) || !lwIsAllowedAssetUrl($release['sha_url'])) {
-        $result['message'] = '更新地址不在白名单';
-        return $result;
+    if ($localZip === '') {
+        if (empty($release['zip_url']) || empty($release['sha_url'])) {
+            $result['message'] = '更新信息不完整';
+            return $result;
+        }
+        if (!lwIsAllowedAssetUrl($release['zip_url']) || !lwIsAllowedAssetUrl($release['sha_url'])) {
+            $result['message'] = '更新地址不在白名单';
+            return $result;
+        }
     }
 
     lwSetMaintenance(true, '正在更新到 v' . $version, $dataDir);
@@ -258,12 +278,22 @@ function lwApplyWebUpdate(array $release, string $webDir = ''): array {
     }
 
     try {
-        lwWriteUpdateStatus(['stage' => 'download', 'message' => '下载更新包', 'version' => $version, 'backup_dir' => $backup['dir']], $dataDir);
-        $tmpZip = $dataDir . DIRECTORY_SEPARATOR . '.update' . DIRECTORY_SEPARATOR . 'package.zip';
-        if (!lwDownloadFile($release['zip_url'], $tmpZip)) throw new RuntimeException('下载更新包失败');
-        $shaText = lwHttpGet($release['sha_url']);
-        $expected = $shaText !== null ? lwParseSha256($shaText) : null;
-        if ($expected === null) throw new RuntimeException('无法读取 sha256');
+        lwWriteUpdateStatus(['stage' => 'download', 'message' => $localZip !== '' ? '读取本地更新包' : '下载更新包', 'version' => $version, 'backup_dir' => $backup['dir']], $dataDir);
+        $downloaded = false;
+        if ($localZip !== '') {
+            if (!is_file($localZip)) throw new RuntimeException('本地更新包不存在');
+            $tmpZip = $localZip;
+            $expected = $localSha !== '' ? $localSha : (string)hash_file('sha256', $tmpZip);
+        } else {
+            $tmpZip = $dataDir . DIRECTORY_SEPARATOR . '.update' . DIRECTORY_SEPARATOR . 'package.zip';
+            if (!lwDownloadFile($release['zip_url'], $tmpZip)) {
+                throw new RuntimeException('下载更新包失败：' . ($GLOBALS['lw_last_download_error'] ?? '未知错误'));
+            }
+            $downloaded = true;
+            $shaText = lwHttpGet($release['sha_url']);
+            $expected = $shaText !== null ? lwParseSha256($shaText) : null;
+            if ($expected === null) throw new RuntimeException('无法读取 sha256');
+        }
         if (!hash_equals($expected, (string)hash_file('sha256', $tmpZip))) throw new RuntimeException('更新包校验失败');
 
         lwWriteUpdateStatus(['stage' => 'extract', 'message' => '解压更新包', 'version' => $version, 'backup_dir' => $backup['dir']], $dataDir);
@@ -284,7 +314,7 @@ function lwApplyWebUpdate(array $release, string $webDir = ''): array {
         lwSetMaintenance(false, '', $dataDir);
         lwWriteUpdateStatus(['stage' => 'done', 'message' => '已更新到 v' . $version . '，请刷新页面', 'version' => $version, 'backup_dir' => $backup['dir']], $dataDir);
         lwRemoveTree($staging);
-        @unlink($tmpZip);
+        if ($downloaded) @unlink($tmpZip);
         $result['ok'] = true;
         $result['message'] = '已更新到 v' . $version;
     } catch (Throwable $e) {
