@@ -354,6 +354,12 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 </div>
 <?php else: ?>
 
+<?php if (!isHttpsRequest()): ?>
+<div class="card" style="padding:12px 18px;margin-bottom:12px;border-color:var(--red);background:#fff2f2;color:var(--red);font-size:14px;line-height:1.7;">
+    <strong>当前通过 HTTP 访问</strong>：管理员密码、班级口令和 APP token 会在链路上明文传输。公网使用请尽量配置 HTTPS 隧道/反向代理；当前仅建议在可信网络中使用。
+</div>
+<?php endif; ?>
+
 <?php if ($msg): ?><div class="card <?php echo strpos($msg,'已')!==false||strpos($msg,'成功')!==false||strpos($msg,'发布')!==false?'card-post-it':''; ?>" style="padding:10px 18px;margin-bottom:12px;font-size:14px;<?php echo strpos($msg,'已')!==false||strpos($msg,'成功')!==false||strpos($msg,'发布')!==false?'':'color:var(--red);'; ?>"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
 
 <!-- 分区导航：长页面快速跳转 -->
