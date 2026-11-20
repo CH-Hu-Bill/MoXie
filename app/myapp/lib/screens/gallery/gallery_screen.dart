@@ -6,6 +6,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:motion_photos/motion_photos.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:video_player/video_player.dart';
@@ -191,7 +192,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final picker = ImagePicker();
     // 不限制 maxWidth/maxHeight：避免 image_picker 重新采样导致 GIF 动图丢失动画
     final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
+    if (image == null || !mounted) return;
     await _uploadPickedImage(File(image.path), image.name);
   }
 
@@ -202,6 +203,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       allowMultiple: false,
       allowCompression: false,
     );
+    if (!mounted) return;
     final picked = result?.files.single;
     final path = picked?.path;
     if (path == null) return;
@@ -212,8 +214,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
     try {
       final motion = MotionPhotos(path);
       if (!await motion.isMotionPhoto()) return null;
-      final video = await motion.getMotionVideoFile();
-      return File(video.path);
+      final dir = await getTemporaryDirectory();
+      return await motion.getMotionVideoFile(
+        dir,
+        fileName: 'lw_live_${DateTime.now().millisecondsSinceEpoch}.mp4',
+      );
     } catch (_) {
       return null;
     }
