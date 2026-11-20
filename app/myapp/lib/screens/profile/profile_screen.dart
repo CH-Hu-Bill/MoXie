@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../config/api_config.dart';
@@ -31,6 +32,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _versionInfo = info;
       _checkingUpdate = false;
     });
+    if (info != null && info['force_update'] == true && mounted) {
+      final url = '${ApiConfig.baseUrl}/download_app.php';
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: AppColors.background,
+            shape: RoundedRectangleBorder(
+              borderRadius: AppTheme.wobblyRadius,
+              side: const BorderSide(color: AppColors.border, width: 2),
+            ),
+            title: Text('需要更新 APP', style: AppTheme.headingStyle),
+            content: Text(
+              '当前版本 ${ApiConfig.appVersion} 低于最低支持版本，请更新到 ${info['latest']} 后继续使用。',
+              style: AppTheme.bodyStyle,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: url));
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('下载地址已复制，请在浏览器打开')),
+                  );
+                },
+                child: Text('复制下载地址', style: AppTheme.bodyStyle),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
     if (info != null && info['has_update'] == true && mounted) {
       showDialog(
         context: context,

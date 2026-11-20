@@ -5,6 +5,7 @@
 require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/game_time.php';
+require_once 'inc/version.php';
 // 后台页面一律禁止缓存：删除公告等操作后刷新必须拿到最新数据，
 // 避免浏览器缓存导致"删了还在/改了没变"的错觉。
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -370,6 +371,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
     <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 公告管理</a>
     <a href="#sec-display" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🖥️ 大屏设置</a>
     <span style="flex:1;"></span>
+    <span style="font-size:12px;opacity:0.55;align-self:center;margin-right:4px;">Web v<?php echo htmlspecialchars(LW_WEB_VERSION, ENT_QUOTES, 'UTF-8'); ?></span>
     <form method="post" style="display:inline;margin:0;">
         <input type="hidden" name="action" value="logout">
         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">

@@ -25,6 +25,7 @@ require_once 'inc/app_auth.php';
 require_once 'inc/ratelimit.php';
 require_once 'inc/app_lib.php';
 require_once 'inc/motion_photo.php';
+require_once 'inc/version.php';
 
 Database::migrateAppData();
 
@@ -315,18 +316,25 @@ if ($action === 'set_global_consent') {
 if ($action === 'check_version') {
     $current = trim(reqPost('current_version', '1.0'));
     $versions = Database::read('app_versions.json');
-    if (!is_array($versions)) $versions = ['latest' => '1.0', 'history' => []];
-    $latest = (string)($versions['latest'] ?? '1.0');
-    $hasUpdate = version_compare($latest, $current, '>');
-    if ($hasUpdate && version_compare($current, $latest, '>=')) {
-        $hasUpdate = false;
-    }
+    if (!is_array($versions)) $versions = ['history' => []];
+    $latest = (string)($versions['latest'] ?? LW_MIN_APP_VERSION);
+    $minSupported = (string)($versions['min_supported'] ?? LW_MIN_APP_VERSION);
+    $minWeb = (string)($versions['min_web_version'] ?? LW_MIN_WEB_VERSION);
+    $gate = appVersionGate($current, $latest, $minSupported, LW_WEB_VERSION, $minWeb);
     $notes = '';
     foreach (($versions['history'] ?? []) as $v) {
         if (($v['version'] ?? '') === $latest) { $notes = $v['notes'] ?? ''; break; }
     }
     appJson(['success' => true, 'data' => [
-        'latest' => $latest, 'has_update' => $hasUpdate, 'notes' => $notes,
+        'latest' => $latest,
+        'has_update' => $gate['has_update'],
+        'force_update' => $gate['force_update'],
+        'min_supported' => $minSupported,
+        'web_version' => LW_WEB_VERSION,
+        'min_web_version' => $minWeb,
+        'server_too_old' => $gate['server_too_old'],
+        'api_version' => LW_API_VERSION,
+        'notes' => $notes,
     ]]);
 }
 

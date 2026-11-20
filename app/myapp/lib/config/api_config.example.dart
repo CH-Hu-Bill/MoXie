@@ -8,5 +8,6 @@ class ApiConfig {
   static String baseUrl = 'http://127.0.0.1:8000/web';
 
   static String get apiEndpoint => '$baseUrl/app_api.php';
-  static const String appVersion = '1.3.0';
+  static const String appVersion = '2.0.0';
+  static const String minWebVersion = '2.0.0';
 }

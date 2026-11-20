@@ -18,6 +18,25 @@ function appApplyWrongFlags(array $words, array $wrongMap): array {
 }
 
 /**
+ * 版本兼容门禁。
+ *
+ * @return array{has_update:bool,force_update:bool,server_too_old:bool}
+ */
+function appVersionGate(
+    string $current,
+    string $latest,
+    string $minSupported,
+    string $webVersion,
+    string $minWebVersion
+): array {
+    return [
+        'has_update' => version_compare($latest, $current, '>'),
+        'force_update' => version_compare($current, $minSupported, '<'),
+        'server_too_old' => version_compare($webVersion, $minWebVersion, '<'),
+    ];
+}
+
+/**
  * 图集条目统一序列化（静态图 / GIF / 普通视频 / 实况）。
  *
  * @param array $item gallery.json 条目
@@ -43,6 +62,7 @@ function appGalleryItemOut(array $item, string $classId, string $base): array {
             'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
             'thumb_url' => $mediaUrl($imgFile),
             'live_video_url' => $mediaUrl($liveFile),
+            'uploader_name' => (string)($item['uploader_name'] ?? ''),
         ];
     }
 
@@ -55,5 +75,6 @@ function appGalleryItemOut(array $item, string $classId, string $base): array {
         'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
         'thumb_url' => $isMp4 ? ($base . '/video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile)) : null,
         'live_video_url' => null,
+        'uploader_name' => (string)($item['uploader_name'] ?? ''),
     ];
 }

@@ -1,0 +1,57 @@
+name: Release Web
+
+on:
+  push:
+    tags:
+      - 'web-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#web-v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Web version: $VERSION"
+
+      - name: Build source zip
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP="ListenWrite-web-${VERSION}.zip"
+          git archive --format=zip --prefix="ListenWrite-web-${VERSION}/" -o "$ZIP" HEAD
+          # 防御性检查：数据、配置、APK 不能进入源码包
+          if unzip -l "$ZIP" | grep -E 'web/inc/config\.php|web/data/classes/|web/apk/|/runtime/|/offline/'; then
+            echo "Forbidden files found in source zip" >&2
+            exit 1
+          fi
+          sha256sum "$ZIP" > "ListenWrite-web-${VERSION}.sha256"
+          unzip -l "$ZIP" | head -20
+          ls -lh "$ZIP" "ListenWrite-web-${VERSION}.sha256"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ListenWrite Web v${{ steps.version.outputs.version }}
+          body: |
+            ## Web v${{ steps.version.outputs.version }}
+            - 源码包：`ListenWrite-web-${{ steps.version.outputs.version }}.zip`
+            - 最低 APP 版本：2.0.0
+            - 最低 Web 版本：2.0.0
+            - 校验文件：`ListenWrite-web-${{ steps.version.outputs.version }}.sha256`
+
+            升级前请备份 `web/data/` 与 `web/inc/config.php`；更新包不包含这些运行时文件。
+          files: |
+            ListenWrite-web-${{ steps.version.outputs.version }}.zip
+            ListenWrite-web-${{ steps.version.outputs.version }}.sha256
+          overwrite_files: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

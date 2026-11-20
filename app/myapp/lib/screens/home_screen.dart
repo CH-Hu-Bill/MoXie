@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../config/api_config.dart';
 import '../models/vlog_entry.dart';
 import '../providers/auth_provider.dart';
 import '../services/announcement_service.dart';
@@ -57,10 +59,89 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkClassValidity());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkClassValidity();
+      _checkVersionGate();
+    });
     _classCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _checkClassValidity();
     });
+  }
+
+  bool _versionLessThan(String a, String b) {
+    List<int> parse(String v) {
+      return v.split('.').map((p) {
+        final digits = RegExp(r'^\d+').firstMatch(p.trim())?.group(0) ?? '0';
+        return int.tryParse(digits) ?? 0;
+      }).toList();
+    }
+    final pa = parse(a);
+    final pb = parse(b);
+    for (var i = 0; i < 3; i++) {
+      final x = i < pa.length ? pa[i] : 0;
+      final y = i < pb.length ? pb[i] : 0;
+      if (x != y) return x < y;
+    }
+    return false;
+  }
+
+  Future<void> _checkVersionGate() async {
+    final info = await context.read<AuthProvider>().checkVersion();
+    if (!mounted || info == null) return;
+    final webVersion = (info['web_version'] ?? '').toString();
+    final minWeb = (info['min_web_version'] ?? ApiConfig.minWebVersion).toString();
+    if (webVersion.isNotEmpty && _versionLessThan(webVersion, minWeb)) {
+      _showVersionBlock(
+        '服务器版本过旧',
+        '当前服务器 $webVersion 低于 APP 要求的 $minWeb。请联系管理员更新网页端后再使用。',
+        null,
+      );
+      return;
+    }
+    if (info['force_update'] == true) {
+      final latest = (info['latest'] ?? '').toString();
+      _showVersionBlock(
+        '需要更新 APP',
+        '当前版本 ${ApiConfig.appVersion} 低于最低支持版本，请更新到 $latest 后继续使用。',
+        '${ApiConfig.baseUrl}/download_app.php',
+      );
+    }
+  }
+
+  void _showVersionBlock(String title, String message, String? downloadUrl) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: AppColors.background,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppTheme.wobblyRadius,
+            side: const BorderSide(color: AppColors.border, width: 2),
+          ),
+          title: Text(title, style: AppTheme.headingStyle),
+          content: Text(message, style: AppTheme.bodyStyle),
+          actions: [
+            if (downloadUrl != null)
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: downloadUrl));
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('下载地址已复制，请在浏览器打开')),
+                  );
+                },
+                child: Text('复制下载地址', style: AppTheme.bodyStyle),
+              )
+            else
+              TextButton(
+                onPressed: () => SystemNavigator.pop(),
+                child: Text('退出 APP', style: AppTheme.bodyStyle),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override

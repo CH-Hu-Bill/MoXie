@@ -13,6 +13,7 @@
 $pageTitle ??= 'ListenWrite';
 $requireFonts ??= true;
 require_once __DIR__ . '/net.php';
+require_once __DIR__ . '/version.php';
 
 // 当前班级：优先 URL 的 id，其次 cookie（由 index.php 写入）
 $__cid = (isset($_GET['id']) && is_string($_GET['id'])) ? $_GET['id'] : '';
@@ -29,6 +30,7 @@ $__enFont = ($__cid !== '' && lw_class_en_font($__cid) === 'andika') ? ' class="
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="shortcut icon" href="favicon.png" type="image/png">
 <script>window.LAN_URL = <?php echo json_encode(lw_lan_url()); ?>;</script>
+<script>window.LW_WEB_VERSION = <?php echo json_encode(LW_WEB_VERSION); ?>;</script>
 <?php if ($requireFonts): ?>
 <!-- 字体已自托管于 web/fonts/，通过 common.css 的 @font-face 加载（无需外部 CDN） -->
 <?php endif; ?>
