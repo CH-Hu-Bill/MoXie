@@ -6,6 +6,7 @@ require_once 'inc/db.php';
 require_once 'inc/security.php';
 require_once 'inc/game_time.php';
 require_once 'inc/version.php';
+require_once 'inc/update_apply.php';
 // 后台页面一律禁止缓存：删除公告等操作后刷新必须拿到最新数据，
 // 避免浏览器缓存导致"删了还在/改了没变"的错觉。
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -77,6 +78,36 @@ if ($isAuthed && ($_POST['action'] ?? '') === 'logout') {
     }
     session_destroy();
     header('Location: admin.php'); exit;
+}
+
+if ($isAuthed && ($_POST['action'] ?? '') === 'check_web_update') {
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode(lwCheckWebUpdate(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($isAuthed && ($_POST['action'] ?? '') === 'apply_web_update') {
+    header('Content-Type: application/json; charset=UTF-8');
+    @set_time_limit(0);
+    @ignore_user_abort(true);
+    $version = trim((string)reqPost('version'));
+    $zipUrl = trim((string)reqPost('zip_url'));
+    $shaUrl = trim((string)reqPost('sha_url'));
+    if (!preg_match('/\A\d+\.\d+\.\d+\z/', $version) || !lwIsAllowedAssetUrl($zipUrl) || !lwIsAllowedAssetUrl($shaUrl)) {
+        echo json_encode(['ok' => false, 'message' => '更新参数无效'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $result = lwApplyWebUpdate(['version' => $version, 'zip_url' => $zipUrl, 'sha_url' => $shaUrl]);
+    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($isAuthed && ($_POST['action'] ?? '') === 'exit_maintenance') {
+    header('Content-Type: application/json; charset=UTF-8');
+    lwSetMaintenance(false);
+    lwWriteUpdateStatus(['stage' => 'idle', 'message' => '已手动退出维护模式']);
+    echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 $msg = '';
@@ -370,6 +401,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
     <a href="#sec-games" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🎮 小游戏时长</a>
     <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 公告管理</a>
     <a href="#sec-display" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🖥️ 大屏设置</a>
+    <a href="#sec-update" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🔄 系统更新</a>
     <span style="flex:1;"></span>
     <span style="font-size:12px;opacity:0.55;align-self:center;margin-right:4px;">Web v<?php echo htmlspecialchars(LW_WEB_VERSION, ENT_QUOTES, 'UTF-8'); ?></span>
     <form method="post" style="display:inline;margin:0;">
@@ -378,6 +410,92 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
         <button type="submit" class="btn btn-sm" style="margin:0;opacity:0.5;color:var(--pencil);">退出登录</button>
     </form>
 </div>
+
+<div class="card" id="sec-update" style="margin-bottom:16px;scroll-margin-top:60px;">
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:10px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">🔄 系统更新</h2>
+    <div style="font-size:14px;line-height:1.8;">
+        当前 Web 版本：<b>v<?php echo htmlspecialchars(LW_WEB_VERSION, ENT_QUOTES, 'UTF-8'); ?></b>
+        · <a href="https://github.com/CH-Hu-Bill/MoXie/releases" target="_blank" rel="noopener" style="color:var(--blue);">GitHub Releases</a>
+    </div>
+    <?php if (lwInMaintenance()): ?>
+        <div style="margin-top:10px;padding:10px 12px;border:2px solid var(--red);background:#fff2f2;color:var(--red);border-radius:var(--wobbly-sm);font-size:14px;">
+            当前处于维护模式。普通页面会返回 503；更新完成后会自动退出，也可手动退出。
+        </div>
+    <?php endif; ?>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button type="button" class="btn btn-primary" onclick="checkWebUpdate()">检查更新</button>
+        <button type="button" class="btn btn-sm" onclick="exitMaintenance()">退出维护模式</button>
+    </div>
+    <div id="updateBox" style="margin-top:10px;font-size:14px;line-height:1.8;color:var(--pencil);"></div>
+</div>
+
+<script>
+const UPDATE_CSRF = <?php echo json_encode($csrfToken); ?>;
+let _webRelease = null;
+function escapeUpdateHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(ch) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+    });
+}
+async function checkWebUpdate() {
+    const box = document.getElementById('updateBox');
+    box.textContent = '检查中…';
+    const fd = new FormData();
+    fd.append('action', 'check_web_update');
+    fd.append('csrf_token', UPDATE_CSRF);
+    try {
+        const r = await fetch('admin.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!d.ok) { box.textContent = '检查失败：' + (d.error || '未知错误'); return; }
+        if (!d.has_update) {
+            box.textContent = '当前已是最新版本 v' + d.current;
+            return;
+        }
+        _webRelease = d.release;
+        box.innerHTML = '<div>发现新版本 <b style="color:var(--red);">v' + escapeUpdateHtml(d.latest) + '</b></div>'
+            + '<div style="white-space:pre-wrap;margin-top:8px;max-height:180px;overflow:auto;background:var(--old-paper);padding:10px;border-radius:var(--wobbly-sm);">'
+            + escapeUpdateHtml(_webRelease.notes || '（无更新说明）') + '</div>'
+            + '<div style="margin-top:10px;"><button type="button" class="btn btn-primary" onclick="startWebUpdate()">开始更新到 v' + escapeUpdateHtml(d.latest) + '</button></div>';
+    } catch (e) {
+        box.textContent = '检查失败：' + e;
+    }
+}
+async function startWebUpdate() {
+    if (!_webRelease) return;
+    if (!confirm('将备份数据并更新到 v' + _webRelease.version + '，期间进入维护模式。确定继续？')) return;
+    const box = document.getElementById('updateBox');
+    box.textContent = '更新中（备份 → 下载 → 校验 → 迁移 → 替换），可能需要 1–2 分钟，请勿关闭页面…';
+    const fd = new FormData();
+    fd.append('action', 'apply_web_update');
+    fd.append('csrf_token', UPDATE_CSRF);
+    fd.append('version', _webRelease.version);
+    fd.append('zip_url', _webRelease.zip_url);
+    fd.append('sha_url', _webRelease.sha_url);
+    try {
+        const r = await fetch('admin.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.ok) {
+            box.textContent = '已更新到 v' + d.version + '，正在刷新…';
+            setTimeout(function() { location.reload(); }, 1500);
+        } else {
+            box.textContent = '更新失败：' + (d.message || '未知错误') + '。若维护模式未退出，可点上方“退出维护模式”。';
+        }
+    } catch (e) {
+        box.textContent = '请求失败：' + e + '。请刷新页面查看状态；若维护模式未退出，可手动退出。';
+    }
+}
+async function exitMaintenance() {
+    const fd = new FormData();
+    fd.append('action', 'exit_maintenance');
+    fd.append('csrf_token', UPDATE_CSRF);
+    try {
+        await fetch('admin.php', { method: 'POST', body: fd });
+        location.reload();
+    } catch (e) {
+        alert('退出维护模式失败：' + e);
+    }
+}
+</script>
 
 <div class="card" id="sec-classes" style="margin-bottom:16px;scroll-margin-top:60px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">班级列表 (<?php echo count($classes); ?>个)</h2>

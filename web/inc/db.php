@@ -1,6 +1,23 @@
 <?php
 
 date_default_timezone_set('Asia/Shanghai');
+require_once __DIR__ . '/maintenance.php';
+
+// 维护模式：更新期间拒绝普通读写请求；管理后台/状态/版本接口保持可用。
+if (PHP_SAPI !== 'cli' && lwInMaintenance()) {
+    $script = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (!in_array($script, ['admin.php', 'update_status.php', 'version.php'], true)) {
+        http_response_code(503);
+        header('Retry-After: 60');
+        header('Content-Type: text/html; charset=UTF-8');
+        echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>系统维护中</title></head>'
+            . '<body style="font-family:system-ui,sans-serif;background:#fdfbf7;color:#2d2d2d;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">'
+            . '<div style="text-align:center;padding:24px;"><h1 style="font-size:24px;">系统维护中</h1><p style="color:#666;">管理员正在更新系统，请稍后刷新页面。</p></div>'
+            . '</body></html>';
+        exit;
+    }
+}
+
 // HTML/JSON 页面一律禁止浏览器缓存：定位/列表等数据是服务端渲染，
 // 缓存会导致"新建任务后定位仍是旧位置"等不刷新问题（图片等静态资源在各自端点单独设长缓存）。
 if (PHP_SAPI !== 'cli') { header('Cache-Control: no-store'); }
