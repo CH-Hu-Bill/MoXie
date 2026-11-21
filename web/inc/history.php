@@ -1,6 +1,6 @@
 <?php
 
-const HISTORY_CONTENT_MAX_BYTES = 1048576;
+const HISTORY_CONTENT_MAX_BYTES = 2097152; // 正文上限 2 MB
 const HISTORY_DATA_IMAGE_MAX_BYTES = 786432;
 
 function historyStrictDate($value) {
@@ -39,7 +39,7 @@ function historyIsEditableDate($date) {
 
 function historySanitizeHtml($html) {
     if (!is_string($html) || strlen($html) > HISTORY_CONTENT_MAX_BYTES) {
-        throw new LengthException('内容过长');
+        throw new LengthException('内容过长（上限 2 MB）');
     }
 
     // 预过滤: 移除已知的危险模式 (条件注释、XML 声明等)
@@ -170,7 +170,7 @@ function historySanitizeHtml($html) {
     $body = $dom->getElementsByTagName('body')->item(0);
     $result = '';
     if ($body) foreach ($body->childNodes as $child) $result .= $dom->saveHTML($child);
-    if (strlen($result) > HISTORY_CONTENT_MAX_BYTES) throw new LengthException('内容过长');
+    if (strlen($result) > HISTORY_CONTENT_MAX_BYTES) throw new LengthException('内容过长（上限 2 MB）');
     return $result;
 }
 

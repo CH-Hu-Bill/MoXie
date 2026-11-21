@@ -333,7 +333,12 @@ function initQuill() {
         }
     });
     quill.on('text-change', function() {
-        if (canEditClass()) { hasUnsavedChanges = true; updateUnsavedDot(); }
+        if (canEditClass()) {
+            hasUnsavedChanges = true;
+            updateUnsavedDot();
+            saveDraftLocal();
+            scheduleAutoSave();
+        }
         syncQuillBlank();
     });
     quill.getModule('toolbar').addHandler('image', function() { chooseAndUploadImage(); });
@@ -367,12 +372,24 @@ function canEditClass() {
     return currentView === 'class' && selectedDate === today;
 }
 
-function updateUnsavedDot() {
-    document.getElementById('unsavedDot').style.display = (canEditClass() && hasUnsavedChanges) ? '' : 'none';
+function updateUnsavedDot(text) {
+    var el = document.getElementById('unsavedDot');
+    if (!el) return;
+    if (canEditClass() && hasUnsavedChanges) {
+        el.textContent = text || '● 未保存';
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
+    }
 }
 
 function markDirty() {
-    if (canEditClass()) { hasUnsavedChanges = true; updateUnsavedDot(); }
+    if (canEditClass()) {
+        hasUnsavedChanges = true;
+        updateUnsavedDot();
+        saveDraftLocal();
+        scheduleAutoSave();
+    }
 }
 
 function renderCalendar() {
@@ -586,6 +603,9 @@ function selectDate(dateStr) {
         }
         syncQuillBlank();
 
+        // 今天：如果本地有未保存草稿（断网/关页丢失），恢复它
+        if (isT) maybeRestoreDraft(dateStr);
+
         document.getElementById('badgeClass').textContent = '班级史记';
         document.getElementById('badgeClass').className = 'badge badge-class';
         document.getElementById('readonlyBadge').style.display = isT ? 'none' : '';
@@ -691,11 +711,71 @@ function changeMonth(delta) {
     renderCalendar();
 }
 
-async function saveEntry() {
+// ── 自动保存（S4）：停止输入 10 秒后静默保存；断网/失败时落到 localStorage 草稿 ──
+var _autoSaveTimer = null;
+var _saving = false;
+
+function draftKey(dateStr) { return 'lw_history_draft_' + classId + '_' + dateStr; }
+
+function saveDraftLocal() {
+    if (!canEditClass() || !quill) return;
+    try {
+        localStorage.setItem(draftKey(selectedDate), JSON.stringify({
+            content: quill.root.innerHTML,
+            title: document.getElementById('entryTitle').value || '',
+            mood: document.getElementById('entryMood').value || '',
+            weather: document.getElementById('entryWeather').value || '',
+            location: document.getElementById('entryLocation').value || '',
+            tags: currentTags.slice(),
+            saved_at: Date.now()
+        }));
+    } catch (e) { /* 隐私模式或超配额：忽略 */ }
+}
+
+function clearDraftLocal() {
+    try { localStorage.removeItem(draftKey(selectedDate)); } catch (e) {}
+}
+
+function scheduleAutoSave() {
+    if (!canEditClass()) return;
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(function() {
+        if (!hasUnsavedChanges || _saving || !canEditClass()) return;
+        saveEntry(true);
+    }, 10000);
+}
+
+/** 本地草稿与服务器内容不一致时恢复（多为上次断网/关页未保存） */
+function maybeRestoreDraft(dateStr) {
+    var raw = null;
+    try { raw = localStorage.getItem(draftKey(dateStr)); } catch (e) { return; }
+    if (!raw) return;
+    var d = null;
+    try { d = JSON.parse(raw); } catch (e) { clearDraftLocal(); return; }
+    if (!d || !d.content) { clearDraftLocal(); return; }
+    var serverHtml = (historyData[dateStr] && historyData[dateStr].content) || '';
+    if (d.content === serverHtml) { clearDraftLocal(); return; }
+
+    setQuillHtml(d.content);
+    if (d.title) document.getElementById('entryTitle').value = d.title;
+    if (d.mood) document.getElementById('entryMood').value = d.mood;
+    if (d.weather) document.getElementById('entryWeather').value = d.weather;
+    if (d.location) document.getElementById('entryLocation').value = d.location;
+    if (Array.isArray(d.tags)) { currentTags = d.tags.slice(); renderTags(); }
+    hasUnsavedChanges = true;
+    updateUnsavedDot('● 已恢复本地草稿');
+    showToast('已恢复上次未保存的本地草稿', 'success');
+    scheduleAutoSave();
+}
+
+async function saveEntry(silent) {
     if (!canEditClass()) { showToast('只能编辑今天的班级史记'); return false; }
     var btn = document.getElementById('saveBtn');
-    btn.disabled = true;
-    btn.textContent = '...';
+    if (!silent) {
+        btn.disabled = true;
+        btn.textContent = '...';
+    }
+    _saving = true;
     var fd = new FormData();
     fd.append('action', 'save_entry');
     fd.append('date', selectedDate);
@@ -719,18 +799,26 @@ async function saveEntry() {
             };
             hasUnsavedChanges = false;
             updateUnsavedDot();
+            clearDraftLocal();
             renderCalendar();
-            showToast('已保存', 'success');
+            if (!silent) showToast('已保存', 'success');
             return true;
         }
-        showToast(r.error || '保存失败');
+        // 内容超限等业务错误：保留草稿，手动保存时才提示
+        saveDraftLocal();
+        if (!silent) showToast(r.error || '保存失败');
         return false;
     } catch (e) {
-        showToast('网络异常');
+        // 断网：落本地草稿，自动保存时不打扰用户
+        saveDraftLocal();
+        if (!silent) showToast('网络异常，已暂存本地草稿');
         return false;
     } finally {
-        btn.disabled = false;
-        btn.textContent = '💾 保存';
+        _saving = false;
+        if (!silent) {
+            btn.disabled = false;
+            btn.textContent = '💾 保存';
+        }
     }
 }
 
@@ -742,6 +830,10 @@ function initEditor() {
         el.addEventListener('input', markDirty);
     });
     setupEditorDrop();
+    // 切到后台/关页前，把未保存内容落到本地草稿（不做原生弹窗拦截）
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden && hasUnsavedChanges && canEditClass()) saveDraftLocal();
+    });
 }
 
 // 编辑器拖拽图片直接上传插入（绕开 Windows 触屏设备文件选择对话框卡死问题）
