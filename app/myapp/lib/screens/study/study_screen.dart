@@ -54,7 +54,13 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
   };
   final Map<String, ScrollController> _kbScroll = {};
   final Map<String, GlobalKey> _cardKeys = {};
-  final Set<String> _autoLocated = {};
+
+  // S3：不再“每个板块只定位一次”。用户每次进学习页 / 切板块 / 切班级都重新定位，
+  // 这里只记“待定位的板块”，这样轮询刷新不会把正在看的列表拽回去。
+  String? _locateRequestType;
+
+  // 各区块指纹（get_rev）：只刷新变化的那一块
+  final Map<String, String> _revs = {};
 
   final Map<String, int> _counts = {'word': 0, 'sentence': 0, 'essay': 0};
   final Map<String, String?> _lastIds = {
@@ -62,7 +68,6 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     'sentence': null,
     'essay': null,
   };
-  String _libraryRev = '';
   String? _highlightId;
   bool _isLocating = false;
 
@@ -81,9 +86,9 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     }
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll(initial: true));
-    // 后台每 30s 拉一次「内容指纹」，有变化才静默重载（解决新增内容不出现）
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _pollMeta();
+    // S3：每 10s 拉一次区块指纹（get_rev），只重载变化的那一块
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _pollRevs();
     });
   }
 
@@ -99,7 +104,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _pollMeta();
+    if (state == AppLifecycleState.resumed) _pollRevs();
   }
 
   @override
@@ -108,9 +113,35 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
     if (classId != null && classId.isNotEmpty && classId != _lastLoadedClassId) {
+      final switched = _lastLoadedClassId != null;
       _lastLoadedClassId = classId;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll(initial: true));
+      // 切班级：清空上一个班的列表/分页/指纹/高亮，避免串数据
+      if (switched) _resetClassState();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _locateRequestType = _kbTypes[_kbTab];
+        _loadAll(initial: true);
+      });
     }
+  }
+
+  /// 切班级时把上一个班的状态全部清掉（S3：切班级清状态）
+  void _resetClassState() {
+    for (final t in _kbTypes) {
+      _kb[t]!.clear();
+      _kbPage[t] = 1;
+      _kbHasMore[t] = false;
+      _kbLoaded[t] = false;
+      _kbLoading[t] = false;
+      _counts[t] = 0;
+      _lastIds[t] = null;
+    }
+    _revs.clear();
+    _cardKeys.clear();
+    _wrongWords = [];
+    _pendingTasks = [];
+    _historyTasks = [];
+    _highlightId = null;
+    _isLocating = false;
   }
 
   void _showLocateHint(String msg) {
@@ -186,10 +217,8 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
       final res = await _api.getLibraryMeta(classId);
       if (!mounted) return;
       final data = res['data'] as Map<String, dynamic>;
-      final rev = (data['rev'] ?? '').toString();
       setState(() {
         _applyMetaData(data);
-        if (rev.isNotEmpty) _libraryRev = rev;
       });
       if (locate) _maybeAutoLocateCurrent();
     } catch (_) {}
@@ -242,8 +271,6 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         _kbLoaded[type] = true;
         _kbLoading[type] = false;
         _applyMetaData(data);
-        final rev = (data['rev'] ?? '').toString();
-        if (rev.isNotEmpty) _libraryRev = rev;
       });
       if (reset && type == 'word') {
         _storage.cacheWords(
@@ -269,23 +296,45 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 后台轮询：仅当内容指纹变化时才重载，尽量保持滚动位置
-  Future<void> _pollMeta() async {
+  /// S3 轮询：只问指纹（get_rev），哪块变了刷哪块。
+  /// 首次调用只记录基线——初次加载已经拉过数据，不重复请求。
+  Future<void> _pollRevs() async {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
     if (classId == null || classId.isEmpty) return;
-    final type = _kbTypes[_kbTab];
-    if (_isLocating || _kbLoading[type] == true) return;
+    if (_isLocating) return;
     try {
-      final res = await _api.getLibraryMeta(classId);
+      final res = await _api.getRev(classId);
       if (!mounted) return;
-      final data = res['data'] as Map<String, dynamic>;
-      final rev = (data['rev'] ?? '').toString();
-      final changed = rev.isNotEmpty && rev != _libraryRev;
-      setState(() => _applyMetaData(data));
-      if (!changed) return;
-      _libraryRev = rev;
+      final data = res['data'];
+      final rev = (data is Map ? data['rev'] : null) as Map?;
+      if (rev == null) return;
+      final incoming = <String, String>{
+        'words': (rev['words'] ?? '').toString(),
+        'tasks': (rev['tasks'] ?? '').toString(),
+        'wrong': (rev['wrong'] ?? '').toString(),
+        'gallery': (rev['gallery'] ?? '').toString(),
+      };
+      if (_revs.isEmpty) {
+        _revs.addAll(incoming);
+        return;
+      }
+      final wordsChanged =
+          incoming['words']!.isNotEmpty && incoming['words'] != _revs['words'];
+      final tasksChanged =
+          incoming['tasks']!.isNotEmpty && incoming['tasks'] != _revs['tasks'];
+      final wrongChanged =
+          incoming['wrong']!.isNotEmpty && incoming['wrong'] != _revs['wrong'];
+      _revs.addAll(incoming);
+      if (!wordsChanged && !tasksChanged && !wrongChanged) return;
+
+      if (wrongChanged) _loadWrongWords(classId);
+      if (tasksChanged) _loadTasks(classId);
+      if (!wordsChanged) return;
+
+      final type = _kbTypes[_kbTab];
+      if (_kbLoading[type] == true) return; // 正在加载，下轮再补
       final offset =
           _kbScroll[type]!.hasClients ? _kbScroll[type]!.offset : 0.0;
       await _loadKb(classId, type, reset: true);
@@ -293,7 +342,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         final max = _kbScroll[type]!.position.maxScrollExtent;
         _kbScroll[type]!.jumpTo(offset.clamp(0.0, max));
       }
-      _loadWrongWords(classId);
+      _loadMeta(classId, locate: false);
     } catch (_) {}
   }
 
@@ -398,12 +447,17 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
   }
 
+  /// 只有“用户刚切到这个板块 / 刚进学习页 / 刚切班级”才自动定位；轮询刷新不抢滚动位置。
   void _maybeAutoLocateCurrent() {
     final type = _kbTypes[_kbTab];
+    if (_locateRequestType != type) return;
     final id = _lastIds[type];
-    if (id == null || _autoLocated.contains(type)) return;
-    if (!_kbLoaded[type]!) return;
-    _autoLocated.add(type);
+    if (id == null) {
+      _locateRequestType = null;
+      return;
+    }
+    if (!_kbLoaded[type]!) return; // 还没加载完，等加载完成时再触发
+    _locateRequestType = null;
     Future.microtask(() => _locate(type, id, highlight: false));
   }
 
@@ -782,7 +836,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
             WobblyTabBar(
               tabs: const ['单词库', '错题本', '任务'],
               selectedIndex: _mainTab,
-              onTap: (i) => setState(() => _mainTab = i),
+              onTap: _switchMainTab,
             ),
             Expanded(
               child: _mainTab == 0
@@ -816,10 +870,21 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     });
     final classId = context.read<AuthProvider>().currentClassId;
     final type = _kbTypes[i];
+    _locateRequestType = type;
     if (classId != null && classId.isNotEmpty && !_kbLoaded[type]!) {
       _loadKb(classId, type, reset: true);
     }
     _maybeAutoLocateCurrent();
+  }
+
+  void _switchMainTab(int i) {
+    if (i == _mainTab) return;
+    setState(() => _mainTab = i);
+    // S3：每次进「单词库」都重新定位到该板块最近更新处
+    if (i == 0) {
+      _locateRequestType = _kbTypes[_kbTab];
+      _maybeAutoLocateCurrent();
+    }
   }
 
   Widget _buildLibrary(String classId) {

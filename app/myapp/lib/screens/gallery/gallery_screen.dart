@@ -37,14 +37,37 @@ class _GalleryScreenState extends State<GalleryScreen> {
   bool _hasMore = false;
 
   Timer? _refreshTimer;
+  String _galleryRev = ''; // 图集区块指纹：只有变化时才重新拉取
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadGallery());
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _loadGallery(reset: true);
+    // S3：10 秒轮询指纹，图集没变就不动列表（不再整表替换导致卡片闪动/滚动跳）
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _pollRev();
     });
+  }
+
+  Future<void> _pollRev() async {
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) return;
+    try {
+      final res = await _api.getRev(classId);
+      if (!mounted) return;
+      final data = res['data'];
+      final rev = (data is Map ? data['rev'] : null) as Map?;
+      final galleryRev = (rev?['gallery'] ?? '').toString();
+      if (galleryRev.isEmpty) return;
+      if (_galleryRev.isEmpty) {
+        _galleryRev = galleryRev; // 基线
+        return;
+      }
+      if (galleryRev == _galleryRev) return;
+      _galleryRev = galleryRev;
+      _loadGalleryRemote(classId, reset: true);
+    } catch (_) {}
   }
 
   @override
@@ -116,7 +139,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (!mounted) return;
       setState(() {
         if (reset) {
-          _items = items;
+          _items = _mergeItems(items);
         } else {
           final existingIds = {for (final e in _items) e.id};
           for (final e in items) {
@@ -137,6 +160,32 @@ class _GalleryScreenState extends State<GalleryScreen> {
     } catch (_) {
       // 静默刷新失败忽略，保留缓存数据
     }
+  }
+
+  /// 刷新合并（S3）：按 id 复用未变化的旧对象，避免整表替换造成卡片重建/滚动跳动。
+  /// 服务端顺序是「新的在前」，直接沿用；已加载的后续分页保持原顺序附在末尾。
+  List<GalleryItem> _mergeItems(List<GalleryItem> incoming) {
+    final oldById = {for (final e in _items) e.id: e};
+    final merged = <GalleryItem>[];
+    for (final item in incoming) {
+      final old = oldById.remove(item.id);
+      merged.add(old != null && _sameGalleryItem(old, item) ? old : item);
+    }
+    // 只加载过一页时以服务端为准（删掉的条目要消失）；多页时才保留没重拉的后续页
+    if (_page > 1) merged.addAll(oldById.values);
+    return merged;
+  }
+
+  static bool _sameGalleryItem(GalleryItem a, GalleryItem b) {
+    return a.id == b.id &&
+        a.imageUrl == b.imageUrl &&
+        a.thumbUrl == b.thumbUrl &&
+        a.description == b.description &&
+        a.uploadedAt == b.uploadedAt &&
+        a.isVideo == b.isVideo &&
+        a.isGif == b.isGif &&
+        a.isLive == b.isLive &&
+        a.liveVideoUrl == b.liveVideoUrl;
   }
 
   void _showUploadMenu() {

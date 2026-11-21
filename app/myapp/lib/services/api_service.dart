@@ -265,6 +265,12 @@ class ApiService {
     return _post('get_library_meta', fields: {'class_id': classId});
   }
 
+  /// 区块指纹（S3）：10 秒轮询用，只返回 words/tasks/wrong/gallery 四个摘要，
+  /// 不拉业务数据。客户端比对后才刷新变化的那一块。
+  Future<Map<String, dynamic>> getRev(String classId) {
+    return _post('get_rev', fields: {'class_id': classId});
+  }
+
   Future<Map<String, dynamic>> searchWord(String classId, String query) {
     return _post('search_word', fields: {
       'class_id': classId,
