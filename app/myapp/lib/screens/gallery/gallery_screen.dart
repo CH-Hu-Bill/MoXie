@@ -50,6 +50,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String? _highlightId;
   String? _focusLoadingId;
   int _focusLoadPages = 0;
+  bool _firstLoadDone = false;
+  bool _remoteLoadDone = false;
 
   // 排序（搜索统一走主界面搜索，这里只保留排序）
   String _order = 'desc'; // desc=最新在前
@@ -109,7 +111,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadGallery());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadGallery();
+      if (mounted) setState(() => _firstLoadDone = true);
+    });
     // S3：10 秒轮询指纹，图集没变就不动列表（不再整表替换导致卡片闪动/滚动跳）
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _pollRev();
@@ -182,13 +187,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _page = page;
         _hasMore = data['has_more'] ?? false;
         _loading = false;
+        _remoteLoadDone = true;
       });
       _storage.cacheGallery(
         classId,
         _items.map((e) => e.toCacheJson()).toList(),
       );
     } catch (e) {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _remoteLoadDone = true;
+      });
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -222,6 +231,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _page = page;
         _hasMore = data['has_more'] ?? false;
         _loading = false;
+        _remoteLoadDone = true;
       });
       _storage.cacheGallery(
         classId,
@@ -229,6 +239,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       );
     } catch (_) {
       // 静默刷新失败忽略，保留缓存数据
+      if (mounted) setState(() => _remoteLoadDone = true);
     }
   }
 
@@ -488,6 +499,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   void _maybeOpenInitial() {
     final id = widget.openItemId;
     if (id == null || id.isEmpty || _openedInitialId == id) return;
+    if (!_firstLoadDone || !_remoteLoadDone) return;
     final idx = _items.indexWhere((e) => e.id == id);
     if (idx < 0) {
       if (_hasMore && _focusLoadingId != id && _focusLoadPages < 20) {

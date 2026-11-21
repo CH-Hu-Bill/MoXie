@@ -278,8 +278,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 children: [
                   Text(
                     g.description.isEmpty ? '未填写描述' : g.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: AppTheme.bodyStyle.copyWith(fontSize: 14),
                   ),
                   const SizedBox(height: 4),
