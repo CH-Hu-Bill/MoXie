@@ -541,7 +541,7 @@ async function checkWebUpdate() {
 }
 async function startWebUpdate() {
     if (!_webRelease) return;
-    if (!confirm('将备份数据并更新到 v' + _webRelease.version + '，期间进入维护模式。确定继续？')) return;
+    if (!await lwConfirm('将备份数据并更新到 v' + _webRelease.version + '，期间进入维护模式。', { title: '开始更新？', okText: '开始更新' })) return;
     const box = document.getElementById('updateBox');
     box.textContent = '更新中（备份 → 下载 → 校验 → 迁移 → 替换），可能需要 1–2 分钟，请勿关闭页面…';
     const fd = new FormData();
@@ -867,13 +867,14 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
         var serverNow = '<?php echo $serverNowInput; ?>';
         var form = document.querySelector('form input[name="start_time"]');
         if (form) {
-            form.closest('form').addEventListener('submit', function(e) {
+            var annForm = form.closest('form');
+            annForm.addEventListener('submit', function(e) {
                 var startVal = form.value;
-                if (startVal && startVal > serverNow) {
-                    if (!confirm('开始时间（' + startVal + '）晚于服务器当前时间（' + serverNow + '），公告需到点才显示。确定要发布吗？')) {
-                        e.preventDefault();
-                    }
-                }
+                if (!startVal || startVal <= serverNow) return;
+                if (annForm.dataset.lwOk === '1') return;
+                e.preventDefault();
+                lwConfirm('开始时间（' + startVal + '）晚于服务器当前时间（' + serverNow + '），公告需到点才显示。', { title: '这个公告还不会立刻显示', okText: '照常发布' })
+                    .then(function(ok) { if (ok) { annForm.dataset.lwOk = '1'; annForm.submit(); } });
             });
         }
     })();
@@ -919,7 +920,7 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
                         <?php else: ?><span style="color:var(--red);">已过期</span><?php endif; ?>
                     </td>
                     <td style="padding:6px 8px;border-bottom:2px solid var(--old-paper);vertical-align:top;">
-                        <form method="post" style="display:inline;" onsubmit="return confirm('确认删除此公告？')">
+                        <form method="post" style="display:inline;" onsubmit="return lwConfirmSubmit(this, '确认删除此公告？', { okText: '删除', danger: true })">
                             <input type="hidden" name="action" value="delete_announcement">
                             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="id" value="<?php echo htmlspecialchars($ann['id']); ?>">

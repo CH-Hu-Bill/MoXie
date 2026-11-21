@@ -761,3 +761,92 @@ function closePronModal() {
     if (_pronAudio) { try { _pronAudio.pause(); } catch (e) {} }
     document.querySelectorAll('.pron-item.playing').forEach(function(x) { x.classList.remove('playing'); });
 }
+
+// ---------- 自定义确认 / 输入弹窗（替代原生 confirm/prompt） ----------
+function _lwOpenModal(opts) {
+    return new Promise(function (resolve) {
+        var overlay = document.createElement('div');
+        overlay.className = 'lw-modal-overlay';
+        var modal = document.createElement('div');
+        modal.className = 'lw-modal';
+
+        var title = document.createElement('div');
+        title.className = 'lw-modal-title';
+        title.textContent = opts.title || '确认';
+        modal.appendChild(title);
+
+        var body = document.createElement('div');
+        body.className = 'lw-modal-body';
+        body.textContent = opts.message || '';
+        modal.appendChild(body);
+
+        var input = null;
+        if (opts.input) {
+            input = document.createElement('input');
+            input.className = 'input lw-modal-input';
+            input.type = 'text';
+            input.value = opts.defaultValue || '';
+            if (opts.maxlength) input.maxLength = opts.maxlength;
+            modal.appendChild(input);
+        }
+
+        var actions = document.createElement('div');
+        actions.className = 'lw-modal-actions';
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn';
+        cancelBtn.textContent = opts.cancelText || '取消';
+        var okBtn = document.createElement('button');
+        okBtn.type = 'button';
+        okBtn.className = 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+        okBtn.textContent = opts.okText || '确定';
+        actions.appendChild(cancelBtn);
+        actions.appendChild(okBtn);
+        modal.appendChild(actions);
+        overlay.appendChild(modal);
+
+        var done = false;
+        function close(val) {
+            if (done) return;
+            done = true;
+            overlay.classList.remove('show');
+            document.removeEventListener('keydown', onKey, true);
+            setTimeout(function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 180);
+            resolve(val);
+        }
+        function onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); close(null); }
+            else if (e.key === 'Enter') {
+                e.preventDefault();
+                close(opts.input ? input.value : true);
+            }
+        }
+        cancelBtn.addEventListener('click', function () { close(null); });
+        okBtn.addEventListener('click', function () { close(opts.input ? input.value : true); });
+        overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(null); });
+        document.addEventListener('keydown', onKey, true);
+        document.body.appendChild(overlay);
+        requestAnimationFrame(function () { overlay.classList.add('show'); });
+        setTimeout(function () { (input || okBtn).focus(); }, 30);
+    });
+}
+
+/** 自定义确认框，返回 Promise<boolean> */
+function lwConfirm(message, opts) {
+    return _lwOpenModal(Object.assign({ message: message }, opts || {})).then(function (v) { return v !== null; });
+}
+
+/** 自定义输入框，返回 Promise<string|null>（取消为 null） */
+function lwPrompt(message, defaultValue, opts) {
+    return _lwOpenModal(Object.assign({ message: message, input: true, defaultValue: defaultValue || '' }, opts || {}))
+        .then(function (v) { return v === null ? null : String(v); });
+}
+
+/** 给 <form onsubmit> 用：先拦截，确认后再真正提交 */
+function lwConfirmSubmit(form, message, opts) {
+    if (form.dataset.lwConfirmed === '1') return true;
+    lwConfirm(message, opts).then(function (ok) {
+        if (ok) { form.dataset.lwConfirmed = '1'; form.submit(); }
+    });
+    return false;
+}

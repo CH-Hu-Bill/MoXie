@@ -24,7 +24,7 @@
 class Mp4Guard {
 
     /** 最大 box 大小容错（单个 box 声明超过此值视为畸形） */
-    const MAX_BOX_BYTES = 200 * 1024 * 1024;
+    const MAX_BOX_BYTES = 2147483648; // 2GB：允许大文件的 mdat box，遍历用 fseek 不会整读
     /** 最大视频分辨率单边（像素，防超大分辨率视频拖垮 ffmpeg 首帧解码内存） */
     const MAX_DIMENSION = 4096;
 
@@ -40,7 +40,7 @@ class Mp4Guard {
     public static function validate($tmpPath, $maxSeconds = 30, $maxBytes = 15728640) {
         $size = @filesize($tmpPath);
         if ($size === false || $size <= 0) throw new RuntimeException('无法读取视频文件');
-        if ($size > $maxBytes) throw new RuntimeException('视频最大 15MB');
+        if ($size > $maxBytes) throw new RuntimeException('视频最大 ' . round($maxBytes / 1048576) . 'MB');
 
         $fp = @fopen($tmpPath, 'rb');
         if (!$fp) throw new RuntimeException('无法读取视频文件');

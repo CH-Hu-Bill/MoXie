@@ -100,7 +100,7 @@ html,body{height:100%;overflow:hidden;}
         <a class="btn btn-secondary" href="main.php?id=<?php echo urlencode($classId); ?>" style="text-decoration:none;display:inline-block;margin-left:8px;">回主界面</a>
     </div>
 </div>
-<script src="common.js?v=14"></script>
+<script src="common.js?v=15"></script>
 <script>
 (function () {
     var classId = <?php echo json_encode($classId, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;

@@ -149,6 +149,120 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     echo json_encode(['success' => true, 'id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null]); exit;
 }
 
+// ========== 分片上传（S5）：大视频按 8MB 切片传，最后服务端拼装校验 ==========
+const LW_CHUNK_BYTES = 8388608;          // 单片 8MB
+const LW_CHUNK_MAX_AGE = 3 * 3600;       // 3 小时没传完的分片自动清掉
+
+function galleryChunkRoot(string $classId): string {
+    return Database::getClassDir($classId) . DIRECTORY_SEPARATOR . 'chunks';
+}
+function galleryChunkDir(string $classId, string $uploadId): string {
+    return galleryChunkRoot($classId) . DIRECTORY_SEPARATOR . $uploadId;
+}
+/** 清理过期的分片目录 */
+function galleryChunkCleanup(string $classId, ?string $only = null): void {
+    $root = galleryChunkRoot($classId);
+    if (!is_dir($root)) return;
+    $targets = $only !== null ? [$root . DIRECTORY_SEPARATOR . $only] : (glob($root . DIRECTORY_SEPARATOR . '*') ?: []);
+    foreach ($targets as $dir) {
+        if (!is_dir($dir)) continue;
+        if ($only === null && (time() - (int)@filemtime($dir)) < LW_CHUNK_MAX_AGE) continue;
+        foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) @unlink($f);
+        @rmdir($dir);
+    }
+    @rmdir($root);
+}
+
+if (isset($_POST['action']) && $_POST['action'] === 'upload_chunk') {
+    header('Content-Type: application/json; charset=UTF-8');
+    requireCsrf();
+    $uid = (string)reqPost('upload_id');
+    if (!preg_match('/\A[a-f0-9]{32}\z/D', $uid)) { echo json_encode(['success' => false, 'error' => '分片参数无效']); exit; }
+    $index = (int)reqPost('index');
+    $total = (int)reqPost('total');
+    if ($index < 0 || $total < 1 || $total > 8192 || $index >= $total) { echo json_encode(['success' => false, 'error' => '分片参数无效']); exit; }
+    $chunk = $_FILES['chunk'] ?? null;
+    if (!$chunk || ($chunk['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) { echo json_encode(['success' => false, 'error' => '分片接收失败']); exit; }
+    if (($chunk['size'] ?? 0) > LW_CHUNK_BYTES + 1048576) { echo json_encode(['success' => false, 'error' => '分片过大']); exit; }
+    $dir = galleryChunkDir($classId, $uid);
+    if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) { echo json_encode(['success' => false, 'error' => '临时目录不可用']); exit; }
+    if (!@move_uploaded_file($chunk['tmp_name'], $dir . DIRECTORY_SEPARATOR . $index . '.part')) {
+        echo json_encode(['success' => false, 'error' => '分片保存失败']); exit;
+    }
+    echo json_encode(['success' => true, 'index' => $index]); exit;
+}
+
+if (isset($_POST['action']) && $_POST['action'] === 'upload_finish') {
+    header('Content-Type: application/json; charset=UTF-8');
+    requireCsrf();
+    $uid = (string)reqPost('upload_id');
+    if (!preg_match('/\A[a-f0-9]{32}\z/D', $uid)) { echo json_encode(['success' => false, 'error' => '分片参数无效']); exit; }
+    $total = (int)reqPost('total');
+    if ($total < 1 || $total > 8192) { echo json_encode(['success' => false, 'error' => '分片参数无效']); exit; }
+    $desc = trim(sanitizePlainText(reqPost('description')));
+    if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
+    if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
+
+    $dir = galleryChunkDir($classId, $uid);
+    if (!is_dir($dir)) { echo json_encode(['success' => false, 'error' => '分片已过期，请重新上传']); exit; }
+    $size = 0;
+    for ($i = 0; $i < $total; $i++) {
+        $part = $dir . DIRECTORY_SEPARATOR . $i . '.part';
+        if (!is_file($part)) { echo json_encode(['success' => false, 'error' => '分片缺失（第 ' . ($i + 1) . ' 片），请重新上传']); exit; }
+        $size += (int)@filesize($part);
+    }
+    if ($size > Database::MP4_MAX_BYTES) {
+        galleryChunkCleanup($classId, $uid);
+        echo json_encode(['success' => false, 'error' => '视频最大 ' . round(Database::MP4_MAX_BYTES / 1048576) . 'MB']); exit;
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'lwchunk');
+    $out = @fopen($tmp, 'wb');
+    if (!$out) { echo json_encode(['success' => false, 'error' => '临时文件不可用']); exit; }
+    for ($i = 0; $i < $total; $i++) {
+        $in = @fopen($dir . DIRECTORY_SEPARATOR . $i . '.part', 'rb');
+        if ($in) { stream_copy_to_stream($in, $out); fclose($in); }
+    }
+    fclose($out);
+
+    try {
+        $filename = Database::saveMp4Image($classId, $tmp);
+    } catch (RuntimeException $e) {
+        @unlink($tmp);
+        galleryChunkCleanup($classId, $uid);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]); exit;
+    } finally {
+        @unlink($tmp);
+    }
+    galleryChunkCleanup($classId, $uid);
+
+    $id = bin2hex(random_bytes(16));
+    try {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
+            if (!is_array($latest)) $latest = [];
+            array_unshift($latest, [
+                'id' => $id,
+                'image' => $filename,
+                'description' => $desc,
+                'uploaded_at' => date('Y-m-d H:i:s'),
+                'type' => 'video',
+                'uploader_name' => '网页',
+            ]);
+            return $latest;
+        });
+        if ($result === false) throw new RuntimeException('数据保存失败');
+    } catch (Throwable $e) {
+        Database::deleteUploadedImage($classId, $filename);
+        echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
+    }
+    echo json_encode(['success' => true, 'id' => $id, 'chunked' => true]); exit;
+}
+
+// GET 请求顺手清理 3 小时前没传完的分片目录
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    try { galleryChunkCleanup($classId); } catch (Throwable $e) {}
+}
+
 // ========== update_gallery ==========
 if (isset($_POST['action']) && $_POST['action'] === 'update_gallery') {
     header('Content-Type: application/json; charset=UTF-8');
@@ -306,7 +420,7 @@ require 'inc/header.php';
         <span id="galCount" style="font-size:12px;color:#888;"></span>
     </div>
 
-    <div class="gallery-grid" id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;"></div>
+    <div class="gallery-grid" id="galleryGrid" style="columns:280px;column-gap:20px;"></div>
     <div class="empty-state" id="emptyState" style="display:none"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-8px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><p>还没有图片，上传第一张吧</p></div>
 </div>
 
@@ -324,12 +438,13 @@ require 'inc/header.php';
     </div>
 </div>
 
-<script src="common.js?v=14"></script>
+<script src="common.js?v=15"></script>
 <script>
 var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 // 上传上限统一从服务端常量取，避免前后端两套数字飘移
 var LW_LIMITS = <?php echo json_encode([
     'mp4' => Database::MP4_MAX_BYTES,
+    'chunk' => LW_CHUNK_BYTES,
     'gif' => Database::GIF_MAX_BYTES,
     'image' => Database::UPLOAD_MAX_BYTES,
 ]); ?>;
@@ -403,10 +518,10 @@ function renderGallery() {
             media = '<img src="' + url + '" alt="" loading="lazy" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)">'
                 + '<video src="' + liveUrl + '" muted loop playsinline preload="none" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;opacity:0;transition:opacity .25s ease;" onplaying="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.hidden=true"></video>';
         } else {
-            media = '<img src="' + url + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.style.opacity=0;markGalleryError(this)">';
+            media = '<img src="' + url + '" alt="" loading="lazy" style="display:block;width:100%;height:auto;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.style.opacity=0;markGalleryError(this)">';
         }
-        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + detailUrl + '\', \'' + item.id + '\', ' + detailIsMp4 + ', \'' + detailThumb + '\')" style="overflow:hidden;cursor:pointer;padding:0;">'
-            + '<div class="img-wrap" style="width:100%;aspect-ratio:4/3;overflow:hidden;background:#f0f0f0;position:relative;">'
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + detailUrl + '\', \'' + item.id + '\', ' + detailIsMp4 + ', \'' + detailThumb + '\')" style="overflow:hidden;cursor:pointer;padding:0;break-inside:avoid;margin-bottom:20px;">'
+            + '<div class="img-wrap" style="width:100%;aspect-ratio:' + (detailIsMp4 ? '4/3' : 'auto') + ';min-height:180px;overflow:hidden;background:#f0f0f0;position:relative;">'
             + placeholder
             + media
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
@@ -720,6 +835,8 @@ async function uploadGallery() {
     var isGif = ext === 'gif';
     var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
     if (file.size > maxBytes) { showToast(isMp4 ? ('视频最大 ' + LW_LIMIT_LABEL.mp4) : (isGif ? ('GIF 最大 ' + LW_LIMIT_LABEL.gif) : ('图片最大 ' + LW_LIMIT_LABEL.image))); return; }
+    // 大视频走分片上传：绕开 PHP post_max_size，硬上限 1GB
+    if (isMp4 && file.size > 16 * 1048576) { await uploadChunkedGallery(file, desc); return; }
     if (!isMp4 && !['jpg','jpeg','png','webp','gif'].includes(ext)) { showToast('不支持的文件格式'); return; }
     var btn = document.getElementById('uploadBtn'); btn.disabled = true; btn.textContent = '上传中…';
     var fd = new FormData();
@@ -761,8 +878,60 @@ async function uploadGallery() {
     btn.disabled = false; btn.textContent = '上传';
 }
 
+// 分片上传：8MB 一片，最后服务端拼装 + MP4 校验；支持到 1GB
+async function uploadChunkedGallery(file, desc) {
+    var hint = document.getElementById('uploadHint');
+    var btn = document.getElementById('uploadBtn');
+    var csrf = document.getElementById('csrfToken').value;
+    var CHUNK = LW_LIMITS.chunk || 8388608;
+    var total = Math.ceil(file.size / CHUNK);
+    var bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    var uid = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    btn.disabled = true;
+    btn.textContent = '上传中…';
+    if (hint) hint.textContent = '';
+    try {
+        for (var i = 0; i < total; i++) {
+            var blob = file.slice(i * CHUNK, Math.min(file.size, (i + 1) * CHUNK));
+            var fd = new FormData();
+            fd.append('action', 'upload_chunk');
+            fd.append('upload_id', uid);
+            fd.append('index', String(i));
+            fd.append('total', String(total));
+            fd.append('chunk', blob, 'part');
+            fd.append('csrf_token', csrf);
+            var resp = await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd });
+            var txt = await resp.text();
+            var r = null;
+            try { r = JSON.parse(txt); } catch (e) { throw new Error('服务器响应异常（HTTP ' + resp.status + '）'); }
+            if (!r.success) throw new Error(r.error || ('第 ' + (i + 1) + ' 片上传失败'));
+            if (hint) hint.textContent = '上传中 ' + Math.round((i + 1) / total * 100) + '%（' + (i + 1) + '/' + total + ' 片）';
+        }
+        if (hint) hint.textContent = '正在拼装与校验…';
+        var fd2 = new FormData();
+        fd2.append('action', 'upload_finish');
+        fd2.append('upload_id', uid);
+        fd2.append('total', String(total));
+        fd2.append('description', desc);
+        fd2.append('csrf_token', csrf);
+        var r2 = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd2 })).json();
+        if (!r2.success) throw new Error(r2.error || '拼装失败');
+        if (hint) hint.textContent = '';
+        showToast('上传成功');
+        clearUpload();
+        await refreshGalleryGrid();
+    } catch (e) {
+        if (hint) hint.textContent = '上传失败：' + (e.message || '网络错误');
+        showToast(e.message || '上传失败');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '上传';
+    }
+}
+
 async function deleteGallery(id) {
-    if (!confirm('删除后可在回收站保留 7 天，确定删除吗？')) return;
+    if (!await lwConfirm('删除后会在回收站保留 7 天，期间可以恢复。', { title: '删除这一项？', okText: '删除', danger: true })) return;
     var fd = new FormData();
     fd.append('action', 'delete_gallery');
     fd.append('id', id);
@@ -816,7 +985,7 @@ async function loadTrash() {
             + '<div style="font-size:11px;color:#999;margin-top:3px;">' + it.deleted_at + ' 删除 · 还剩 ' + it.days_left + ' 天</div>'
             + '</div>'
             + '<button class="btn btn-sm" onclick="restoreTrash(\'' + it.id + '\')">恢复</button>'
-            + '<button class="btn btn-danger btn-sm" data-armed="" onclick="purgeTrash(this, \'' + it.id + '\')">彻底删除</button>'
+            + '<button class="btn btn-danger btn-sm" onclick="purgeTrash(this, \'' + it.id + '\')">彻底删除</button>'
             + '</div>';
     }).join('');
 }
@@ -837,12 +1006,7 @@ async function restoreTrash(id) {
 
 // 彻底删除不用原生 confirm：第一次点变成「再点一次确认」，4 秒后回落
 async function purgeTrash(btn, id) {
-    if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1';
-        btn.textContent = '再点一次确认';
-        setTimeout(function() { if (btn) { btn.dataset.armed = ''; btn.textContent = '彻底删除'; } }, 4000);
-        return;
-    }
+    if (!await lwConfirm('彻底删除后文件不可恢复。', { title: '彻底删除？', okText: '彻底删除', danger: true })) return;
     if (!await trashPost('purge_trash', id)) return;
     showToast('已彻底删除');
     await loadTrash();
@@ -850,9 +1014,9 @@ async function purgeTrash(btn, id) {
 
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function editGallery(id) {
+async function editGallery(id) {
     var currentDesc = galleryDescMap[id] || '';
-    var newDesc = prompt('修改图片描述：', currentDesc);
+    var newDesc = await lwPrompt('修改图片描述', currentDesc, { title: '修改描述', okText: '保存', maxlength: 500 });
     if (newDesc === null) return;
     newDesc = newDesc.trim();
     if (!newDesc) { showToast('描述不能为空'); return; }

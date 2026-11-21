@@ -549,8 +549,8 @@ class Database {
     const GIF_MAX_FRAME_PIXELS = 25000000;
     /** @var int GIF 单边最大像素（逻辑屏/帧，防超大单帧） */
     const GIF_MAX_EDGE = 8000;
-    /** @var int MP4 单文件最大字节数 (200MB；需 PHP upload_max_filesize/post_max_size 同步放开) */
-    const MP4_MAX_BYTES = 209715200;
+    /** @var int MP4 单文件最大字节数 (1GB；大文件由前端分片上传，单片 8MB) */
+    const MP4_MAX_BYTES = 1073741824;
     /** @var int MP4 最大时长（秒）；从 30 秒放宽到 3 分钟，方便课堂实录短片 */
     const MP4_MAX_SECONDS = 180;
 

@@ -186,6 +186,6 @@ require 'inc/head.php';
 
     <p class="game-note">游戏时长按班级统一计算，每天 0 点重置。只支持内置游戏；外站游戏无法可靠限制时长，因此暂不接入。</p>
 </div>
-<script src="common.js?v=14"></script>
+<script src="common.js?v=15"></script>
 </body>
 </html>

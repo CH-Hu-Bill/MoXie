@@ -373,7 +373,7 @@ $classMusicUrl = music_get_class_url($classId);
     </div>
     <div class="toast" id="toast"></div>
 
-    <script src="common.js?v=14"></script>
+    <script src="common.js?v=15"></script>
     <script>var speakRepeat = <?php echo $defaultRepeat; ?>;</script>
     <script>
         function generateApiKey() {

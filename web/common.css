@@ -1371,3 +1371,23 @@ body.music-page {
   .music-pencil-line path { stroke-dashoffset: 0; }
   .music-progress span { width: 100%; }
 }
+
+/* ======== 自定义确认/输入弹窗（替代原生 confirm/prompt） ======== */
+.lw-modal-overlay {
+  position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45); padding: 20px; opacity: 0; transition: opacity 0.16s ease;
+}
+.lw-modal-overlay.show { opacity: 1; }
+.lw-modal {
+  width: 100%; max-width: 420px; background: var(--paper);
+  border: 2.5px solid var(--pencil); border-radius: var(--wobbly);
+  box-shadow: 6px 6px 0 var(--pencil); padding: 20px 20px 16px;
+  transform: translateY(8px) scale(0.98); transition: transform 0.16s ease;
+}
+.lw-modal-overlay.show .lw-modal { transform: none; }
+.lw-modal-title { font-family: var(--font-heading); font-size: 17px; margin-bottom: 8px; }
+.lw-modal-body { font-size: 14px; line-height: 1.7; color: var(--pencil); white-space: pre-wrap; word-break: break-word; }
+.lw-modal-input { width: 100%; margin-top: 12px; }
+.lw-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.lw-modal-actions .btn { margin: 0; }
+@media (max-width: 480px) { .lw-modal { max-width: 100%; } }
