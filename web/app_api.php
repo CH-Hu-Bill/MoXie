@@ -92,12 +92,7 @@ function appLibraryCounts($words) {
 
 /** 知识库内容指纹：APP 轮询它判断是否需要后台刷新 */
 function appLibraryRev($words) {
-    $sig = [];
-    foreach ($words as $w) {
-        $sig[] = ($w['id'] ?? '') . '|' . ($w['type'] ?? 'word') . '|' . ($w['word'] ?? '')
-            . '|' . ($w['meaning'] ?? '') . '|' . ($w['pos'] ?? '') . '|' . ($w['title'] ?? '');
-    }
-    return substr(md5(implode("\n", $sig)), 0, 16);
+    return appWordsRev($words);
 }
 
 /**
@@ -536,6 +531,22 @@ switch ($action) {
             return $data;
         });
         appJson(['success' => true, 'data' => ['is_wrong' => $wrong]]);
+
+    case 'get_rev':
+        // S3 轻量指纹：客户端每 10 秒比对一次，只刷新变化的区块。
+        // 只读几个 JSON 文件，不返回业务数据，开销远小于全量拉取。
+        $revUser = Database::getUser($userId);
+        $revWrong = $revUser['wrong_words'][$classId] ?? [];
+        $revGallery = Database::getClassData($classId, 'gallery');
+        appJson(['success' => true, 'data' => [
+            'rev' => appDataRevs(
+                Database::getWords($classId),
+                (array)Database::getTasks($classId),
+                is_array($revWrong) ? $revWrong : [],
+                is_array($revGallery) ? $revGallery : []
+            ),
+            'web_version' => LW_WEB_VERSION,
+        ]]);
 
     case 'get_tasks':
         $type = trim(reqPost('type', 'pending'));
