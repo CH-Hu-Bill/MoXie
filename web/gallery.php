@@ -477,6 +477,17 @@ function renderGallery() {
             + '</div></div></div>';
     }).join('');
     initGridVideos(); // 重渲染后重新挂视口调度（新 video 元素需要重新 observe）
+
+    // 搜索时自动定位到第一张命中项（需求：图集搜索仍要自动定位）
+    if (q && items.length) {
+        var firstCard = grid.querySelector('.gallery-card');
+        if (firstCard) {
+            try { firstCard.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+            var prev = firstCard.style.boxShadow;
+            firstCard.style.boxShadow = '0 0 0 4px var(--blue)';
+            setTimeout(function () { firstCard.style.boxShadow = prev; }, 1600);
+        }
+    }
 }
 function hideGalleryPlaceholder(el) {
     if (!el) return;
