@@ -2,14 +2,23 @@
 
 Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 
+## 运行要求
+
+| 项 | 最低要求 | 说明 |
+|----|----------|------|
+| Android | **7.0（API 24）** | `minSdk = 24`；`compileSdk/targetSdk = 36` |
+| 服务端 Web | **2.0.0+** | 建议与 APP 同为 2.1.2；低于最低版本会被阻断 |
+| 当前 APP | **2.1.2** | `pubspec.yaml`：`2.1.2+8` |
+| CI 构建 | Flutter 3.50.1 / Java 17 / Gradle 9.1.0 | 见 `.github/workflows/build.yml` |
+
 ## 功能概览
 
 | Tab | 功能 |
 |-----|------|
 | 学习 | 知识库（单词/句子/作文，卡片+点读+添加，下拉刷新+10s 指纹轮询）、错题本（标记/移出+导出）、任务（进行中/历史+详情） |
 | 生活 | 个人史记（日历+富文本编辑器+图片上传，保存后自动切换查看模式，下拉刷新+10s 自动刷新）、他人史记（授权用户，可滚动查看）、班级史记（只读） |
-| 搜索 | 全局搜索单词和任务，点击跳转+滚动定位+高亮 |
-| 画廊 | 瀑布流浏览 + 单/多文件上传（图片/GIF/MP4/实况，图片建议 15MB/上限 100MB，视频建议 50MB/上限 1GB，可本地压缩并对比）+大图查看+图片缓存；**MP4 视频卡片显示后端 ffmpeg 生成的首帧图（cached_network_image 缓存秒开）+ 手绘风「视频」贴纸（白纸卡片+抖动圆角+硬阴影），点进去才加载真视频**（首次网络流式播放并后台缓存整文件，二次起直接读缓存）；GIF 动图缩略图进入视口才播放、离开释放；大图可缩放/播放/声音开关；**大图查看时描述过长在固定区域自动滚动（可拖动打断、2s 后恢复）**；支持修改图片描述；下拉刷新+10s 指纹轮询 |
+| 搜索 | 全局搜索单词、句子、作文、任务与图集；图集结果显示完整描述+首帧，点击切到画廊 Tab 定位并高亮；作文跳到知识库定位；结果列表有限渲染，不无限滚动 |
+| 画廊 | 瀑布流浏览 + 单/多文件上传（图片/GIF/MP4/实况，图片建议 15MB/上限 100MB，视频建议 50MB/上限 1GB；上传原文件，不压缩）+ 上传进度/百分比 + 大图查看 + 图片缓存；顶部栏班级名后显示「· N 张」，排序按钮在右下角上传键上方；**MP4/实况网格只显示静态首帧（cached_network_image 缓存）+ 手绘风「视频/实况」贴纸，点进去才播放**；GIF 缩略图进入视口才播放、离开释放；大图可缩放/播放/声音开关；**大图查看时描述过长在固定区域自动滚动（可拖动打断、2s 后恢复）**；支持修改图片描述；下拉刷新+10s 指纹轮询，刷新保留滚动位置 |
 | 我的 | 用户信息、切换班级、Vlog 授权、检查更新、退出登录、注销账号。登录无闪屏（本地 loading 状态） |
 
 ## 技术栈
@@ -22,8 +31,6 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | http | ^1.2.0 | 网络请求（MultipartRequest） |
 | shared_preferences | ^2.2.0 | 本地缓存（token、班级、单词等） |
 | file_picker | ^10.3.10 | 图片/视频多选（画廊） |
-| flutter_image_compress | ^2.5.1 | 图片本地压缩 |
-| video_compress | ^3.1.4 | 视频本地压缩（MediaCodec） |
 | flutter_staggered_grid_view | ^0.7.0 | 图集瀑布流 |
 | flutter_widget_from_html | ^0.15.0 | Vlog HTML 内容渲染 |
 | just_audio | ^0.9.39 | 单词发音（有道词典 TTS） |
@@ -33,7 +40,7 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 | vsc_quill_delta_to_html | ^1.0.5 | Quill Delta → HTML 转换（保存到服务器，inline styles 模式） |
 | cached_network_image | ^3.4.1 | 图片缓存（画廊网格静态图+大图查看，避免重复下载） |
 | visibility_detector | ^0.4.0+2 | GIF/MP4 缩略图视口检测（进入视口才加载播放，省流量+性能） |
-| video_player | ^2.13.0 | MP4 视频播放（画廊缩略图静音循环 + 大图播放/声音开关） |
+| video_player | ^2.9.1 | MP4 视频播放（大图播放/声音开关） |
 | flutter_lints | ^4.0.0 | 代码规范（dev） |
 
 **字体**（打包到 APK，离线可用）：
@@ -41,7 +48,9 @@ Flutter Android 客户端，配合 [web/](../../web/) 后端使用。
 - `MaShanZheng` → 正文字体（`assets/fonts/MaShanZheng-Regular.ttf`）
 
 **Android 配置**：
+- `minSdk = 24`（Android 7.0；Flutter 3.50.1 默认值）
 - `compileSdk = 36`（`android/app/build.gradle.kts`）
+- CI 使用 Flutter 3.50.1 / Java 17 / Gradle 9.1.0
 - `android:usesCleartextTraffic="true"`（`AndroidManifest.xml`，允许 HTTP）
 - `android:label="默写史记"`
 - `FileProvider` 配置（`res/xml/file_paths.xml`，flutter_quill 图片剪贴板支持）
@@ -89,7 +98,7 @@ lib/
     ├── life/
     │   └── life_screen.dart           # 生活 Tab（日历在上 + 内容在下，3 子 Tab）
     ├── search/
-    │   └── search_screen.dart         # 搜索 Tab（单词+任务，高亮+跳转）
+    │   └── search_screen.dart         # 搜索 Tab（单词/作文/任务/图集，高亮+跳转）
     ├── gallery/
     │   └── gallery_screen.dart        # 画廊 Tab（网格+上传+灯箱查看）
     └── profile/
@@ -137,8 +146,8 @@ main.dart
 1. **设置 Secret**：仓库 Settings → Secrets → Actions → 添加 `API_BASE_URL`
    - 值为后端地址（如 `http://<你的内网IP>:8000`）
    - 不带 `/app_api.php`，不带尾部斜杠
-2. **触发构建**：推送改动到 `main`（需改动 `app/myapp/**`），或手动 Run workflow
-3. **下载**：run 详情页 → Artifacts → `listenwrite-release.apk`
+2. **触发构建**：推送 `app-v*` tag 正式发布；手动 Run workflow 只产出 7 天测试 artifact
+3. **下载**：正式 Release 下载 `app-arm64-v8a-release.apk` / `app-armeabi-v7a-release.apk`；测试 artifact 名称为 `listenwrite-<版本>-test`
 
 ### 方式二：本地构建
 
@@ -195,7 +204,7 @@ flutter build apk --release
 2. **Vlog 编辑器**：flutter_quill 与网站端 Quill JS 的 Delta 格式存在细微差异，复杂排版迁移可能不完美；字体颜色已通过 inlineStylesFlag + 正则后处理输出为内联样式
 3. **TTS 容错**：有道词典对部分单词无发音记录，已加 SnackBar 提示
 4. **iOS 适配**：代码已兼容，需 Mac + Xcode + Apple Developer 账号构建
-5. **画廊上传**：已实现本地校验（图片 100MB 硬上限、GIF 16MB、视频 1GB 硬上限）+ 服务器端二次校验；大文件走 8MB 分片
+5. **画廊上传**：已实现本地校验（图片 100MB 硬上限、GIF 16MB、视频 1GB 硬上限）+ 服务器端二次校验；大文件走 8MB 分片；上传保留原文件，压缩功能已暂停
 6. **同步刷新**：学习/图集/生活页每 10s 检查区块指纹或静默拉取，编辑/滚动中不打断
 7. **媒体缓存**：画廊静态图使用 cached_network_image 缓存；GIF 动图用 flutter_cache_manager 磁盘缓存 + visibility_detector 视口检测（进入视口才播放、离开释放资源）；**MP4 视频卡片显示后端 ffmpeg 首帧图（`thumb_url`，cached_network_image 缓存）+ 手绘风「视频」贴纸**——网格不再内嵌视频解码器（消除缩略图黑屏/多实例卡顿）；大图播放器**缓存命中直接读本地文件，未缓存则网络流式播放（服务器 HEAD/Range 秒开）并后台下载整文件写缓存，二次打开秒开**；**大图查看描述用 AutoScrollText：内容超出固定高度时自动纵向滚动（滚到底→停留→滚回顶部循环），用户拖动可打断、2s 后恢复，上下边缘渐变蒙版仅在确有溢出时显示（不遮挡短文本末行）、内容底部留缓冲**；无 `thumb_url` 的历史视频走旧版视口缩略图降级路径；单词/史记数据使用 SharedPreferences TTL 缓存（10s 轮询 + 变化才刷新）
 8. **`api_config.example.dart` 中 baseUrl 为 `127.0.0.1:8000/web`**：注意服务器端如果没有 `/web` 前缀（直接部署在根目录），需去掉 `/web`
