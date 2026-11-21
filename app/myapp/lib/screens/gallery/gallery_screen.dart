@@ -61,7 +61,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       final galleryRev = (rev?['gallery'] ?? '').toString();
       if (galleryRev.isEmpty) return;
       if (_galleryRev.isEmpty) {
-        _galleryRev = galleryRev; // 基线
+        _galleryRev = galleryRev;
+        // 首次拿到指纹（可能是从连续失败中恢复）：同步一次，避免停在旧列表
+        _loadGalleryRemote(classId, reset: true);
         return;
       }
       if (galleryRev == _galleryRev) return;

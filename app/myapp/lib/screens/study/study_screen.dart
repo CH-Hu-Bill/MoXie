@@ -272,6 +272,10 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         _kbLoading[type] = false;
         _applyMetaData(data);
       });
+      // 首屏加载时把 words 指纹记下来：这样第一次轮询就是"真比对"，
+      // 不会再出现"启动后 10 秒内变化被当成基线吞掉"的情况。
+      final rev = (data['rev'] ?? '').toString();
+      if (reset && rev.isNotEmpty) _revs['words'] = rev;
       if (reset && type == 'word') {
         _storage.cacheWords(
             classId,
@@ -317,7 +321,13 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         'gallery': (rev['gallery'] ?? '').toString(),
       };
       if (_revs.isEmpty) {
+        // 没有任何基线（例如首屏加载没拿到 rev、或刚从连续失败中恢复）：
+        // 记下基线并主动同步一次，避免停留在旧数据上。
         _revs.addAll(incoming);
+        _loadTasks(classId);
+        _loadWrongWords(classId);
+        final t = _kbTypes[_kbTab];
+        if (_kbLoading[t] != true) _loadKb(classId, t, reset: true);
         return;
       }
       final wordsChanged =
