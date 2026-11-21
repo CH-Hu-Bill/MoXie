@@ -284,8 +284,8 @@ function renderGallery() {
             // - preload=metadata + IntersectionObserver 视口调度：进视口才 play() 下载/解码，
             //   不再首屏全量并发下载所有视频（多解码器并发是点开视频卡顿的根源）。
             var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + item.image;
-            media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)">'
-                + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop playsinline preload="metadata" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onplaying="hideGalleryPlaceholder(this)" onerror="markGalleryError(this)"></video>';
+            media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="this.hidden=true">'
+                + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop playsinline preload="metadata" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onplaying="hideGalleryPlaceholder(this)" onerror="galleryVideoError(this)"></video>';
         } else if (isLive) {
             // 实况卡片：静态图打底 + 实况视频叠在上层，进视口静音循环播放（与 MP4 卡片共用同一套调度）。
             // - 视频未出首帧前 opacity:0，仍显示静态图，不会黑屏；
@@ -330,6 +330,18 @@ function markGalleryError(el) {
         ph.innerHTML = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg><span style="font-size:11px;color:#bbb;margin-top:4px;">媒体已失效</span>';
         ph.style.display = 'flex';
     }
+}
+
+// 视频 onerror 可能是瞬时失败（缺首帧缩略图、刚进视口还没缓冲够时更常见）：
+// 延迟判定，期间只要能播就忽略，避免正常视频先闪一段“媒体已失效”。
+function galleryVideoError(el) {
+    if (!el) return;
+    setTimeout(function() {
+        try {
+            if (el.readyState >= 2 || el.currentTime > 0) return;
+        } catch (e) {}
+        markGalleryError(el);
+    }, 1200);
 }
 
 // 网格视频视口调度：进入视口的视频才 play()（触发下载/解码），离开视口 pause()。

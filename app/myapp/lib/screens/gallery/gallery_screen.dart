@@ -604,6 +604,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                     ? (item.thumbUrl.isNotEmpty
                                           ? _VideoThumbView(
                                               thumbUrl: item.thumbUrl,
+                                              videoUrl: item.imageUrl,
                                             )
                                           : _VideoThumbnail(
                                               videoUrl: item.imageUrl,
@@ -1055,7 +1056,12 @@ class _VideoThumbSurface extends StatelessWidget {
 /// 网格中不再内嵌播放解码器（这是此前缩略图黑屏/卡顿的主要来源）。
 class _VideoThumbView extends StatelessWidget {
   final String thumbUrl;
-  const _VideoThumbView({required this.thumbUrl});
+
+  /// 首帧缩略图接口返回 404（CLI 计划任务还没生成）时的兜底：
+  /// 直接用视频现场抽帧，保证卡片始终是“第一帧画面”而不是灰块图标。
+  final String videoUrl;
+
+  const _VideoThumbView({required this.thumbUrl, required this.videoUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -1074,12 +1080,14 @@ class _VideoThumbView extends StatelessWidget {
               ),
             ),
           ),
-          errorWidget: (_, __, ___) => Container(
-            color: AppColors.muted,
-            child: const Center(
-              child: Icon(Icons.videocam, size: 40, color: Colors.white70),
-            ),
-          ),
+          errorWidget: (_, __, ___) => videoUrl.isEmpty
+              ? Container(
+                  color: AppColors.muted,
+                  child: const Center(
+                    child: Icon(Icons.videocam, size: 40, color: Colors.white70),
+                  ),
+                )
+              : _VideoThumbnail(videoUrl: videoUrl),
         ),
         // 手绘风格"视频"贴纸：白纸卡片 + 抖动圆角 + 硬偏移阴影 + 红色播放三角 + 手写标题
         Positioned.fill(
