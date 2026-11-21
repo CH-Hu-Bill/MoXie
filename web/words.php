@@ -576,7 +576,7 @@ PROMPT;
 </style>
 </head>
 <body>
-    <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';</script>
+    <script>var CSRF_TOKEN='<?php echo $csrfToken; ?>';var LW_CLASS_ID=<?php echo json_encode($classId); ?>;</script>
     <?php
     $backUrl = 'main.php?id=' . $classId;
     $className = $class['name'];
@@ -1823,6 +1823,66 @@ PROMPT;
                 locateForTab(currentTab);
             }
         });
+        // ── 分区刷新（S3）：每 10 秒比对区块指纹，只重渲染三个列表面板 ──
+        // 有勾选 / 打开弹窗 / 正在输入时不刷新，避免打断用户操作。
+        (function setupPartitionRefresh() {
+            var lastRev = '';
+            var busy = false;
+
+            function isBusy() {
+                if (typeof selectedIds !== 'undefined' && selectedIds.size > 0) return true;
+                if (document.querySelector('.modal.active')) return true;
+                var ae = document.activeElement;
+                if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return true;
+                return false;
+            }
+
+            async function refreshPanels() {
+                var y = window.scrollY;
+                var res = await fetch(location.pathname + '?id=' + encodeURIComponent(LW_CLASS_ID), { credentials: 'same-origin' });
+                if (!res.ok) return;
+                var html = await res.text();
+                var doc = new DOMParser().parseFromString(html, 'text/html');
+                ['panelWord', 'panelSentence', 'panelEssay'].forEach(function(pid) {
+                    var fresh = doc.getElementById(pid);
+                    var cur = document.getElementById(pid);
+                    if (!fresh || !cur) return;
+                    // 只换内容，保留当前 tab 的显示/隐藏状态（否则刷新会把 tab 弹回单词）
+                    cur.innerHTML = fresh.innerHTML;
+                });
+                window.scrollTo(0, y);
+            }
+
+            async function poll() {
+                if (document.hidden || busy || isBusy()) return;
+                busy = true;
+                try {
+                    var r = await fetch('class_rev.php?id=' + encodeURIComponent(LW_CLASS_ID), { credentials: 'same-origin' });
+                    if (!r.ok) return;
+                    var j = await r.json();
+                    var rev = (j && j.rev && j.rev.words) || '';
+                    if (!rev) return;
+                    if (!lastRev) { lastRev = rev; return; } // 基线
+                    if (rev === lastRev) return;
+                    lastRev = rev;
+                    await refreshPanels();
+                    if (j.counts) {
+                        var map = { countWord: 'word', countSentence: 'sentence', countEssay: 'essay' };
+                        Object.keys(map).forEach(function(elId) {
+                            var el = document.getElementById(elId);
+                            if (el && typeof j.counts[map[elId]] !== 'undefined') el.textContent = j.counts[map[elId]];
+                        });
+                    }
+                } catch (e) {
+                    /* 网络抖动忽略，下轮再试 */
+                } finally {
+                    busy = false;
+                }
+            }
+
+            setInterval(poll, 10000);
+            document.addEventListener('visibilitychange', function() { if (!document.hidden) poll(); });
+        })();
     </script>
 </body>
 </html>
