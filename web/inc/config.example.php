@@ -17,4 +17,6 @@ return [
     'admin_password'      => '',
     'admin_password_hash' => '',
     'admin_session_ttl'   => 1800,
+    // 可选：GitHub 只读 Token（fine-grained / classic 均可），仅用于后台检查 Web 更新，避免匿名 API 限流 403
+    'github_token'        => getenv('GITHUB_TOKEN') ?: '',
 ];

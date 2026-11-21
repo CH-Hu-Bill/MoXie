@@ -3,13 +3,11 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:motion_photos/motion_photos.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:video_compress/video_compress.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:video_player/video_player.dart';
 import '../../models/gallery_item.dart';
@@ -29,8 +27,6 @@ class GalleryScreen extends StatefulWidget {
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
-  static const _maxBytes = 104857600; // 图片硬上限 100MB
-  static const _gifMaxBytes = 16777216; // GIF 动图 16MB
   static const _allowedExts = [
     'jpg',
     'jpeg',
@@ -49,6 +45,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Timer? _refreshTimer;
   String _galleryRev = ''; // 图集区块指纹：只有变化时才重新拉取
+  final _gridController = ScrollController();
+  final Map<String, GlobalKey> _cardKeys = {};
+  String? _highlightId;
+  String? _focusLoadingId;
+  int _focusLoadPages = 0;
 
   // 排序（搜索统一走主界面搜索，这里只保留排序）
   String _order = 'desc'; // desc=最新在前
@@ -69,35 +70,38 @@ class _GalleryScreenState extends State<GalleryScreen> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Text(
-            '共 ${_items.length} 条',
+            '共 ${_items.length} 张',
             style: AppTheme.bodyStyle.copyWith(
               fontSize: 12,
               color: AppColors.muted,
             ),
           ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: () =>
-                setState(() => _order = _order == 'desc' ? 'asc' : 'desc'),
-            icon: Icon(
-              _order == 'desc' ? Icons.south_rounded : Icons.north_rounded,
-              size: 16,
-            ),
-            label: Text(
-              _order == 'desc' ? '最新' : '最早',
-              style: AppTheme.bodyStyle.copyWith(
-                fontSize: 13,
-                color: AppColors.pencil,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.pencil, width: 2),
-              shape: RoundedRectangleBorder(borderRadius: AppTheme.wobblySm),
-              foregroundColor: AppColors.pencil,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-            ),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSortButton() {
+    return OutlinedButton.icon(
+      onPressed: () =>
+          setState(() => _order = _order == 'desc' ? 'asc' : 'desc'),
+      icon: Icon(
+        _order == 'desc' ? Icons.south_rounded : Icons.north_rounded,
+        size: 16,
+      ),
+      label: Text(
+        _order == 'desc' ? '最新' : '最早',
+        style: AppTheme.bodyStyle.copyWith(
+          fontSize: 13,
+          color: AppColors.pencil,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: AppColors.pencil, width: 2),
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.wobblySm),
+        foregroundColor: AppColors.pencil,
+        backgroundColor: AppColors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       ),
     );
   }
@@ -138,6 +142,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _gridController.dispose();
     super.dispose();
   }
 
@@ -255,69 +260,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
         a.height == b.height;
   }
 
-  void _showUploadMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.background,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppTheme.wobblyRadius,
-        side: const BorderSide(color: AppColors.border, width: 2),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('上传到画廊', style: AppTheme.headingStyle),
-              const SizedBox(height: 16),
-              _UploadMenuTile(
-                icon: Icons.perm_media_outlined,
-                label: '选择图片 / 视频（可多选，1GB 以内）',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickAndUploadMedia();
-                },
-              ),
-              const SizedBox(height: 10),
-              _UploadMenuTile(
-                icon: Icons.motion_photos_on_outlined,
-                label: '上传实况照片（选原图，保留动图）',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickAndUploadLive();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 兜底：直接选原图文件，确保 motion 元数据不被 image_picker 副本丢掉。
-  Future<void> _pickAndUploadLive() async {
-    FilePickerResult? result;
-    try {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('打开文件选择器失败，请重试')),
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-    final picked = result?.files.single;
-    final path = picked?.path;
-    if (path == null) return;
-    await _uploadPickedImage(File(path), picked!.name, preferLive: true);
-  }
-
   Future<void> _pickAndUploadMedia() async {
     FilePickerResult? result;
     try {
@@ -347,11 +289,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
         }
         continue;
       }
+      final isVideo = ext == 'mp4' || ext == 'mov';
+      final isGif = ext == 'gif';
+      File? liveVideo;
+      if (!isVideo && !isGif) {
+        liveVideo = await _extractLiveVideo(path);
+      }
       pending.add(_GalleryPendingFile(
         file: File(path),
         name: f.name,
-        isVideo: ext == 'mp4' || ext == 'mov',
-        isGif: ext == 'gif',
+        isVideo: isVideo,
+        isGif: isGif,
+        liveVideo: liveVideo,
       ));
     }
     if (pending.isEmpty || !mounted) return;
@@ -377,178 +326,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
       );
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<void> _uploadPickedImage(
-    File file,
-    String name, {
-    bool preferLive = false,
-  }) async {
-    final ext = name.split('.').last.toLowerCase();
-    final isGif = ext == 'gif';
-    final fileSize = await file.length();
-    final maxBytes = isGif ? _gifMaxBytes : _maxBytes;
-    if (fileSize > maxBytes) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isGif ? 'GIF 动图大小不能超过 16MB' : '图片大小不能超过 100MB'),
-          ),
-        );
-      }
-      return;
-    }
-    if (!_allowedExts.contains(ext)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('仅支持 JPEG、PNG、WebP 或 GIF 格式')),
-        );
-      }
-      return;
-    }
-
-    File? liveVideo = await _extractLiveVideo(file.path);
-    if (liveVideo != null) {
-      if (!mounted) return;
-      final useLive = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          scrollable: true,
-          backgroundColor: AppColors.background,
-          shape: RoundedRectangleBorder(
-            borderRadius: AppTheme.wobblyRadius,
-            side: const BorderSide(color: AppColors.border, width: 2),
-          ),
-          title: Text('检测到实况照片', style: AppTheme.headingStyle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: AppTheme.wobblyRadius,
-                    child: Image.file(
-                      file,
-                      height: 180,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(top: 8, right: 8, child: _LiveBadge()),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '这张照片带有动态视频。可以一起上传为实况，也可以只上传静态图。',
-                style: AppTheme.bodyStyle,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('取消', style: AppTheme.bodyStyle),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('仅图片', style: AppTheme.bodyStyle),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text('实况上传', style: AppTheme.bodyStyle),
-            ),
-          ],
-        ),
-      );
-      if (useLive == null) return;
-      if (!useLive) liveVideo = null;
-    } else if (preferLive && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未识别到实况视频，将按普通图片上传')),
-      );
-    }
-
-    final desc = await _askDescription('描述这张图片...');
-    if (desc == null || !mounted) return;
-    await _uploadFile(file, desc, liveVideo: liveVideo);
-  }
-
-  Future<String?> _askDescription(String hint) async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        scrollable: true,
-        backgroundColor: AppColors.background,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppTheme.wobblyRadius,
-          side: const BorderSide(color: AppColors.border, width: 2),
-        ),
-        title: Text('添加描述', style: AppTheme.headingStyle),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(hintText: hint),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: AppTheme.bodyStyle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: Text('上传', style: AppTheme.bodyStyle),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return result;
-  }
-
-  Future<void> _uploadFile(File file, String desc, {File? liveVideo}) async {
-    final auth = context.read<AuthProvider>();
-    final classId = auth.currentClassId!;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const LoadingOverlay(message: '上传中...'),
-    );
-
-    try {
-      final res = await _api.saveGallery(
-        classId,
-        file,
-        desc,
-        liveVideo: liveVideo,
-      );
-      if (mounted) Navigator.pop(context);
-      _loadGallery();
-      final data = res['data'] as Map<String, dynamic>?;
-      final warning = (data?['live_warning'] ?? '').toString();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(warning.isNotEmpty ? warning : '上传成功')),
-        );
-      }
-    } on ApiException catch (e) {
-      if (mounted) Navigator.pop(context);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message.isNotEmpty ? e.message : '上传失败，请重试'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('网络错误，请检查网络后重试')));
-      }
     }
   }
 
@@ -705,17 +482,52 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   String? _openedInitialId;
+  GlobalKey _cardKey(String id) => _cardKeys.putIfAbsent(id, () => GlobalKey());
 
-  /// 从全局搜索跳转进来：列表就绪后自动打开目标图集（只做一次）
+  /// 从全局搜索跳转进来：自动定位并高亮目标卡片，不直接打开详情。
   void _maybeOpenInitial() {
     final id = widget.openItemId;
     if (id == null || id.isEmpty || _openedInitialId == id) return;
     final idx = _items.indexWhere((e) => e.id == id);
-    if (idx < 0) return;
+    if (idx < 0) {
+      if (_hasMore && _focusLoadingId != id && _focusLoadPages < 20) {
+        _focusLoadingId = id;
+        _focusLoadPages++;
+        _loadGallery(reset: false).whenComplete(() {
+          if (mounted && _focusLoadingId == id) _focusLoadingId = null;
+        });
+      } else if (!_hasMore && _focusLoadingId != '__not_found__') {
+        _focusLoadingId = '__not_found__';
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('这条图集已不存在或已被删除')),
+        );
+      }
+      return;
+    }
+
     _openedInitialId = id;
+    setState(() => _highlightId = id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _viewImage(_items[idx]);
+      final offset = (idx / 2) * 220.0;
+      if (_gridController.hasClients) {
+        final max = _gridController.position.maxScrollExtent;
+        _gridController.jumpTo(offset.clamp(0.0, max).toDouble());
+      }
+      Future.delayed(const Duration(milliseconds: 120), () {
+        if (!mounted) return;
+        final ctx = _cardKey(id).currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 300),
+            alignment: 0.35,
+          );
+        }
+      });
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _highlightId == id) setState(() => _highlightId = null);
+      });
     });
   }
 
@@ -748,6 +560,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                               return false;
                             },
                             child: MasonryGridView.count(
+                              controller: _gridController,
                               padding: const EdgeInsets.all(12),
                               crossAxisCount: 2,
                               crossAxisSpacing: 12,
@@ -756,7 +569,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
                               itemBuilder: (ctx, i) {
                                 final item = _shownItems[i];
                                 return HandDrawnCard(
+                                  key: _cardKey(item.id),
                                   padding: EdgeInsets.zero,
+                                  borderColor: _highlightId == item.id
+                                      ? AppColors.blue
+                                      : null,
+                                  borderWidth: _highlightId == item.id ? 3 : 2,
                                   onTap: () => _viewImage(item),
                                   child: Column(
                                     crossAxisAlignment:
@@ -879,10 +697,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ],
                   ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showUploadMenu,
-        backgroundColor: AppColors.accent,
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _buildSortButton(),
+          const SizedBox(height: 10),
+          FloatingActionButton(
+            onPressed: _pickAndUploadMedia,
+            backgroundColor: AppColors.accent,
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
@@ -1177,52 +1003,6 @@ class _GifViewerState extends State<_GifViewer> {
 }
 
 /// 上传菜单项
-class _UploadMenuTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _UploadMenuTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppTheme.wobblyRadius,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          border: Border.all(color: AppColors.border, width: 2),
-          borderRadius: AppTheme.wobblyRadius,
-          boxShadow: const [
-            BoxShadow(color: AppColors.border, offset: Offset(3, 3)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.pencil, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: AppTheme.bodyStyle.copyWith(fontSize: 15),
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: AppColors.muted),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 全局视频解码器单例管理：同时只允许一个视频缩略图在解码播放，
-/// 避免网格里多个 ExoPlayer 全尺寸解码导致卡顿/突然暂停。
 class _VideoThumbPool {
   static _VideoThumbnailState? _active;
 
@@ -1308,15 +1088,13 @@ class _VideoThumbView extends StatelessWidget {
               ),
             ),
           ),
-          errorWidget: (_, __, ___) => videoUrl.isEmpty
-              ? Container(
-                  color: AppColors.muted,
-                  child: const Center(
-                    child:
-                        Icon(Icons.videocam, size: 40, color: Colors.white70),
-                  ),
-                )
-              : _VideoThumbnail(videoUrl: videoUrl),
+          // 网格里只显示静态首帧；视频/实况只在点击进入查看器后播放。
+          errorWidget: (_, __, ___) => Container(
+            color: AppColors.muted,
+            child: const Center(
+              child: Icon(Icons.videocam, size: 40, color: Colors.white70),
+            ),
+          ),
         ),
         // 手绘风格"视频"贴纸：白纸卡片 + 抖动圆角 + 硬偏移阴影 + 红色播放三角 + 手写标题
         Positioned.fill(
@@ -1760,30 +1538,21 @@ class _GalleryPendingFile {
   final String name;
   final bool isVideo;
   final bool isGif;
+  File? liveVideo;
   int originalSize = 0;
-  File? compressed;
-  int compressedSize = 0;
-  bool compressing = false;
-  String? error;
-  bool useCompressed = true;
   String? thumbPath;
-  String? compressedThumbPath;
 
   _GalleryPendingFile({
     required this.file,
     required this.name,
     required this.isVideo,
     required this.isGif,
+    this.liveVideo,
   });
-
-  File get uploadFile =>
-      useCompressed && compressed != null ? compressed! : file;
-
-  int get uploadSize =>
-      useCompressed && compressed != null ? compressedSize : originalSize;
 }
 
-/// 上传前的预览/压缩/描述页：支持单文件与多文件。
+/// 上传前的预览页：单/多文件统一布局。
+/// 压缩功能已停用：这里只做类型识别、首帧/缩略图预览、描述填写和上传。
 class _GalleryUploadReviewPage extends StatefulWidget {
   final List<_GalleryPendingFile> files;
   const _GalleryUploadReviewPage({required this.files});
@@ -1797,21 +1566,13 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
   static const _imageMax = 104857600;
   static const _gifMax = 16777216;
   static const _videoMax = 1073741824;
-  static const _imageRecommend = 15728640;
-  static const _videoRecommend = 52428800;
 
   final _desc = TextEditingController();
   final _api = ApiService();
   bool _preparing = true;
-  bool _compress = true;
   bool _uploading = false;
-  double _quality = 80;
-  int _compressSeq = 0;
 
   bool get _single => widget.files.length == 1;
-  bool get _anyOverRecommend => widget.files.any((p) =>
-      (!p.isVideo && !p.isGif && p.originalSize > _imageRecommend) ||
-      (p.isVideo && p.originalSize > _videoRecommend));
 
   @override
   void initState() {
@@ -1829,118 +1590,29 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
     for (final p in widget.files) {
       try {
         p.originalSize = await p.file.length();
-        if (p.isVideo) {
-          final thumb = await VideoCompress.getFileThumbnail(
-            p.file.path,
-            quality: 60,
-            position: 0,
-          );
-          p.thumbPath = thumb.path;
-        }
-      } catch (e) {
-        p.error = '读取文件失败';
-      }
+      } catch (_) {}
     }
-    if (!mounted) return;
-    setState(() => _preparing = false);
-    if (_compress) await _compressAll();
-  }
-
-  bool _needsCompress(_GalleryPendingFile p) {
-    if (p.isGif) return false;
-    if (p.isVideo) return p.originalSize > _videoRecommend;
-    return p.originalSize > _imageRecommend;
-  }
-
-  VideoQuality _videoQuality(double q) {
-    if (q < 72) return VideoQuality.LowQuality;
-    if (q < 88) return VideoQuality.MediumQuality;
-    return VideoQuality.HighestQuality;
-  }
-
-  Future<void> _compressAll() async {
-    if (!_compress) return;
-    final seq = ++_compressSeq;
-    for (final p in widget.files) {
-      if (!_needsCompress(p) || p.compressing) continue;
-      p.compressing = true;
-      p.error = null;
-      if (mounted) setState(() {});
-      try {
-        if (p.isVideo) {
-          final info = await VideoCompress.compressVideo(
-            p.file.path,
-            quality: _videoQuality(_quality),
-            deleteOrigin: false,
-            includeAudio: true,
-          );
-          final path = info?.path;
-          if (path != null) {
-            final out = File(path);
-            final size = await out.length();
-            if (size < p.originalSize) {
-              p.compressed = out;
-              p.compressedSize = size;
-              p.useCompressed = true;
-              try {
-                final thumb = await VideoCompress.getFileThumbnail(
-                  path,
-                  quality: 60,
-                  position: 0,
-                );
-                p.compressedThumbPath = thumb.path;
-              } catch (_) {}
-            }
-          }
-        } else {
-          final dir = await getTemporaryDirectory();
-          final target =
-              '${dir.path}/lw_gallery_${DateTime.now().microsecondsSinceEpoch}.webp';
-          final out = await FlutterImageCompress.compressAndGetFile(
-            p.file.path,
-            target,
-            quality: _quality.round(),
-            minWidth: 1600,
-            minHeight: 1600,
-            format: CompressFormat.webp,
-          );
-          if (out != null) {
-            final size = await out.length();
-            if (size < p.originalSize) {
-              p.compressed = File(out.path);
-              p.compressedSize = size;
-              p.useCompressed = true;
-            }
-          }
-        }
-      } catch (e) {
-        p.error = '压缩失败，可改用原文件上传';
-        p.useCompressed = false;
-      } finally {
-        if (seq == _compressSeq) p.compressing = false;
-      }
-      if (!mounted || seq != _compressSeq) return;
-      setState(() {});
-    }
-  }
-
-  void _clearCompressed() {
-    _compressSeq++;
-    for (final p in widget.files) {
-      p.compressed = null;
-      p.compressedSize = 0;
-      p.compressedThumbPath = null;
-      p.useCompressed = false;
-      p.compressing = false;
-      p.error = null;
-    }
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _preparing = false);
   }
 
   int _maxFor(_GalleryPendingFile p) {
     if (p.isVideo) return _videoMax;
     if (p.isGif) return _gifMax;
     return _imageMax;
+  }
+
+  String _mb(int bytes) => (bytes / 1048576).toStringAsFixed(1);
+
+  void _toast(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  void _remove(int index) {
+    setState(() => widget.files.removeAt(index));
+    if (widget.files.isEmpty) Navigator.pop(context, false);
   }
 
   Future<void> _upload() async {
@@ -1950,22 +1622,12 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
       return;
     }
     for (final p in widget.files) {
-      if (p.compressing) {
-        _toast('压缩还没完成，请稍候');
-        return;
-      }
-      if (p.originalSize > _maxFor(p) && p.compressed == null) {
-        _toast('「${p.name}」超过大小上限，请压缩或移除');
-        return;
-      }
-      if (p.uploadSize > _maxFor(p)) {
-        _toast('「${p.name}」压缩后仍超过大小上限');
+      if (p.originalSize > _maxFor(p)) {
+        _toast('「${p.name}」超过大小上限');
         return;
       }
     }
-
-    final auth = context.read<AuthProvider>();
-    final classId = auth.currentClassId;
+    final classId = context.read<AuthProvider>().currentClassId;
     if (classId == null || classId.isEmpty) {
       _toast('请先选择班级');
       return;
@@ -1980,27 +1642,33 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
     );
     try {
       for (final p in widget.files) {
-        final file = p.uploadFile;
-        final size = await file.length();
-        if (size > 16 * 1024 * 1024) {
+        if (p.liveVideo != null) {
+          await _api.saveGallery(
+            classId,
+            p.file,
+            desc,
+            liveVideo: p.liveVideo,
+            multi: multi,
+          );
+        } else if (p.originalSize > 16 * 1024 * 1024) {
           await _api.saveGalleryChunked(
             classId,
-            file,
+            p.file,
             desc,
             multi: multi,
           );
         } else {
           await _api.saveGallery(
             classId,
-            file,
+            p.file,
             desc,
             multi: multi,
           );
         }
       }
       if (!mounted) return;
-      Navigator.pop(context); // loading
-      Navigator.pop(context, true); // review page
+      Navigator.pop(context);
+      Navigator.pop(context, true);
     } on ApiException catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
@@ -2014,59 +1682,19 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
     }
   }
 
-  void _toast(String text) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
-  }
-
-  void _remove(int index) {
-    setState(() => widget.files.removeAt(index));
-    if (widget.files.isEmpty) Navigator.pop(context, false);
-  }
-
-  void _showVideoCompare(_GalleryPendingFile p) {
-    if (p.compressed == null) return;
-    showDialog<void>(
-      context: context,
-      builder: (_) => _VideoCompareDialog(
-        original: p.file,
-        compressed: p.compressed!,
-      ),
-    );
-  }
-
-  String _mb(int bytes) => (bytes / 1048576).toStringAsFixed(1);
-
-  Widget _preview(_GalleryPendingFile p, {required bool compressed}) {
-    File? file;
-    if (compressed) {
-      if (p.isVideo) {
-        file =
-            p.compressedThumbPath == null ? null : File(p.compressedThumbPath!);
-      } else {
-        file = p.compressed;
-      }
-    } else {
-      if (p.isVideo) {
-        file = p.thumbPath == null ? null : File(p.thumbPath!);
-      } else {
-        file = p.file;
-      }
-    }
+  Widget _preview(_GalleryPendingFile p) {
     return Container(
-      height: 86,
+      height: 92,
       decoration: BoxDecoration(
         color: AppColors.oldPaper,
         borderRadius: AppTheme.wobblySm,
         border: Border.all(color: AppColors.border, width: 1.5),
       ),
       clipBehavior: Clip.antiAlias,
-      child: file == null
-          ? const Center(child: Icon(Icons.videocam_outlined, size: 30))
+      child: p.isVideo
+          ? _LocalVideoThumb(file: p.file)
           : Image.file(
-              file,
+              p.file,
               fit: BoxFit.cover,
               width: double.infinity,
               cacheWidth: 360,
@@ -2075,106 +1703,54 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
   }
 
   Widget _fileCard(_GalleryPendingFile p, int index) {
-    final overRecommend =
-        (!p.isVideo && !p.isGif && p.originalSize > _imageRecommend) ||
-            (p.isVideo && p.originalSize > _videoRecommend);
-    final overMax = p.originalSize > _maxFor(p);
+    final type = p.liveVideo != null
+        ? '实况照片'
+        : (p.isVideo ? '视频' : (p.isGif ? 'GIF' : '图片'));
     return HandDrawnCard(
       padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
+          SizedBox(width: 112, child: _preview(p)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   p.name,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTheme.bodyStyle.copyWith(fontSize: 13),
                 ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: '移除',
-                onPressed: _uploading ? null : () => _remove(index),
-                icon: const Icon(Icons.close, size: 18),
-              ),
-            ],
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    _preview(p, compressed: false),
-                    const SizedBox(height: 4),
-                    Text(
-                      '原图 ${_mb(p.originalSize)}MB',
+                const SizedBox(height: 4),
+                Text(
+                  '$type · ${_mb(p.originalSize)}MB',
+                  style: AppTheme.bodyStyle.copyWith(
+                    fontSize: 11,
+                    color: AppColors.muted,
+                  ),
+                ),
+                if (p.originalSize > _maxFor(p))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '超过大小上限',
                       style: AppTheme.bodyStyle.copyWith(
                         fontSize: 11,
-                        color: overMax ? AppColors.red : AppColors.muted,
+                        color: AppColors.red,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  children: [
-                    _preview(p, compressed: true),
-                    const SizedBox(height: 4),
-                    Text(
-                      p.compressed != null
-                          ? '压缩后 ${_mb(p.compressedSize)}MB'
-                          : (p.compressing
-                              ? '压缩中…'
-                              : (overRecommend ? '未压缩' : '无需压缩')),
-                      style: AppTheme.bodyStyle.copyWith(
-                        fontSize: 11,
-                        color: p.compressed != null
-                            ? AppColors.blue
-                            : AppColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+              ],
+            ),
           ),
-          if (p.isVideo && p.compressed != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => _showVideoCompare(p),
-                icon: const Icon(Icons.play_circle_outline, size: 18),
-                label: const Text('播放对比'),
-              ),
-            ),
-          if (p.error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                p.error!,
-                style: AppTheme.bodyStyle.copyWith(
-                  fontSize: 11,
-                  color: AppColors.red,
-                ),
-              ),
-            ),
-          if (overMax && p.compressed == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '超过硬上限，请压缩或移除',
-                style: AppTheme.bodyStyle.copyWith(
-                  fontSize: 11,
-                  color: AppColors.red,
-                ),
-              ),
-            ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: '移除',
+            onPressed: _uploading ? null : () => _remove(index),
+            icon: const Icon(Icons.close, size: 18),
+          ),
         ],
       ),
     );
@@ -2182,6 +1758,7 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final count = _desc.text.length;
     return Scaffold(
       appBar: AppBar(
         title: Text(_single ? '上传文件' : '上传 ${widget.files.length} 个文件'),
@@ -2191,86 +1768,16 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
       body: PaperTexture(
         child: _preparing
             ? const Center(
-                child: CircularProgressIndicator(color: AppColors.red))
+                child: CircularProgressIndicator(color: AppColors.red),
+              )
             : Column(
                 children: [
                   Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                      children: [
-                        if (_anyOverRecommend)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.postIt,
-                              borderRadius: AppTheme.wobblySm,
-                              border: Border.all(
-                                  color: AppColors.border, width: 1.5),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Checkbox(
-                                      value: _compress,
-                                      onChanged: _uploading
-                                          ? null
-                                          : (v) {
-                                              setState(
-                                                  () => _compress = v == true);
-                                              if (_compress) {
-                                                _compressAll();
-                                              } else {
-                                                _clearCompressed();
-                                              }
-                                            },
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        '压缩超过建议大小的文件（图片 15MB / 视频 50MB）',
-                                        style: AppTheme.bodyStyle
-                                            .copyWith(fontSize: 12),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Slider(
-                                        min: 60,
-                                        max: 95,
-                                        divisions: 7,
-                                        value: _quality,
-                                        label: '${_quality.round()}%',
-                                        onChanged: _uploading || !_compress
-                                            ? null
-                                            : (v) =>
-                                                setState(() => _quality = v),
-                                        onChangeEnd: _uploading || !_compress
-                                            ? null
-                                            : (_) => _compressAll(),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${_quality.round()}%',
-                                      style: AppTheme.bodyStyle
-                                          .copyWith(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ...widget.files.asMap().entries.map(
-                              (e) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: _fileCard(e.value, e.key),
-                              ),
-                            ),
-                      ],
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(14),
+                      itemCount: widget.files.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => _fileCard(widget.files[i], i),
                     ),
                   ),
                   Container(
@@ -2283,30 +1790,36 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
                     ),
                     child: SafeArea(
                       top: false,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          TextField(
-                            controller: _desc,
-                            maxLines: 2,
-                            maxLength: 500,
-                            decoration: InputDecoration(
-                              hintText: _single
-                                  ? '描述这个文件（必填）'
-                                  : '多文件描述（可不填，留空显示未填写描述）',
+                          Expanded(
+                            child: TextField(
+                              controller: _desc,
+                              maxLines: 2,
+                              maxLength: 500,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                hintText: _single
+                                    ? '描述这个文件（必填）'
+                                    : '多文件描述（可不填，留空显示未填写描述）',
+                                counterText: '',
+                              ),
                             ),
                           ),
-                          Row(
+                          const SizedBox(width: 12),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  _uploading ? '正在上传…' : '上传后将自动刷新图集',
-                                  style: AppTheme.bodyStyle.copyWith(
-                                    fontSize: 11,
-                                    color: AppColors.muted,
-                                  ),
+                              Text(
+                                '$count/500',
+                                style: AppTheme.bodyStyle.copyWith(
+                                  fontSize: 11,
+                                  color: AppColors.muted,
                                 ),
                               ),
+                              const SizedBox(height: 4),
                               HandDrawnButton(
                                 label: _uploading ? '上传中…' : '上传',
                                 onPressed: _uploading ? null : _upload,
@@ -2324,168 +1837,58 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
   }
 }
 
-/// 本地视频压缩前后对比：两个播放器互斥播放，便于检查画质与声音。
-class _VideoCompareDialog extends StatefulWidget {
-  final File original;
-  final File compressed;
-  const _VideoCompareDialog({
-    required this.original,
-    required this.compressed,
-  });
+/// 上传预览页的本地视频首帧（暂停，不自动播放）。
+class _LocalVideoThumb extends StatefulWidget {
+  final File file;
+  const _LocalVideoThumb({required this.file});
 
   @override
-  State<_VideoCompareDialog> createState() => _VideoCompareDialogState();
+  State<_LocalVideoThumb> createState() => _LocalVideoThumbState();
 }
 
-class _VideoCompareDialogState extends State<_VideoCompareDialog> {
-  VideoPlayerController? _a;
-  VideoPlayerController? _b;
+class _LocalVideoThumbState extends State<_LocalVideoThumb> {
+  VideoPlayerController? _controller;
 
   @override
   void initState() {
     super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    final a = VideoPlayerController.file(widget.original);
-    final b = VideoPlayerController.file(widget.compressed);
-    try {
-      await Future.wait([a.initialize(), b.initialize()]);
-      if (!mounted) {
-        await a.dispose();
-        await b.dispose();
-        return;
-      }
-      setState(() {
-        _a = a;
-        _b = b;
-      });
-    } catch (_) {
-      await a.dispose();
-      await b.dispose();
-    }
+    final c = VideoPlayerController.file(widget.file);
+    _controller = c;
+    c.initialize().then((_) async {
+      if (!mounted) return;
+      await c.setVolume(0);
+      await c.seekTo(Duration.zero);
+      await c.pause();
+      if (mounted) setState(() {});
+    }).catchError((_) {});
   }
 
   @override
   void dispose() {
-    _a?.dispose();
-    _b?.dispose();
+    _controller?.dispose();
     super.dispose();
-  }
-
-  void _toggle(VideoPlayerController c) {
-    final a = _a;
-    final b = _b;
-    final other = identical(c, a) ? b : a;
-    if (c.value.isPlaying) {
-      c.pause();
-    } else {
-      other?.pause();
-      c.play();
-    }
-    setState(() {});
-  }
-
-  Widget _panel(String label, VideoPlayerController? c) {
-    if (c == null || !c.value.isInitialized) {
-      return const SizedBox(
-        height: 220,
-        child: Center(child: CircularProgressIndicator(color: AppColors.red)),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: AppTheme.bodyStyle.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 6),
-        AspectRatio(
-          aspectRatio: c.value.aspectRatio <= 0 ? 16 / 9 : c.value.aspectRatio,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              VideoPlayer(c),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  color: Colors.black45,
-                  child: IconButton(
-                    onPressed: () => _toggle(c),
-                    icon: Icon(
-                      c.value.isPlaying
-                          ? Icons.pause_circle
-                          : Icons.play_circle,
-                      color: Colors.white,
-                      size: 38,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(14),
-      backgroundColor: AppColors.background,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppTheme.wobblyRadius,
-        side: const BorderSide(color: AppColors.border, width: 2),
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) {
+      return const Center(
+        child: Icon(Icons.videocam_outlined, size: 34),
+      );
+    }
+    return FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: c.value.size.width,
+        height: c.value.size.height,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('压缩前后播放对比', style: AppTheme.headingStyle),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            LayoutBuilder(
-              builder: (ctx, constraints) {
-                final wide = constraints.maxWidth > 620;
-                final panels = [
-                  _panel('原视频', _a),
-                  _panel('压缩后', _b),
-                ];
-                return wide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: panels[0]),
-                          const SizedBox(width: 12),
-                          Expanded(child: panels[1]),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          panels[0],
-                          const SizedBox(height: 12),
-                          panels[1],
-                        ],
-                      );
-              },
-            ),
+            VideoPlayer(c),
+            const Icon(Icons.play_circle_outline,
+                color: Colors.white, size: 30),
           ],
         ),
       ),

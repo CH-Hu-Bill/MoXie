@@ -210,20 +210,21 @@ class _SearchScreenState extends State<SearchScreen> {
         isWrong: _wrongWordIds.contains(w.id) || w.isWrong,
         highlight: true,
         onToggleWrong: () => _toggleWrong(w),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EssayDetailScreen(
-              essay: Word(
-                id: w.id,
-                word: w.word,
-                meaning: w.meaning,
-                type: 'essay',
-                title: w.title,
-              ),
-            ),
-          ),
-        ),
+        onTap: onTap ??
+            () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EssayDetailScreen(
+                      essay: Word(
+                        id: w.id,
+                        word: w.word,
+                        meaning: w.meaning,
+                        type: 'essay',
+                        title: w.title,
+                      ),
+                    ),
+                  ),
+                ),
       );
     }
     return WordCard(

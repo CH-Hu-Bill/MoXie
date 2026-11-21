@@ -417,7 +417,8 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 /* ── S4 后台左侧导航 ── */
 .admin-shell { display: flex; gap: 18px; align-items: flex-start; }
 .admin-side {
-    position: sticky; top: 16px; flex: 0 0 200px; width: 200px;
+    position: sticky; top: 16px; flex: 0 0 210px; width: 210px;
+    max-height: calc(100vh - 32px); overflow-y: auto;
     background: var(--white); border: 2.5px solid var(--pencil);
     border-radius: var(--wobbly); box-shadow: var(--shadow-sm); padding: 14px 10px;
 }
@@ -447,7 +448,9 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 .admin-side-foot { margin-top: 12px; padding-top: 10px; border-top: 2px dashed var(--old-paper); }
 .admin-main { flex: 1; min-width: 0; }
 .admin-sections { display: flex; flex-direction: column; }
-/* 视觉顺序（DOM 不动，保证 #sec-* 锚点与已有深链继续可用） */
+.admin-section { display: none; min-width: 0; }
+.admin-section.active { display: block; }
+/* 右侧只显示当前功能，避免所有卡片同时拉长页面 */
 #sec-overview { order: 1; } #sec-classes { order: 2; } #sec-trash { order: 3; }
 #sec-announce { order: 4; } #sec-display { order: 5; } #sec-app { order: 6; } #sec-games { order: 7; } #sec-update { order: 8; }
 @media (max-width: 880px) {
@@ -545,11 +548,6 @@ $ovStat = function ($label, $value, $hint = '') {
         $ovStat('运行状态', lwInMaintenance() ? '维护中' : '正常');
         ?>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-        <a href="#sec-classes" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">新建/管理班级</a>
-        <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">发布公告</a>
-        <a href="#sec-update" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">检查更新</a>
-    </div>
 </div>
 
 <div class="card" id="sec-update" style="margin-bottom:16px;scroll-margin-top:60px;">
@@ -568,12 +566,6 @@ $ovStat = function ($label, $value, $hint = '') {
         <button type="button" class="btn btn-sm" onclick="exitMaintenance()">退出维护模式</button>
     </div>
     <div id="updateBox" style="margin-top:10px;font-size:14px;line-height:1.8;color:var(--pencil);"></div>
-    <div style="margin-top:14px;padding-top:12px;border-top:2px dashed var(--old-paper);font-size:13px;line-height:1.8;color:var(--pencil);">
-        <b>视频压缩队列</b>：超过 100MB 的视频上传后会显示「压缩中」，由后台 worker 自动处理。
-        若长时间未完成，可在服务器执行
-        <code style="background:var(--old-paper);padding:2px 6px;border-radius:4px;">php web/bin/compress_gallery.php</code>；
-        建议用计划任务每分钟运行一次。
-    </div>
 </div>
 
 <script>
@@ -1069,34 +1061,47 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
 </div>
 
 <script>
-// 侧边栏高亮：按可视顺序（flex order 已重排）取「最后一个进入滚动区顶部」的分区。
-// 注意：本站的滚动容器是 .content，不是 window。
+// 真正的后台分区：左侧选择功能，右侧只显示该功能。
 (function () {
     var links = Array.prototype.slice.call(document.querySelectorAll('.admin-side-link'));
-    if (!links.length) return;
-    var scroller = document.querySelector('.content');
-    var sections = links
-        .map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); })
-        .filter(Boolean)
-        .sort(function (a, b) { return a.offsetTop - b.offsetTop; });
-    function setActive(id) {
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.admin-sections > [id^="sec-"]'));
+    if (!links.length || !sections.length) return;
+    sections.forEach(function (s) { s.classList.add('admin-section'); });
+
+    function resolveId(id) {
+        return sections.some(function (s) { return s.id === id; }) ? id : 'sec-overview';
+    }
+    function showSection(id) {
+        id = resolveId(id);
+        sections.forEach(function (s) { s.classList.toggle('active', s.id === id); });
         links.forEach(function (a) {
-            a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+            var active = a.getAttribute('href') === '#' + id;
+            a.classList.toggle('active', active);
+            if (active) {
+                var group = a.closest('details');
+                if (group) group.open = true;
+            }
         });
+        try { localStorage.setItem('lw_admin_section', id); } catch (e) {}
+        try { history.replaceState(null, '', '#' + id); } catch (e) {}
+        try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (e) { window.scrollTo(0, 0); }
     }
-    function onScroll() {
-        if (!sections.length) return;
-        var base = scroller ? scroller.getBoundingClientRect().top : 0;
-        var active = sections[0].id;
-        for (var i = 0; i < sections.length; i++) {
-            if (sections[i].getBoundingClientRect().top - base <= 120) active = sections[i].id;
-        }
-        setActive(active);
+
+    links.forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            showSection(a.getAttribute('href').slice(1));
+        });
+    });
+    window.addEventListener('hashchange', function () {
+        showSection(location.hash ? location.hash.slice(1) : 'sec-overview');
+    });
+
+    var initial = location.hash ? location.hash.slice(1) : '';
+    if (!initial) {
+        try { initial = localStorage.getItem('lw_admin_section') || ''; } catch (e) {}
     }
-    (scroller || window).addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('hashchange', function () { setActive(location.hash.slice(1)); });
-    onScroll();
-    if (location.hash) setActive(location.hash.slice(1));
+    showSection(initial || 'sec-overview');
 })();
 </script>
 

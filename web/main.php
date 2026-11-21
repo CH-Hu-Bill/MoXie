@@ -203,11 +203,35 @@ if (isset($_POST['action']) && $_POST['action'] === 'search_all') {
         }
     }
 
+    // 4) 图集：按描述搜索；结果带首帧/缩略图，点击跳转图集并按 id 定位
+    $galleryResults = [];
+    foreach ((array)Database::getClassData($classId, 'gallery') as $gItem) {
+        $gDesc = (string)($gItem['description'] ?? '');
+        if ($gDesc === '' || mb_stripos($gDesc, $query) === false) continue;
+        $imgFile = (string)($gItem['image'] ?? '');
+        if ($imgFile === '') continue;
+        $compressed = (string)($gItem['compressed_image'] ?? '');
+        $effective = $compressed !== '' ? $compressed : $imgFile;
+        $ext = strtolower(pathinfo($effective, PATHINFO_EXTENSION));
+        $isVideo = $ext === 'mp4';
+        $galleryResults[] = [
+            'id' => (string)($gItem['id'] ?? ''),
+            'description' => $gDesc,
+            'image_url' => 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($effective),
+            'thumb_url' => $isVideo
+                ? ('video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($effective))
+                : ('upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($effective)),
+            'is_video' => $isVideo || (($gItem['type'] ?? '') === 'live'),
+            'uploaded_at' => (string)($gItem['uploaded_at'] ?? ''),
+        ];
+    }
+
     echo json_encode(['success' => true, 'data' => [
         // words 支持 words_offset 分页：搜索下拉"查看更多单词"逐批就地加载（不再跳转单词库）
         'words' => ['items' => array_slice($wordResults, $wordsOffset, 10), 'total' => count($wordResults), 'has_more' => ($wordsOffset + 10) < count($wordResults)],
         'pending_tasks' => ['items' => array_slice($pendingResults, 0, 10), 'total' => count($pendingResults), 'has_more' => count($pendingResults) > 10],
         'history_tasks' => ['items' => array_slice($historyResults, 0, 10), 'total' => count($historyResults), 'has_more' => count($historyResults) > 10],
+        'gallery' => ['items' => array_slice($galleryResults, 0, 20), 'total' => count($galleryResults), 'has_more' => count($galleryResults) > 20],
     ]]); exit;
 }
 
@@ -245,7 +269,7 @@ require 'inc/header.php';
 
     <div style="max-width:600px;margin:0 auto 28px;position:relative;z-index:2001;">
         <div style="display:flex;gap:8px;position:relative;z-index:2001;">
-            <input type="text" id="searchInput" class="input" placeholder="搜索单词或释义..." onkeydown="if(event.key==='Enter')doSearch()" onfocus="onSearchFocus()" style="flex:1;">
+            <input type="text" id="searchInput" class="input" placeholder="搜索知识库、任务、图集..." onkeydown="if(event.key==='Enter')doSearch()" onfocus="onSearchFocus()" style="flex:1;">
             <button class="btn btn-primary" onmousedown="searchSuppressDismiss=true" onclick="doSearch()">搜索</button>
         </div>
         <div class="search-results" id="searchResults"></div>
@@ -358,7 +382,8 @@ require 'inc/header.php';
                 clipboard: '<path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
                 search: '<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>',
                 star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
-                note: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>'
+                note: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+                camera: '<path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/>'
             };
             var s = size || 16;
             return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:' + Math.round(-s / 4) + 'px">' + (paths[name] || '') + '</svg>';
@@ -427,6 +452,15 @@ require 'inc/header.php';
             const tag = t === 'sentence' ? '<span style="font-size:11px;color:var(--blue);margin-left:6px;">[句]</span>'
                 : (t === 'essay' ? '<span style="font-size:11px;color:var(--red);margin-left:6px;">[文]</span>' : '');
             return '<div class="sr-item" onclick="showOkOverlayThen(\'words.php?id='+classId+'&highlight='+encodeURIComponent(w.id)+'\')"><span><span class="word">'+escHtml2(w.word)+'</span>'+tag+'<span class="meaning">'+escHtml2(w.meaning)+'</span></span><span class="arrow">›</span></div>';
+        }
+
+        function srGalleryItemHtml(g) {
+            return '<div class="sr-item" onclick="showOkOverlayThen(\'gallery.php?id='+classId+'&highlight='+encodeURIComponent(g.id)+'\')">'
+                + '<span style="display:flex;align-items:center;gap:10px;min-width:0;">'
+                + '<img src="'+escHtml2(g.thumb_url)+'" alt="" loading="lazy" style="width:44px;height:44px;object-fit:cover;border:2px solid var(--pencil);border-radius:8px;flex:0 0 44px;">'
+                + '<span style="min-width:0;"><span class="word" style="display:block;white-space:normal;">'+escHtml2(g.description)+'</span>'
+                + '<span class="meaning">'+(g.is_video ? '视频 / 实况' : '图片')+' · '+escHtml2(g.uploaded_at||'')+'</span></span></span>'
+                + '<span class="arrow">›</span></div>';
         }
 
         function updateSrWordsMore() {
@@ -514,7 +548,13 @@ require 'inc/header.php';
                     if (data.history_tasks.has_more) html += '<div class="sr-more" onclick="showOkOverlayThen(\'history.php?id='+classId+'&search='+encodeURIComponent(q)+'\')">查看更多历史 →</div>';
                 }
                 html += '</div>';
-                if (data.words.total === 0 && data.pending_tasks.total === 0 && data.history_tasks.total === 0) {
+                if (data.gallery && data.gallery.total > 0) {
+                    html += '<div class="sr-group"><div class="sr-group-title">' + iconSvg('camera') + ' 班级图集 (' + data.gallery.total + '条)</div>';
+                    html += data.gallery.items.map(srGalleryItemHtml).join('');
+                    if (data.gallery.has_more) html += '<div class="sr-more" onclick="showOkOverlayThen(\'gallery.php?id='+classId+'\')">查看更多图集 →</div>';
+                    html += '</div>';
+                }
+                if (data.words.total === 0 && data.pending_tasks.total === 0 && data.history_tasks.total === 0 && (!data.gallery || data.gallery.total === 0)) {
                     html = '<div class="sr-empty">未找到匹配"'+escHtml2(q)+'"的结果</div>';
                 }
                 res.innerHTML = html;

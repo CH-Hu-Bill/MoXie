@@ -8,7 +8,6 @@ require_once 'inc/security.php';
 require_once 'inc/history.php';
 require_once 'inc/motion_photo.php';
 require_once 'inc/gallery_trash.php';
-require_once 'inc/gallery_compress.php';
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
@@ -137,36 +136,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 禁用了 exec/proc_open，
     // 这里不再内联调用，避免在请求路径加载 composer/php-ffmpeg 引发偶发超时或 PHP 警告污染 JSON）
 
-    $compressFields = [];
-    $compressWarning = '';
-    $compressKick = false;
-    $compressWanted = reqPost('compress') === '1' && $isMp4 && !$liveFile;
-    $compressQuality = galleryCompressQuality(reqPost('compress_quality', '80'));
-    if ($compressWanted) {
-        if ((int)($image['size'] ?? 0) <= GALLERY_COMPRESS_SYNC_MAX_BYTES) {
-            @set_time_limit(300);
-            try {
-                $compressFields = galleryCompressVideo($classId, ['image' => $filename], $compressQuality);
-                try { Database::generateVideoThumb($classId, (string)$compressFields['compressed_image']); } catch (Throwable $e) {}
-            } catch (Throwable $e) {
-                $compressFields = [
-                    'compression_status' => 'failed',
-                    'compression_error' => mb_substr($e->getMessage(), 0, 300),
-                ];
-                $compressWarning = '视频已保存，但压缩失败：' . $e->getMessage();
-            }
-        } else {
-            $compressFields = [
-                'compression_status' => 'pending',
-                'compression_quality' => $compressQuality,
-            ];
-            $compressKick = true;
-        }
-    }
-
     $id = bin2hex(random_bytes(16));
     try {
-        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4, $galleryW, $galleryH, $compressFields) {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4, $galleryW, $galleryH) {
             if (!is_array($latest)) $latest = [];
             $item = [
                 'id' => $id,
@@ -179,12 +151,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
                 'uploader_name' => '网页',
             ];
             if ($liveFile) $item['live_video'] = $liveFile;
-            foreach ($compressFields as $k => $v) $item[$k] = $v;
             array_unshift($latest, $item);
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
-        if ($compressKick) galleryCompressKick($classId);
     } catch (Throwable $e) {
         // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
         Database::deleteUploadedImage($classId, $filename);
@@ -193,13 +163,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
             Database::deleteUploadedImage($classId, $liveFile);
             Database::deleteVideoThumb($classId, $liveFile);
         }
-        if (!empty($compressFields['compressed_image'])) {
-            Database::deleteUploadedImage($classId, (string)$compressFields['compressed_image']);
-            Database::deleteVideoThumb($classId, (string)$compressFields['compressed_image']);
-        }
         echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
     }
-    echo json_encode(['success' => true, 'id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null, 'compress_warning' => $compressWarning ?: null]); exit;
+    echo json_encode(['success' => true, 'id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null]); exit;
 }
 
 // ========== 分片上传（S5）：大视频按 8MB 切片传，最后服务端拼装校验 ==========
@@ -290,59 +256,26 @@ if (isset($_POST['action']) && $_POST['action'] === 'upload_finish') {
     }
     galleryChunkCleanup($classId, $uid);
 
-    $compressFields = [];
-    $compressWarning = '';
-    $compressKick = false;
-    $compressQuality = galleryCompressQuality(reqPost('compress_quality', '80'));
-    if (reqPost('compress') === '1') {
-        if ($size <= GALLERY_COMPRESS_SYNC_MAX_BYTES) {
-            @set_time_limit(300);
-            try {
-                $compressFields = galleryCompressVideo($classId, ['image' => $filename], $compressQuality);
-                try { Database::generateVideoThumb($classId, (string)$compressFields['compressed_image']); } catch (Throwable $e) {}
-            } catch (Throwable $e) {
-                $compressFields = [
-                    'compression_status' => 'failed',
-                    'compression_error' => mb_substr($e->getMessage(), 0, 300),
-                ];
-                $compressWarning = '视频已保存，但压缩失败：' . $e->getMessage();
-            }
-        } else {
-            $compressFields = [
-                'compression_status' => 'pending',
-                'compression_quality' => $compressQuality,
-            ];
-            $compressKick = true;
-        }
-    }
-
     $id = bin2hex(random_bytes(16));
     try {
-        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $compressFields) {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
             if (!is_array($latest)) $latest = [];
-            $item = [
+            array_unshift($latest, [
                 'id' => $id,
                 'image' => $filename,
                 'description' => $desc,
                 'uploaded_at' => date('Y-m-d H:i:s'),
                 'type' => 'video',
                 'uploader_name' => '网页',
-            ];
-            foreach ($compressFields as $k => $v) $item[$k] = $v;
-            array_unshift($latest, $item);
+            ]);
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
-        if ($compressKick) galleryCompressKick($classId);
     } catch (Throwable $e) {
         Database::deleteUploadedImage($classId, $filename);
-        if (!empty($compressFields['compressed_image'])) {
-            Database::deleteUploadedImage($classId, (string)$compressFields['compressed_image']);
-            Database::deleteVideoThumb($classId, (string)$compressFields['compressed_image']);
-        }
         echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
     }
-    echo json_encode(['success' => true, 'id' => $id, 'chunked' => true, 'compress_warning' => $compressWarning ?: null]); exit;
+    echo json_encode(['success' => true, 'id' => $id, 'chunked' => true]); exit;
 }
 
 // GET 请求顺手清理 3 小时前没传完的分片目录
@@ -417,25 +350,12 @@ require 'inc/header.php';
         <div class="card" style="width:100%;max-width:680px;max-height:86vh;overflow:auto;padding:20px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
                 <h3 style="font-family:var(--font-heading);font-size:17px;margin:0;">上传到图集</h3>
-                <button type="button" class="btn btn-sm" onclick="closeUpload()">关闭</button>
             </div>
             <label class="input upload-file-btn" for="galleryImage" style="display:flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;padding:14px;">
                 <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（可多选）</span>
                 <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" multiple style="display:none;" onchange="onFilesPicked()">
             </label>
             <div id="uploadPreviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:12px;"></div>
-            <div id="compressBox" style="display:none;margin-top:12px;padding:10px 12px;border:2px dashed var(--old-paper);border-radius:var(--wobbly-sm);background:rgba(255,255,255,.55);">
-                <label class="hd-check" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-                    <input type="checkbox" id="compressToggle" checked onchange="onCompressToggle()">
-                    <span>压缩超过建议大小的图片 / 视频 <span style="color:#999;">（图片建议 <?php echo round(Database::GALLERY_IMAGE_RECOMMEND_BYTES / 1048576); ?>MB，视频建议 50MB）</span></span>
-                </label>
-                <div id="compressSliderBox" style="display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--pencil);">
-                    <span>压缩强度</span>
-                    <input type="range" id="compressQuality" min="60" max="95" value="80" step="5" style="flex:1;accent-color:var(--blue);" oninput="onCompressQualityChange()">
-                    <b id="compressQualityLabel" style="min-width:38px;text-align:right;">80%</b>
-                </div>
-                <div id="compressHint" style="font-size:12px;color:#999;margin-top:6px;">图片在浏览器即时压缩并并排对比；视频上传后由服务器压缩，完成后卡片会出现「已压缩」和「对比」。</div>
-            </div>
             <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="margin-top:12px;">
             <div id="uploadDescHint" style="font-size:12px;color:#999;margin-top:6px;"></div>
             <div id="uploadHint" style="font-size:13px;color:var(--red);min-height:18px;margin-top:6px;"></div>
@@ -449,13 +369,16 @@ require 'inc/header.php';
     <button type="button" id="uploadFab" onclick="openUpload()" title="上传图片 / 视频"
             style="position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;background:var(--blue);color:#fff;border:2.5px solid var(--pencil);box-shadow:4px 4px 0 var(--pencil);font-size:30px;line-height:1;cursor:pointer;z-index:6000;display:flex;align-items:center;justify-content:center;">+</button>
 
-    <div class="card mb-4" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <input type="search" class="input" id="galSearch" placeholder="搜索描述…" oninput="renderGallery()" style="flex:2;min-width:200px;">
-        <select class="input" id="galSort" onchange="renderGallery()" style="flex:1;min-width:140px;">
+    <div class="card mb-4" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end;">
+        <span id="galCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
+    </div>
+
+    <!-- 排序悬浮在右下角上传键上方（图集搜索已合并到功能主页全局搜索） -->
+    <div style="position:fixed;right:22px;bottom:94px;z-index:6000;">
+        <select class="input" id="galSort" onchange="renderGallery()" style="min-width:108px;padding:8px 10px;font-size:13px;box-shadow:4px 4px 0 var(--pencil);background:var(--white);">
             <option value="desc">最新在前</option>
             <option value="asc">最早在前</option>
         </select>
-        <span id="galCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
     </div>
 
     <div class="gallery-grid" id="galleryGrid" style="display:block;columns:280px;column-gap:20px;"></div>
@@ -506,6 +429,7 @@ var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON
 var galleryDescMap = {};
 var galleryCompareMap = {};
 var _compressPollTimer = null;
+var galleryHighlightId = <?php echo json_encode(preg_match('/\A[a-f0-9]{32}\z/D', (string)reqGet('highlight')) ? (string)reqGet('highlight') : '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
 function galleryEffectiveFile(item) {
     return item.compressed_image ? item.compressed_image : item.image;
@@ -514,29 +438,22 @@ function galleryEffectiveFile(item) {
 function renderGallery() {
     var grid = document.getElementById('galleryGrid');
     var empty = document.getElementById('emptyState');
-    var searchEl = document.getElementById('galSearch');
     var sortEl = document.getElementById('galSort');
     var countEl = document.getElementById('galCount');
-    var q = (searchEl && searchEl.value || '').trim().toLowerCase();
     var order = (sortEl && sortEl.value) || 'desc';
 
-    // 描述搜索 + 时间排序（纯前端，不改动服务端顺序）
+    // 时间排序（文字搜索已合并到功能主页全局搜索）
     var items = galleryData.slice();
-    if (q) {
-        items = items.filter(function(it) {
-            return ((it.description || '') + ' ' + (it.image || '')).toLowerCase().indexOf(q) >= 0;
-        });
-    }
     items.sort(function(a, b) {
         var ta = a.uploaded_at || '', tb = b.uploaded_at || '';
         return order === 'asc' ? (ta < tb ? -1 : ta > tb ? 1 : 0) : (ta > tb ? -1 : ta < tb ? 1 : 0);
     });
-    if (countEl) countEl.textContent = q ? (items.length + ' / ' + galleryData.length + ' 条') : (galleryData.length + ' 条');
+    if (countEl) countEl.textContent = galleryData.length + ' 条';
 
     if (!items.length) {
         grid.innerHTML = '';
         empty.style.display = 'block';
-        empty.querySelector('p').textContent = q ? '没有匹配的图片/视频' : '还没有图片，上传第一张吧';
+        empty.querySelector('p').textContent = '还没有图片，上传第一张吧';
         return;
     }
     empty.style.display = 'none';
@@ -582,15 +499,13 @@ function renderGallery() {
         } else {
             media = '<img src="' + url + '" alt="" loading="lazy" style="display:block;width:100%;height:auto;opacity:0;transition:opacity .35s ease;position:relative;z-index:1;" onload="this.style.opacity=1;hideGalleryPlaceholder(this)" onerror="this.style.opacity=0;markGalleryError(this)">';
         }
-        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" onclick="openLightbox(\'' + detailUrl + '\', \'' + item.id + '\', ' + detailIsMp4 + ', \'' + detailThumb + '\')" style="overflow:hidden;cursor:pointer;padding:0;break-inside:avoid;margin-bottom:20px;">'
+        return '<div class="card gallery-card rotate-' + (idx % 2 === 0 ? '1' : '-1') + '" data-id="' + item.id + '" onclick="openLightbox(\'' + detailUrl + '\', \'' + item.id + '\', ' + detailIsMp4 + ', \'' + detailThumb + '\')" style="overflow:hidden;cursor:pointer;padding:0;break-inside:avoid;margin-bottom:20px;">'
             + '<div class="img-wrap" style="width:100%;aspect-ratio:' + (detailIsMp4 ? '4/3' : 'auto') + ';min-height:180px;overflow:hidden;background:#f0f0f0;position:relative;">'
             + placeholder
             + media
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
             + (isMp4 ? '<span class="gif-badge mp4-badge">MP4</span>' : '')
             + (isLive ? '<span class="gif-badge" style="background:var(--blue);">实况</span>' : '')
-            + ((item.compression_status === 'pending' || item.compression_status === 'processing') ? '<span class="gif-badge" style="background:#b87500;">压缩中</span>' : '')
-            + (item.compression_status === 'failed' ? '<span class="gif-badge" style="background:var(--red);" title="' + escapeHtml(item.compression_error || '') + '">压缩失败</span>' : '')
             + (item.compressed_image ? '<span class="gif-badge" style="background:#2d7a46;">已压缩</span>' : '')
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
@@ -604,24 +519,14 @@ function renderGallery() {
     }).join('');
     initGridVideos(); // 重渲染后重新挂视口调度（新 video 元素需要重新 observe）
 
-    // 有视频在排队/压缩时，每 5 秒静默刷新一次，完成后自动切换为压缩版
-    if (galleryData.some(function(it) { return it.compression_status === 'pending' || it.compression_status === 'processing'; })) {
-        if (!_compressPollTimer) {
-            _compressPollTimer = setTimeout(function() {
-                _compressPollTimer = null;
-                refreshGalleryGrid();
-            }, 5000);
-        }
-    }
-
-    // 搜索时自动定位到第一张命中项（需求：图集搜索仍要自动定位）
-    if (q && items.length) {
-        var firstCard = grid.querySelector('.gallery-card');
-        if (firstCard) {
-            try { firstCard.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
-            var prev = firstCard.style.boxShadow;
-            firstCard.style.boxShadow = '0 0 0 4px var(--blue)';
-            setTimeout(function () { firstCard.style.boxShadow = prev; }, 1600);
+    // 从功能主页搜索跳转：按 id 定位并短暂高亮
+    if (galleryHighlightId) {
+        var targetCard = grid.querySelector('.gallery-card[data-id="' + galleryHighlightId + '"]');
+        if (targetCard) {
+            try { targetCard.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+            var prev = targetCard.style.boxShadow;
+            targetCard.style.boxShadow = '0 0 0 4px var(--blue)';
+            setTimeout(function () { targetCard.style.boxShadow = prev; }, 1800);
         }
     }
 }
@@ -1056,22 +961,14 @@ function renderPending() {
         var isMp4 = isVideoFile(f);
         var isGif = isGifFile(f);
         var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
-        var recommendBytes = isMp4 ? LW_LIMITS.mp4Recommend : (isGif ? 0 : LW_LIMITS.imageRecommend);
         var tooBig = f.size > maxBytes;
-        var rec = !tooBig && recommendBytes > 0 && f.size > recommendBytes;
+        var rec = false;
         var effective = p.compressedFile || f;
         var effectiveSize = effective.size;
-        var border = tooBig ? 'var(--red)' : (rec && !p.compressedFile ? '#b87500' : 'var(--pencil)');
+        var border = tooBig ? 'var(--red)' : 'var(--pencil)';
         var media;
         if (isMp4) {
-            var compressToggleEl = document.getElementById('compressToggle');
-            var willCompress = rec && compressToggleEl && compressToggleEl.checked;
-            media = '<div style="width:100%;height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频' + (willCompress ? '<span style="color:#b87500;margin-top:3px;">上传后服务器压缩</span>' : '') + '</div>';
-        } else if (rec) {
-            var compressedCell = p.compressedUrl
-                ? previewThumb(p, p.compressedUrl)
-                : '<div style="flex:1;min-width:0;height:74px;display:flex;align-items:center;justify-content:center;background:#f5f2eb;border-radius:5px;color:#999;font-size:11px;">' + (p.compressing ? '压缩中…' : (p.compressError ? '压缩失败' : '未压缩')) + '</div>';
-            media = '<div style="display:flex;gap:4px;padding:5px;background:#faf8f3;">' + previewThumb(p, p.url) + compressedCell + '</div>';
+            media = '<div style="width:100%;height:88px;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频</div>';
         } else {
             media = '<img src="' + p.url + '" alt="" style="width:100%;height:88px;object-fit:cover;">';
         }

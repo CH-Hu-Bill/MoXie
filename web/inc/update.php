@@ -14,6 +14,21 @@ function lwCaBundle(): ?string {
     return is_file($file) ? $file : null;
 }
 
+/** GitHub 只读 Token（可选）：用于避免匿名 API 60 次/小时限流导致的 403。 */
+function lwGithubToken(): string {
+    $env = getenv('GITHUB_TOKEN');
+    if ($env === false || $env === '') $env = getenv('LW_GITHUB_TOKEN');
+    if ($env !== false && $env !== '') return trim((string)$env);
+    $file = __DIR__ . '/config.php';
+    if (!is_file($file)) return '';
+    try {
+        $config = require $file;
+    } catch (Throwable $e) {
+        return '';
+    }
+    return is_array($config) ? trim((string)($config['github_token'] ?? '')) : '';
+}
+
 function lwIsAllowedAssetUrl(string $url): bool {
     $parts = parse_url($url);
     if (!is_array($parts)) return false;
@@ -79,12 +94,15 @@ function lwCheckWebUpdate(): array {
     }
     $url = 'https://api.github.com/repos/' . LW_UPDATE_REPO . '/releases?per_page=30';
     $ch = curl_init($url);
+    $headers = ['Accept: application/vnd.github+json'];
+    $githubToken = lwGithubToken();
+    if ($githubToken !== '') $headers[] = 'Authorization: Bearer ' . $githubToken;
     $options = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT => 20,
         CURLOPT_USERAGENT => 'ListenWrite/' . LW_WEB_VERSION,
-        CURLOPT_HTTPHEADER => ['Accept: application/vnd.github+json'],
+        CURLOPT_HTTPHEADER => $headers,
     ];
     $ca = lwCaBundle();
     if ($ca !== null) $options[CURLOPT_CAINFO] = $ca;
@@ -94,7 +112,16 @@ function lwCheckWebUpdate(): array {
     $err = curl_error($ch);
     curl_close($ch);
     if ($body === false || $code !== 200) {
-        $result['error'] = $err !== '' ? $err : ('GitHub API HTTP ' . $code);
+        $detail = '';
+        if (is_string($body) && $body !== '') {
+            $j = json_decode($body, true);
+            if (is_array($j) && isset($j['message'])) $detail = '：' . $j['message'];
+        }
+        if ($code === 403) {
+            $result['error'] = 'GitHub API 403（可能是 API 限流）。请在 web/inc/config.php 配置只读 github_token 后重试' . $detail;
+        } else {
+            $result['error'] = $err !== '' ? $err : ('GitHub API HTTP ' . $code . $detail);
+        }
         return $result;
     }
     $releases = json_decode((string)$body, true);
