@@ -18,9 +18,13 @@ import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 
 class GalleryScreen extends StatefulWidget {
-  /// 从全局搜索跳转时传入：加载完成后自动打开这条图集
+  /// 从全局搜索跳转时传入：加载完成后自动定位这条图集
   final String? openItemId;
-  const GalleryScreen({super.key, this.openItemId});
+
+  /// 通知外层顶部栏图集总数（放在班级名后面）
+  final ValueChanged<int>? onCountChanged;
+
+  const GalleryScreen({super.key, this.openItemId, this.onCountChanged});
 
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
@@ -63,24 +67,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
         ? a.uploadedAt.compareTo(b.uploadedAt)
         : b.uploadedAt.compareTo(a.uploadedAt));
     return list;
-  }
-
-  Widget _buildGalleryBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text(
-            '共 ${_items.length} 张',
-            style: AppTheme.bodyStyle.copyWith(
-              fontSize: 12,
-              color: AppColors.muted,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildSortButton() {
@@ -162,6 +148,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       setState(() {
         _items = cached.map((e) => GalleryItem.fromJson(e)).toList();
       });
+      _notifyCount();
     }
 
     // 有可用缓存时先展示，不弹全屏 loading，避免每次进入都等待网络
@@ -189,6 +176,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
         _remoteLoadDone = true;
       });
+      _notifyCount();
       _storage.cacheGallery(
         classId,
         _items.map((e) => e.toCacheJson()).toList(),
@@ -233,6 +221,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _loading = false;
         _remoteLoadDone = true;
       });
+      _notifyCount();
       _storage.cacheGallery(
         classId,
         _items.map((e) => e.toCacheJson()).toList(),
@@ -390,6 +379,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       await _api.deleteGallery(classId, item.id);
       if (!mounted) return;
       setState(() => _items.removeWhere((e) => e.id == item.id));
+      _notifyCount();
       _storage.cacheGallery(
         classId,
         _items.map((e) => e.toCacheJson()).toList(),
@@ -484,6 +474,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
   }
 
+  void _notifyCount() {
+    widget.onCountChanged?.call(_items.length);
+  }
+
   /// 瀑布流卡片比例：服务端有真实宽高就用真实比例，旧数据回退到 4:3 / 16:9。
   double _itemAspect(GalleryItem item) {
     if (item.width > 0 && item.height > 0) {
@@ -555,7 +549,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     message: '画廊还是空的，上传第一张图片吧', icon: Icons.photo)
                 : Column(
                     children: [
-                      _buildGalleryBar(),
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: () => _loadGallery(reset: true),

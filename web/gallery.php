@@ -344,6 +344,13 @@ $pageTitle = '班级图集';
 require 'inc/header.php';
 ?>
 
+<style>
+.gallery-card.search-highlight {
+    box-shadow: 0 0 0 4px var(--blue), 0 0 0 8px rgba(45, 93, 161, 0.18) !important;
+    outline: 3px solid var(--blue);
+    outline-offset: 2px;
+}
+</style>
 <div class="content">
     <!-- 上传弹窗（S6）：右下角 + 打开，支持单文件/多文件 -->
     <div id="uploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:6200;align-items:center;justify-content:center;padding:20px;">
@@ -373,13 +380,9 @@ require 'inc/header.php';
         <span id="galCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
     </div>
 
-    <!-- 排序悬浮在右下角上传键上方（图集搜索已合并到功能主页全局搜索） -->
-    <div style="position:fixed;right:22px;bottom:94px;z-index:6000;">
-        <select class="input" id="galSort" onchange="renderGallery()" style="min-width:108px;padding:8px 10px;font-size:13px;box-shadow:4px 4px 0 var(--pencil);background:var(--white);">
-            <option value="desc">最新在前</option>
-            <option value="asc">最早在前</option>
-        </select>
-    </div>
+    <!-- 排序悬浮在右下角上传键上方（点击直接切换，不弹出浏览器选择框） -->
+    <button type="button" id="galSortBtn" onclick="toggleGallerySort()"
+            style="position:fixed;right:22px;bottom:94px;z-index:6000;min-width:108px;padding:8px 12px;font-size:13px;font-family:var(--font-body);color:var(--pencil);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);box-shadow:4px 4px 0 var(--pencil);background:var(--white);cursor:pointer;">最新在前 ↓</button>
 
     <div class="gallery-grid" id="galleryGrid" style="display:block;columns:280px;column-gap:20px;"></div>
     <div class="empty-state" id="emptyState" style="display:none"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-8px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><p>还没有图片，上传第一张吧</p></div>
@@ -430,6 +433,16 @@ var galleryDescMap = {};
 var galleryCompareMap = {};
 var _compressPollTimer = null;
 var galleryHighlightId = <?php echo json_encode(preg_match('/\A[a-f0-9]{32}\z/D', (string)reqGet('highlight')) ? (string)reqGet('highlight') : '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+var galleryHighlightCleared = false;
+var highlightedGalleryCard = null;
+var galleryOrder = 'desc';
+
+function toggleGallerySort() {
+    galleryOrder = galleryOrder === 'desc' ? 'asc' : 'desc';
+    var btn = document.getElementById('galSortBtn');
+    if (btn) btn.textContent = galleryOrder === 'desc' ? '最新在前 ↓' : '最早在前 ↑';
+    renderGallery();
+}
 
 function galleryEffectiveFile(item) {
     return item.compressed_image ? item.compressed_image : item.image;
@@ -438,9 +451,8 @@ function galleryEffectiveFile(item) {
 function renderGallery() {
     var grid = document.getElementById('galleryGrid');
     var empty = document.getElementById('emptyState');
-    var sortEl = document.getElementById('galSort');
     var countEl = document.getElementById('galCount');
-    var order = (sortEl && sortEl.value) || 'desc';
+    var order = galleryOrder;
 
     // 时间排序（文字搜索已合并到功能主页全局搜索）
     var items = galleryData.slice();
@@ -519,14 +531,16 @@ function renderGallery() {
     }).join('');
     initGridVideos(); // 重渲染后重新挂视口调度（新 video 元素需要重新 observe）
 
-    // 从功能主页搜索跳转：按 id 定位并短暂高亮
-    if (galleryHighlightId) {
+    // 从功能主页搜索跳转：按 id 定位并持续高亮，直到用户操作
+    if (galleryHighlightId && !galleryHighlightCleared) {
         var targetCard = grid.querySelector('.gallery-card[data-id="' + galleryHighlightId + '"]');
         if (targetCard) {
             try { targetCard.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
-            var prev = targetCard.style.boxShadow;
-            targetCard.style.boxShadow = '0 0 0 4px var(--blue)';
-            setTimeout(function () { targetCard.style.boxShadow = prev; }, 1800);
+            if (highlightedGalleryCard && highlightedGalleryCard !== targetCard) {
+                highlightedGalleryCard.classList.remove('search-highlight');
+            }
+            highlightedGalleryCard = targetCard;
+            targetCard.classList.add('search-highlight');
         }
     }
 }
@@ -1218,6 +1232,25 @@ function setupUploadHelpers() {
     });
 }
 setupUploadHelpers();
+
+// 搜索跳转高亮持续到用户真正操作（点击/滚轮/键盘/触摸）后才清除
+(function bindGalleryHighlightClear() {
+    function clear() {
+        galleryHighlightCleared = true;
+        if (highlightedGalleryCard) {
+            highlightedGalleryCard.classList.remove('search-highlight');
+            highlightedGalleryCard = null;
+        }
+        document.removeEventListener('pointerdown', clear);
+        document.removeEventListener('wheel', clear);
+        document.removeEventListener('keydown', clear);
+        document.removeEventListener('touchstart', clear);
+    }
+    document.addEventListener('pointerdown', clear, { passive: true });
+    document.addEventListener('wheel', clear, { passive: true });
+    document.addEventListener('keydown', clear);
+    document.addEventListener('touchstart', clear, { passive: true });
+})();
 
 renderGallery();
 </script>

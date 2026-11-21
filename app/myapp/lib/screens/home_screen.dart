@@ -24,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  int _galleryCount = 0;
   bool _classExpiredHandled = false;
   Timer? _classCheckTimer;
   final _studyKey = GlobalKey<StudyScreenState>();
@@ -35,6 +36,11 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _studyKey.currentState?.locateWord(word.type, word.id, word.word);
     });
+  }
+
+  void _onGalleryCount(int count) {
+    if (!mounted || _galleryCount == count) return;
+    setState(() => _galleryCount = count);
   }
 
   void _onTabChanged(int index) {
@@ -50,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     StudyScreen(key: _studyKey),
     LifeScreen(key: _lifeKey),
     SearchScreen(onWordFound: _onWordFound),
-    const GalleryScreen(),
+    GalleryScreen(onCountChanged: _onGalleryCount),
     const ProfileScreen(),
   ];
 
@@ -75,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return int.tryParse(digits) ?? 0;
       }).toList();
     }
+
     final pa = parse(a);
     final pb = parse(b);
     for (var i = 0; i < 3; i++) {
@@ -90,7 +97,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final info = await auth.checkVersion();
     if (!mounted || info == null) return;
     final webVersion = (info['web_version'] ?? '').toString();
-    final minWeb = (info['min_web_version'] ?? ApiConfig.minWebVersion).toString();
+    final minWeb =
+        (info['min_web_version'] ?? ApiConfig.minWebVersion).toString();
     if (webVersion.isNotEmpty && _versionLessThan(webVersion, minWeb)) {
       _showVersionBlock(
         '服务器版本过旧',
@@ -174,7 +182,8 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: AppTheme.wobblyRadius,
           side: const BorderSide(color: AppColors.pencil, width: 2),
         ),
-        title: Text('班级口令已失效', style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
+        title: Text('班级口令已失效',
+            style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22)),
         content: Text('班级口令已被修改或班级已删除，请重新选择班级',
             style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 16)),
         actions: [
@@ -202,9 +211,12 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(_currentIndex == 4
             ? '我的'
-            : (auth.currentClassName ?? _tabTitles[_currentIndex])),
+            : (_currentIndex == 3
+                ? '${auth.currentClassName ?? _tabTitles[3]} · $_galleryCount 张'
+                : (auth.currentClassName ?? _tabTitles[_currentIndex]))),
         backgroundColor: AppColors.white,
-        shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
+        shape:
+            const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
       ),
       body: Column(
         children: [
@@ -220,7 +232,8 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppColors.white,
-          border: const Border(top: BorderSide(color: AppColors.pencil, width: 2)),
+          border:
+              const Border(top: BorderSide(color: AppColors.pencil, width: 2)),
           boxShadow: [
             BoxShadow(
               color: AppColors.pencil.withValues(alpha: 0.1),
@@ -258,7 +271,8 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: selected ? AppColors.postIt : Colors.transparent,
           borderRadius: AppTheme.wobblyRadius,
-          border: selected ? Border.all(color: AppColors.pencil, width: 2) : null,
+          border:
+              selected ? Border.all(color: AppColors.pencil, width: 2) : null,
         ),
         child: Icon(
           icon,
