@@ -18,6 +18,7 @@
  */
 require_once 'inc/db.php';
 require_once 'inc/security.php';
+require_once 'inc/ratelimit.php';
 $classes = Database::getClasses();
 
 // Handle password verification — 必须在自动跳转检查之前
@@ -27,6 +28,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
     $cid = reqPost('class_id');
     $pw = reqPost('password');
     if (!isset($classes[$cid])) { echo json_encode(['success' => false, 'error' => '班级不存在']); exit; }
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+    list($allow, $retry) = RateLimiter::check('class_pw:' . $cid, $ip, 12, 300);
+    if (!$allow) {
+        echo json_encode(['success' => false, 'error' => '口令尝试过于频繁，请 ' . max(1, (int)$retry) . ' 秒后再试']);
+        exit;
+    }
     $hash = $classes[$cid]['password_hash'] ?? null;
     if (!$hash || password_verify($pw, $hash)) {
         setClassAuthCookie($cid, $classes[$cid]['auth_version'] ?? 1);

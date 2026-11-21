@@ -385,6 +385,7 @@ function updateUnsavedDot(text) {
 
 function markDirty() {
     if (canEditClass()) {
+        _editVersion++;
         hasUnsavedChanges = true;
         updateUnsavedDot();
         saveDraftLocal();
@@ -711,9 +712,10 @@ function changeMonth(delta) {
     renderCalendar();
 }
 
-// ── 自动保存（S4）：停止输入 10 秒后静默保存；断网/失败时落到 localStorage 草稿 ──
+// ── 自动保存（S4.1）：每 10 秒检查一次 dirty，有内容就静默保存；断网/失败时落到 localStorage 草稿 ──
 var _autoSaveTimer = null;
 var _saving = false;
+var _editVersion = 0; // 保存期间用户继续编辑时，不能用旧请求的结果清掉 dirty
 
 function draftKey(dateStr) { return 'lw_history_draft_' + classId + '_' + dateStr; }
 
@@ -736,13 +738,17 @@ function clearDraftLocal() {
     try { localStorage.removeItem(draftKey(selectedDate)); } catch (e) {}
 }
 
-function scheduleAutoSave() {
-    if (!canEditClass()) return;
-    clearTimeout(_autoSaveTimer);
-    _autoSaveTimer = setTimeout(function() {
+function startAutoSaveLoop() {
+    if (_autoSaveTimer) return;
+    _autoSaveTimer = setInterval(function() {
         if (!hasUnsavedChanges || _saving || !canEditClass()) return;
+        updateUnsavedDot('● 自动保存…');
         saveEntry(true);
     }, 10000);
+}
+
+function scheduleAutoSave() {
+    if (canEditClass()) startAutoSaveLoop();
 }
 
 /** 本地草稿与服务器内容不一致时恢复（多为上次断网/关页未保存） */
@@ -776,6 +782,7 @@ async function saveEntry(silent) {
         btn.textContent = '...';
     }
     _saving = true;
+    var saveVersion = _editVersion;
     var fd = new FormData();
     fd.append('action', 'save_entry');
     fd.append('date', selectedDate);
@@ -797,11 +804,19 @@ async function saveEntry(silent) {
                 location: document.getElementById('entryLocation').value || '',
                 tags: currentTags.slice()
             };
-            hasUnsavedChanges = false;
+            if (_editVersion === saveVersion) {
+                hasUnsavedChanges = false;
+                clearDraftLocal();
+            } else {
+                // 保存请求期间用户又改了内容：保留 dirty，下一轮 10 秒自动保存继续提交
+                hasUnsavedChanges = true;
+                scheduleAutoSave();
+            }
             updateUnsavedDot();
-            clearDraftLocal();
             renderCalendar();
-            if (!silent) showToast('已保存', 'success');
+            if (!silent) {
+                showToast(_editVersion === saveVersion ? '已保存' : '已保存上一版，正在继续保存新修改', 'success');
+            }
             return true;
         }
         // 内容超限等业务错误：保留草稿，手动保存时才提示
@@ -815,6 +830,8 @@ async function saveEntry(silent) {
         return false;
     } finally {
         _saving = false;
+        // 自动保存失败时恢复「未保存」提示；成功时 hasUnsavedChanges=false，自动隐藏
+        updateUnsavedDot();
         if (!silent) {
             btn.disabled = false;
             btn.textContent = '💾 保存';
@@ -823,6 +840,7 @@ async function saveEntry(silent) {
 }
 
 function initEditor() {
+    startAutoSaveLoop();
     document.addEventListener('paste', handlePaste);
     ['entryMood', 'entryWeather', 'entryLocation', 'entryTitle'].forEach(function(id) {
         var el = document.getElementById(id);

@@ -8,6 +8,7 @@ require_once 'inc/game_time.php';
 require_once 'inc/version.php';
 require_once 'inc/update_apply.php';
 require_once 'inc/gallery_trash.php';
+require_once 'inc/ratelimit.php';
 // 后台页面一律禁止缓存：删除公告等操作后刷新必须拿到最新数据，
 // 避免浏览器缓存导致"删了还在/改了没变"的错觉。
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -53,7 +54,16 @@ if (!$isAuthed && ($_POST['action'] ?? '') === 'admin_login') {
     $loginOk = $adminPasswordHash !== ''
         ? password_verify($submittedPassword, $adminPasswordHash)
         : ($adminPassword !== '' && hash_equals($adminPassword, $submittedPassword));
-    if (count($failures) >= $maxFailures) {
+    // 跨会话/跨 Cookie 的 IP 限流：只对失败尝试计数，防止清 Cookie 绕过上面的 session 失败计数
+    $loginIpAllowed = true;
+    $loginRetry = 0;
+    if (!$loginOk) {
+        $loginIp = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+        list($loginIpAllowed, $loginRetry) = RateLimiter::check('admin_login', $loginIp, 10, 600);
+    }
+    if (!$loginIpAllowed) {
+        $loginError = '登录尝试过于频繁，请 ' . max(1, (int)$loginRetry) . ' 秒后再试';
+    } elseif (count($failures) >= $maxFailures) {
         $_SESSION['admin_login_failures'] = $failures;
         $loginError = '登录失败次数过多，请10分钟后重试';
     } elseif (!$adminConfigured) {

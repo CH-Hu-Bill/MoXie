@@ -4,7 +4,7 @@
  * 壁纸展示大屏页（用于 Lively Wallpaper / 希沃大屏）
  * ============================================================
  *
- * 全屏壁纸展示：顶部公告跑马灯 + 今日默写单词大字海报 + 班级图集轮播。
+ * 全屏壁纸展示：顶部公告跑马灯 + 今日默写单词大字海报 + 「好好学习 天天向上」标语。
  * 严格遵循 风格.md（暖纸底 / 手绘圆角 / 硬阴影）。
  *
  * 班级鉴权状态机:
@@ -20,12 +20,13 @@
  *   ?json=1       — 数据接口（供 60s 轮询，需同鉴权）
  *
  * 数据依赖:
- *   data/classes.json, data/classes/{id}/{tasks,words,gallery}.json,
+ *   data/classes.json, data/classes/{id}/{tasks,words}.json,
  *   data/announcements.json, data/settings.json(display_bottom_margin, display_token_{classId})
  * ============================================================
  */
 require_once 'inc/db.php';
 require_once 'inc/security.php';
+require_once 'inc/ratelimit.php';
 
 function displayBannerAnnouncement($classId) {
     try {
@@ -126,34 +127,6 @@ function displayWeekdayCn($dateStr) {
     return $map[(int)date('w', $ts)];
 }
 
-function displayGallery($classId) {
-    try {
-        $items = Database::getClassData($classId, 'gallery');
-        $out = [];
-        foreach ($items as $it) {
-            if (empty($it['image'])) continue;
-            $imgFile = (string)$it['image'];
-            $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
-            $stillUrl = 'upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile);
-            // 实况：展示页按视频播放（静态图作 poster），与 MP4 共用同一条轮播路径
-            $liveFile = (string)($it['live_video'] ?? '');
-            $isLive = ($it['type'] ?? '') === 'live' && $liveFile !== '';
-            $isVideo = $isLive || $ext === 'mp4';
-            $out[] = [
-                'url' => $isLive
-                    ? ('upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($liveFile))
-                    : $stillUrl,
-                'type' => $ext === 'gif' ? 'gif' : ($isVideo ? 'mp4' : 'static'),
-                'description' => (string)($it['description'] ?? ''),
-                'thumb_url' => $isLive
-                    ? $stillUrl
-                    : ($ext === 'mp4' ? 'video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile) : null),
-            ];
-        }
-        return $out;
-    } catch (Throwable $e) { return []; }
-}
-
 $classes = Database::getClasses();
 $settings = Database::getSettings();
 $bottomMargin = max(0, (int)($settings['display_bottom_margin'] ?? 48));
@@ -174,6 +147,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'verify_class_password') {
     $cid = reqPost('class_id');
     $pw = reqPost('password');
     if (!isset($classes[$cid])) { echo json_encode(['success' => false, 'error' => '班级不存在']); exit; }
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+    list($allow, $retry) = RateLimiter::check('class_pw:' . $cid, $ip, 12, 300);
+    if (!$allow) {
+        echo json_encode(['success' => false, 'error' => '口令尝试过于频繁，请 ' . max(1, (int)$retry) . ' 秒后再试']);
+        exit;
+    }
     $hash = $classes[$cid]['password_hash'] ?? null;
     if (!$hash || password_verify($pw, $hash)) {
         setClassAuthCookie($cid, $classes[$cid]['auth_version'] ?? 1);
@@ -214,7 +193,6 @@ if (reqGet('json') === '1') {
             'class_name' => (string)($classes[$classId]['name'] ?? ''),
             'announcement' => displayBannerAnnouncement($classId),
             'words' => displayRecentTaskWords($classId),
-            'gallery' => displayGallery($classId),
             'bottom_margin' => $bottomMargin,
         ], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
@@ -245,7 +223,6 @@ if ($classId !== '' && isset($classes[$classId])) {
 $className = $view === 'content' ? (string)($class['name'] ?? '') : '';
 $banner = $view === 'content' ? displayBannerAnnouncement($classId) : null;
 $wordsData = $view === 'content' ? displayRecentTaskWords($classId) : ['task' => null, 'words' => [], 'sentences' => [], 'essays' => []];
-$gallery = $view === 'content' ? displayGallery($classId) : [];
 
 // 班级列表（选择页 + 口令弹窗共用）
 $publicClasses = [];
@@ -269,11 +246,10 @@ var CSRF_TOKEN='<?php echo $csrfToken; ?>';
 var DISPLAY_VIEW='<?php echo $view; ?>';
 var DISPLAY_CID='<?php echo $classId !== '' ? htmlspecialchars($classId, ENT_QUOTES, 'UTF-8') : ''; ?>';
 var DISPLAY_CLASSES=<?php echo json_encode($publicClasses, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-var DISPLAY_GALLERY=<?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
 
-<div class="display-root" id="displayRoot" data-view="<?php echo $view; ?>"
+<div class="display-root" id="displayRoot" data-view="<?php echo $view; ?>" data-gallery-mode="motto"
      style="--bottom-margin:<?php echo (int)$bottomMargin; ?>px">
 
   <!-- ===== 视图: 班级选择 ===== -->
@@ -365,29 +341,7 @@ var DISPLAY_WORDS=<?php echo json_encode($wordsData, JSON_UNESCAPED_UNICODE | JS
         <?php endif; ?>
       </div>
 
-        <div class="d-gallery" id="dGallery">
-        <div class="d-gallery-img" id="dGalleryImg">
-          <?php if (!empty($gallery)): ?>
-            <div class="d-gallery-loading"><?php echo $gallery[0]['type'] === 'mp4' ? '视频加载中…' : '加载中…'; ?></div>
-            <?php if ($gallery[0]['type'] === 'mp4'): ?>
-              <video id="dGalleryPic" muted loop autoplay playsinline preload="auto" poster="<?php echo htmlspecialchars((string)($gallery[0]['thumb_url'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>"></video>
-            <?php else: ?>
-              <img id="dGalleryPic" alt="" src="<?php echo htmlspecialchars($gallery[0]['url'], ENT_QUOTES, 'UTF-8'); ?>">
-            <?php endif; ?>
-          <?php else: ?>
-            <div class="d-placeholder d-placeholder-sm">暂无图集</div>
-          <?php endif; ?>
-        </div>
-        <div class="d-gallery-desc" id="dGalleryDesc">
-          <div class="d-gallery-desc-scroll" id="dGalleryDescScroll">
-          <?php if (!empty($gallery) && $gallery[0]['description'] !== ''): ?>
-            <?php echo htmlspecialchars($gallery[0]['description']); ?>
-          <?php endif; ?>
-          </div>
-        </div>
-      </div>
-      <!-- 图集轮播已停用（定稿：展示页只保留标语），如需恢复把下方 motto 固定去掉即可 -->
-      <!-- 文字占位（好好学习 天天向上） -->
+      <!-- 展示页只保留文字标语，图集轮播已移除（不再加载图集媒体） -->
       <div class="d-motto" id="dMotto">
         <div class="d-motto-line1">好好学习</div>
         <div class="d-motto-line2">天天向上</div>

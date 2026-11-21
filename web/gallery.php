@@ -90,8 +90,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     if ($isMp4) {
         if (($image['size'] ?? 0) > Database::MP4_MAX_BYTES) { echo json_encode(['success' => false, 'error' => '视频最大 ' . round(Database::MP4_MAX_BYTES / 1048576) . 'MB']); exit; }
     } else {
-        $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
-        if (($image['size'] ?? 0) > $maxBytes) { echo json_encode(['success' => false, 'error' => $isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB']); exit; }
+        $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::GALLERY_IMAGE_MAX_BYTES;
+        if (($image['size'] ?? 0) > $maxBytes) { echo json_encode(['success' => false, 'error' => $isGif ? 'GIF 动图最大 16MB' : '图片最大 100MB']); exit; }
     }
 
     $liveTmp = null;
@@ -338,7 +338,19 @@ require 'inc/header.php';
                 <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（可多选）</span>
                 <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" multiple style="display:none;" onchange="onFilesPicked()">
             </label>
-            <div id="uploadPreviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:12px;"></div>
+            <div id="uploadPreviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:12px;"></div>
+            <div id="compressBox" style="display:none;margin-top:12px;padding:10px 12px;border:2px dashed var(--old-paper);border-radius:var(--wobbly-sm);background:rgba(255,255,255,.55);">
+                <label class="hd-check" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+                    <input type="checkbox" id="compressToggle" checked onchange="onCompressToggle()">
+                    <span>压缩超过建议大小的图片 <span style="color:#999;">（建议 <?php echo round(Database::GALLERY_IMAGE_RECOMMEND_BYTES / 1048576); ?>MB）</span></span>
+                </label>
+                <div id="compressSliderBox" style="display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--pencil);">
+                    <span>压缩强度</span>
+                    <input type="range" id="compressQuality" min="60" max="95" value="80" step="5" style="flex:1;accent-color:var(--blue);" oninput="onCompressQualityChange()">
+                    <b id="compressQualityLabel" style="min-width:38px;text-align:right;">80%</b>
+                </div>
+                <div id="compressHint" style="font-size:12px;color:#999;margin-top:6px;">原图与压缩结果会并排显示；若压缩后更大，将自动保留原图。</div>
+            </div>
             <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="margin-top:12px;">
             <div id="uploadDescHint" style="font-size:12px;color:#999;margin-top:6px;"></div>
             <div id="uploadHint" style="font-size:13px;color:var(--red);min-height:18px;margin-top:6px;"></div>
@@ -387,12 +399,16 @@ var LW_LIMITS = <?php echo json_encode([
     'mp4' => Database::MP4_MAX_BYTES,
     'chunk' => LW_CHUNK_BYTES,
     'gif' => Database::GIF_MAX_BYTES,
-    'image' => Database::UPLOAD_MAX_BYTES,
+    'image' => Database::GALLERY_IMAGE_MAX_BYTES,
+    'imageRecommend' => Database::GALLERY_IMAGE_RECOMMEND_BYTES,
+    'mp4Recommend' => 52428800,
 ]); ?>;
 var LW_LIMIT_LABEL = {
     mp4: Math.round(LW_LIMITS.mp4 / 1048576) + 'MB',
     gif: Math.round(LW_LIMITS.gif / 1048576) + 'MB',
-    image: Math.round(LW_LIMITS.image / 1048576) + 'MB'
+    image: Math.round(LW_LIMITS.image / 1048576) + 'MB',
+    imageRecommend: Math.round(LW_LIMITS.imageRecommend / 1048576) + 'MB',
+    mp4Recommend: Math.round(LW_LIMITS.mp4Recommend / 1048576) + 'MB'
 };
 var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 // 描述不内嵌到 HTML onclick 属性（含换行/过长会破坏 JS 导致卡片打不开），统一存映射表按 id 取
@@ -682,8 +698,15 @@ function lbDescScroll() {
     box.addEventListener('touchend', function() { setTimeout(lbDescScroll, 2000); });
 })();
 
-// ── 上传（S6）：右下角 + 打开弹窗，支持单文件 / 多文件 ──
+// ── 上传（S6.1）：右下角 + 打开弹窗，支持单文件/多文件、图片压缩前后对比 ──
 var pendingFiles = [];
+var _compressSeq = 0;
+var _compressTimer = null;
+
+function fileExt(f) { return (f.name.split('.').pop() || '').toLowerCase(); }
+function isVideoFile(f) { var e = fileExt(f); return e === 'mp4' || e === 'mov'; }
+function isGifFile(f) { return fileExt(f) === 'gif'; }
+function isImageFile(f) { var e = fileExt(f); return ['jpg', 'jpeg', 'png', 'webp'].indexOf(e) >= 0; }
 
 function openUpload() {
     document.getElementById('uploadModal').style.display = 'flex';
@@ -693,8 +716,13 @@ function closeUpload() {
     document.getElementById('uploadModal').style.display = 'none';
     clearPending();
 }
+function revokePending(p) {
+    if (!p) return;
+    if (p.url) { try { URL.revokeObjectURL(p.url); } catch (e) {} p.url = ''; }
+    if (p.compressedUrl) { try { URL.revokeObjectURL(p.compressedUrl); } catch (e) {} p.compressedUrl = ''; }
+}
 function clearPending() {
-    pendingFiles.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
+    pendingFiles.forEach(revokePending);
     pendingFiles = [];
     var input = document.getElementById('galleryImage');
     if (input) input.value = '';
@@ -702,19 +730,30 @@ function clearPending() {
     if (desc) desc.value = '';
     var hint = document.getElementById('uploadHint');
     if (hint) hint.textContent = '';
+    var box = document.getElementById('compressBox');
+    if (box) box.style.display = 'none';
     renderPending();
 }
 function addFiles(list) {
     var added = 0;
     Array.prototype.forEach.call(list || [], function (f) {
         if (!f) return;
-        var isVideo = f.type && f.type.indexOf('video/') === 0;
-        pendingFiles.push({ file: f, url: isVideo ? '' : URL.createObjectURL(f) });
+        var isVideo = isVideoFile(f);
+        pendingFiles.push({
+            file: f,
+            url: isVideo ? '' : URL.createObjectURL(f),
+            compressedFile: null,
+            compressedUrl: '',
+            compressing: false,
+            compressError: ''
+        });
         added++;
     });
     if (!added) return;
     document.getElementById('uploadModal').style.display = 'flex';
     renderPending();
+    updateCompressControls();
+    compressAll();
 }
 function onFilesPicked() {
     var input = document.getElementById('galleryImage');
@@ -724,9 +763,119 @@ function onFilesPicked() {
 function removePending(i) {
     var p = pendingFiles[i];
     if (!p) return;
-    if (p.url) URL.revokeObjectURL(p.url);
+    revokePending(p);
     pendingFiles.splice(i, 1);
     renderPending();
+    updateCompressControls();
+    compressAll();
+}
+function overRecommend(p) {
+    return isImageFile(p.file) && p.file.size > LW_LIMITS.imageRecommend;
+}
+function updateCompressControls() {
+    var box = document.getElementById('compressBox');
+    if (!box) return;
+    var any = pendingFiles.some(overRecommend);
+    box.style.display = any ? 'block' : 'none';
+    var slider = document.getElementById('compressSliderBox');
+    var toggle = document.getElementById('compressToggle');
+    if (slider) slider.style.display = (toggle && toggle.checked) ? 'flex' : 'none';
+}
+function clearCompressed() {
+    _compressSeq++;
+    pendingFiles.forEach(function (p) {
+        if (p.compressedUrl) { try { URL.revokeObjectURL(p.compressedUrl); } catch (e) {} }
+        p.compressedUrl = '';
+        p.compressedFile = null;
+        p.compressing = false;
+        p.compressError = '';
+    });
+    renderPending();
+}
+function onCompressToggle() {
+    updateCompressControls();
+    if (document.getElementById('compressToggle').checked) compressAll();
+    else clearCompressed();
+}
+function onCompressQualityChange() {
+    var q = document.getElementById('compressQuality');
+    var label = document.getElementById('compressQualityLabel');
+    if (label) label.textContent = q.value + '%';
+    clearTimeout(_compressTimer);
+    _compressTimer = setTimeout(compressAll, 280);
+}
+function loadImageElement(file) {
+    return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(file);
+        var img = new Image();
+        img.onload = function () { resolve({ img: img, url: url }); };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('浏览器无法解码这张图片')); };
+        img.src = url;
+    });
+}
+async function compressImageFile(file, quality) {
+    var loaded = await loadImageElement(file);
+    var img = loaded.img;
+    var maxEdge = quality >= 88 ? 2560 : (quality >= 78 ? 1920 : 1600);
+    var scale = Math.min(1, maxEdge / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+    var w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+    var h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) { URL.revokeObjectURL(loaded.url); throw new Error('浏览器不支持图片压缩'); }
+    ctx.drawImage(img, 0, 0, w, h);
+    var blob = await new Promise(function (resolve) {
+        canvas.toBlob(resolve, 'image/webp', quality / 100);
+    });
+    URL.revokeObjectURL(loaded.url);
+    if (!blob) {
+        blob = await new Promise(function (resolve) {
+            canvas.toBlob(resolve, 'image/jpeg', quality / 100);
+        });
+    }
+    if (!blob || blob.size >= file.size) return null; // 压缩后更大：保留原图
+    var ext = blob.type === 'image/jpeg' ? '.jpg' : '.webp';
+    var name = file.name.replace(/\.[^.]+$/, '') + ext;
+    return new File([blob], name, { type: blob.type || 'image/webp' });
+}
+async function compressAll() {
+    var toggle = document.getElementById('compressToggle');
+    if (!toggle || !toggle.checked) return;
+    var quality = parseInt((document.getElementById('compressQuality') || {}).value || '80', 10);
+    var seq = ++_compressSeq;
+    pendingFiles.forEach(function (p) { p.compressing = false; });
+    for (var i = 0; i < pendingFiles.length; i++) {
+        var p = pendingFiles[i];
+        if (!overRecommend(p) || p.compressing) continue;
+        p.compressing = true;
+        p.compressError = '';
+        renderPending();
+        try {
+            var out = await compressImageFile(p.file, quality);
+            if (seq !== _compressSeq) return;
+            if (out) {
+                if (p.compressedUrl) { try { URL.revokeObjectURL(p.compressedUrl); } catch (e) {} }
+                p.compressedFile = out;
+                p.compressedUrl = URL.createObjectURL(out);
+            } else {
+                p.compressedFile = null;
+                p.compressedUrl = '';
+            }
+        } catch (e) {
+            if (seq !== _compressSeq) return;
+            p.compressError = e.message || '压缩失败';
+        } finally {
+            if (seq === _compressSeq) p.compressing = false;
+        }
+        if (seq !== _compressSeq) return;
+        renderPending();
+    }
+}
+function previewThumb(p, url) {
+    return '<div style="flex:1;min-width:0;text-align:center;">'
+        + '<img src="' + url + '" alt="" style="width:100%;height:74px;object-fit:cover;display:block;border-radius:5px;">'
+        + '</div>';
 }
 function renderPending() {
     var box = document.getElementById('uploadPreviewList');
@@ -745,20 +894,34 @@ function renderPending() {
     }
     box.innerHTML = pendingFiles.map(function (p, i) {
         var f = p.file;
-        var ext = (f.name.split('.').pop() || '').toLowerCase();
-        var isMp4 = ext === 'mp4' || ext === 'mov';
-        var maxBytes = isMp4 ? LW_LIMITS.mp4 : (ext === 'gif' ? LW_LIMITS.gif : LW_LIMITS.image);
+        var isMp4 = isVideoFile(f);
+        var isGif = isGifFile(f);
+        var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
+        var recommendBytes = isMp4 ? LW_LIMITS.mp4Recommend : (isGif ? 0 : LW_LIMITS.imageRecommend);
         var tooBig = f.size > maxBytes;
-        var media = isMp4
-            ? '<div style="width:100%;height:88px;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频</div>'
-            : '<img src="' + p.url + '" alt="" style="width:100%;height:88px;object-fit:cover;">';
-        return '<div style="position:relative;border:2px solid ' + (tooBig ? 'var(--red)' : 'var(--pencil)') + ';border-radius:8px;overflow:hidden;background:#fff;">'
+        var rec = !tooBig && recommendBytes > 0 && f.size > recommendBytes;
+        var effective = p.compressedFile || f;
+        var effectiveSize = effective.size;
+        var border = tooBig ? 'var(--red)' : (rec && !p.compressedFile ? '#b87500' : 'var(--pencil)');
+        var media;
+        if (isMp4) {
+            media = '<div style="width:100%;height:88px;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频</div>';
+        } else if (rec) {
+            var compressedCell = p.compressedUrl
+                ? previewThumb(p, p.compressedUrl)
+                : '<div style="flex:1;min-width:0;height:74px;display:flex;align-items:center;justify-content:center;background:#f5f2eb;border-radius:5px;color:#999;font-size:11px;">' + (p.compressing ? '压缩中…' : (p.compressError ? '压缩失败' : '未压缩')) + '</div>';
+            media = '<div style="display:flex;gap:4px;padding:5px;background:#faf8f3;">' + previewThumb(p, p.url) + compressedCell + '</div>';
+        } else {
+            media = '<img src="' + p.url + '" alt="" style="width:100%;height:88px;object-fit:cover;">';
+        }
+        return '<div style="position:relative;border:2px solid ' + border + ';border-radius:8px;overflow:hidden;background:#fff;">'
             + media
             + '<button type="button" onclick="removePending(' + i + ')" title="移除" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;line-height:1;">×</button>'
-            + '<div style="padding:4px 6px;font-size:11px;line-height:1.3;">'
+            + '<div style="padding:5px 7px;font-size:11px;line-height:1.35;">'
             + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(f.name) + '">' + escapeHtml(f.name) + '</div>'
-            + '<div style="color:' + (tooBig ? 'var(--red)' : '#999') + ';">' + (f.size / 1048576).toFixed(1) + 'MB' + (tooBig ? ' 超出上限' : '') + '</div>'
-            + '</div></div>';
+            + '<div style="color:' + (tooBig ? 'var(--red)' : (rec ? '#b87500' : '#999')) + ';">'
+            + (p.compressedFile ? '原 ' + (f.size / 1048576).toFixed(1) + 'MB → ' + (effectiveSize / 1048576).toFixed(1) + 'MB' : (f.size / 1048576).toFixed(1) + 'MB' + (tooBig ? ' 超出上限' : (rec ? ' 建议压缩' : '')))
+            + '</div></div></div>';
     }).join('');
 }
 
@@ -771,7 +934,7 @@ function uploadOneFile(file, desc, multi) {
         fd.append('multi', multi);
         fd.append('csrf_token', document.getElementById('csrfToken').value);
         var controller = new AbortController();
-        var timeoutMs = file.size > 30 * 1048576 ? 300000 : 60000;
+        var timeoutMs = file.size > 10 * 1048576 ? 300000 : 60000;
         var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
         fetch('gallery.php?id=' + classId, { method: 'POST', body: fd, signal: controller.signal })
             .then(function (resp) { return resp.text(); })
@@ -798,16 +961,22 @@ async function uploadGallery() {
     if (pendingFiles.length === 1 && !desc) { showToast('单文件上传请填写描述'); return; }
 
     for (var i = 0; i < pendingFiles.length; i++) {
-        var f = pendingFiles[i].file;
-        var ext = (f.name.split('.').pop() || '').toLowerCase();
-        var isMp4 = ext === 'mp4' || ext === 'mov';
-        var isGif = ext === 'gif';
+        var pv = pendingFiles[i];
+        var f = pv.compressedFile || pv.file;
+        if (pv.compressing) { showToast('图片正在压缩，请稍候再上传'); return; }
+        var ext = fileExt(f);
+        var isMp4 = isVideoFile(f);
+        var isGif = isGifFile(f);
         if (!isMp4 && !isGif && ['jpg', 'jpeg', 'png', 'webp'].indexOf(ext) < 0) {
-            showToast('不支持的文件格式：' + f.name);
+            showToast('不支持的文件格式：' + pv.file.name);
             return;
         }
         var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
-        if (f.size > maxBytes) { showToast('「' + f.name + '」超过大小上限'); return; }
+        if (!pv.compressedFile && pv.file.size > maxBytes) {
+            showToast('「' + pv.file.name + '」超过大小上限' + (isImageFile(pv.file) ? '，请压缩或移除' : ''));
+            return;
+        }
+        if (f.size > maxBytes) { showToast('「' + pv.file.name + '」压缩后仍超过大小上限'); return; }
     }
 
     var multi = pendingFiles.length > 1 ? '1' : '0';
@@ -815,9 +984,10 @@ async function uploadGallery() {
     btn.disabled = true;
     try {
         for (var j = 0; j < pendingFiles.length; j++) {
-            var file = pendingFiles[j].file;
+            var item = pendingFiles[j];
+            var file = item.compressedFile || item.file;
             btn.textContent = '上传中 ' + (j + 1) + '/' + pendingFiles.length;
-            var e2 = (file.name.split('.').pop() || '').toLowerCase();
+            var e2 = fileExt(file);
             var mp42 = e2 === 'mp4' || e2 === 'mov';
             try {
                 if (mp42 && file.size > 16 * 1048576) {
@@ -828,7 +998,7 @@ async function uploadGallery() {
                 okCount++;
             } catch (err) {
                 failCount++;
-                if (hint) hint.textContent = '「' + file.name + '」失败：' + (err.message || '网络错误');
+                if (hint) hint.textContent = '「' + item.file.name + '」失败：' + (err.message || '网络错误');
             }
         }
     } finally {

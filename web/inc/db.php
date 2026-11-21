@@ -20,7 +20,14 @@ if (PHP_SAPI !== 'cli' && lwInMaintenance()) {
 
 // HTML/JSON 页面一律禁止浏览器缓存：定位/列表等数据是服务端渲染，
 // 缓存会导致"新建任务后定位仍是旧位置"等不刷新问题（图片等静态资源在各自端点单独设长缓存）。
-if (PHP_SAPI !== 'cli') { header('Cache-Control: no-store'); }
+if (PHP_SAPI !== 'cli') {
+    header('Cache-Control: no-store');
+    // 公网部署的基础安全响应头（不启用严格 CSP，避免破坏现有内联脚本）
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+}
 require_once __DIR__ . '/input.php';
 /**
  * ============================================================
@@ -533,8 +540,12 @@ class Database {
     }
 
     // ==================== 上传图片管理 ====================
-    /** @var int 单张图片最大字节数 (12MB) */
+    /** @var int 单张图片最大字节数 (12MB，史记/通用上传) */
     const UPLOAD_MAX_BYTES = 12582912;
+    /** @var int 班级图集图片硬上限 (100MB；建议 15MB，前端压缩后通常远小于此值) */
+    const GALLERY_IMAGE_MAX_BYTES = 104857600;
+    /** @var int 班级图集图片建议大小 (15MB；超过则提示压缩，不强制) */
+    const GALLERY_IMAGE_RECOMMEND_BYTES = 15728640;
     /** @var int 图片最大像素数 (2500 万) */
     const UPLOAD_MAX_PIXELS = 25000000;
     /** @var int 缩放后最长边像素 */

@@ -796,7 +796,7 @@ switch ($action) {
         }
         if (($file['size'] ?? 0) <= 0) appError('上传文件无效');
         if (!is_uploaded_file($file['tmp_name'])) appError('上传文件无效');
-        // 按类型分段限值（与 save_gallery / gallery.php / upload.php 一致）：GIF 16MB / MP4 200MB / 图片 12MB
+        // 按类型分段限值：史记图片 12MB；图集见 save_gallery（GIF 16MB / MP4 1GB / 图片 100MB）
         $isGifUp = false;
         $isMp4Up = false;
         if (is_file($file['tmp_name'])) {
@@ -815,7 +815,7 @@ switch ($action) {
             $filename = Database::saveUploadedImage($classId, $file['tmp_name']);
         } catch (RuntimeException $e) {
             $msg = $e->getMessage();
-            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '200MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500;
+            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '100MB') || str_contains($msg, '15MB') || str_contains($msg, '200MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500;
             appError($msg, null, $code);
         }
 
@@ -1144,8 +1144,8 @@ switch ($action) {
         if ($isMp4) {
             if (($img['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 ' . round(Database::MP4_MAX_BYTES / 1048576) . 'MB', null, 413);
         } else {
-            $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
-            if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
+            $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::GALLERY_IMAGE_MAX_BYTES;
+            if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 100MB', null, 413);
         }
         $desc = sanitizePlainText(reqPost('description'));
         if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
@@ -1168,7 +1168,7 @@ switch ($action) {
         } catch (RuntimeException $e) {
             if ($liveTmp) @unlink($liveTmp);
             $msg = $e->getMessage();
-            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '200MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500);
+            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '100MB') || str_contains($msg, '15MB') || str_contains($msg, '200MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500);
         }
 
         $liveFile = null;

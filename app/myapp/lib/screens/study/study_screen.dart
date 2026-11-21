@@ -869,7 +869,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         child: Column(
           children: [
             WobblyTabBar(
-              tabs: const ['单词库', '错题本', '任务'],
+              tabs: const ['知识库', '错题本', '任务'],
               selectedIndex: _mainTab,
               onTap: _switchMainTab,
             ),
