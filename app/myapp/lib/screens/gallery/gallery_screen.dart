@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,9 @@ class GalleryScreen extends StatefulWidget {
   /// 搜索页已经拿到的完整图集项：先直接展示，避免跳转后空白/等分页
   final GalleryItem? focusItem;
 
+  /// 主页搜索切到画廊 Tab 时，通过它传递要定位的图集项
+  final ValueListenable<GalleryItem?>? focusListenable;
+
   /// 通知外层顶部栏图集总数（放在班级名后面）
   final ValueChanged<int>? onCountChanged;
 
@@ -31,6 +35,7 @@ class GalleryScreen extends StatefulWidget {
     super.key,
     this.openItemId,
     this.focusItem,
+    this.focusListenable,
     this.onCountChanged,
   });
 
@@ -64,6 +69,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   int _focusLoadPages = 0;
   bool _firstLoadDone = false;
   bool _remoteLoadDone = false;
+  GalleryItem? _externalFocusItem;
 
   // 排序（搜索统一走主界面搜索，这里只保留排序）
   String _order = 'desc'; // desc=最新在前
@@ -105,6 +111,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
+    widget.focusListenable?.addListener(_onExternalFocus);
     final focus = widget.focusItem;
     if (focus != null) {
       _items = [focus];
@@ -151,6 +158,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   @override
   void dispose() {
+    widget.focusListenable?.removeListener(_onExternalFocus);
     _refreshTimer?.cancel();
     _gridController.dispose();
     super.dispose();
@@ -509,10 +517,43 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   List<GalleryItem> _ensureFocus(List<GalleryItem> list) {
-    final focus = widget.focusItem;
+    final focus = widget.focusItem ?? _externalFocusItem;
     if (focus == null) return list;
     if (list.any((e) => e.id == focus.id)) return list;
     return [focus, ...list];
+  }
+
+  void _onExternalFocus() {
+    final item = widget.focusListenable?.value;
+    if (item == null) return;
+    _externalFocusItem = item;
+    _focusExternalItem(item);
+  }
+
+  void _focusExternalItem(GalleryItem item) {
+    setState(() {
+      _items = [
+        item,
+        ..._items.where((e) => e.id != item.id),
+      ];
+      _openedInitialId = item.id;
+      _highlightId = item.id;
+      _firstLoadDone = true;
+      _remoteLoadDone = true;
+    });
+    _notifyCount();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_gridController.hasClients) _gridController.jumpTo(0);
+      final ctx = _cardKey(item.id).currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.2,
+          duration: const Duration(milliseconds: 300),
+        );
+      }
+    });
   }
 
   /// 瀑布流卡片比例：服务端有真实宽高就用真实比例，旧数据回退到 4:3 / 16:9。

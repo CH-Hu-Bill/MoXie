@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/api_config.dart';
+import '../models/gallery_item.dart';
 import '../models/vlog_entry.dart';
 import '../providers/auth_provider.dart';
 import '../services/announcement_service.dart';
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _classCheckTimer;
   final _studyKey = GlobalKey<StudyScreenState>();
   final _lifeKey = GlobalKey<LifeScreenState>();
+  final ValueNotifier<GalleryItem?> _galleryFocus = ValueNotifier(null);
 
   void _onWordFound(WordMatch word) {
     setState(() => _currentIndex = 0);
@@ -43,6 +45,15 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _galleryCount = count);
   }
 
+  void _onGalleryFound(GalleryItem item) {
+    setState(() => _currentIndex = 3);
+    // 先清空再写入，确保连续点同一条也能触发定位；切 Tab 完成后再投递
+    _galleryFocus.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _galleryFocus.value = item;
+    });
+  }
+
   void _onTabChanged(int index) {
     if (_currentIndex == 1 && index != 1) {
       _lifeKey.currentState?.resetToInitial();
@@ -55,8 +66,14 @@ class _HomeScreenState extends State<HomeScreen> {
   late final _screens = [
     StudyScreen(key: _studyKey),
     LifeScreen(key: _lifeKey),
-    SearchScreen(onWordFound: _onWordFound),
-    GalleryScreen(onCountChanged: _onGalleryCount),
+    SearchScreen(
+      onWordFound: _onWordFound,
+      onGalleryFound: _onGalleryFound,
+    ),
+    GalleryScreen(
+      focusListenable: _galleryFocus,
+      onCountChanged: _onGalleryCount,
+    ),
     const ProfileScreen(),
   ];
 
@@ -156,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _classCheckTimer?.cancel();
+    _galleryFocus.dispose();
     super.dispose();
   }
 

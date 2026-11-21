@@ -17,9 +17,15 @@ class SearchScreen extends StatefulWidget {
   final String? initialQuery;
   final String? highlightWord;
   final ValueChanged<WordMatch>? onWordFound;
+  final ValueChanged<GalleryItem>? onGalleryFound;
 
-  const SearchScreen(
-      {super.key, this.initialQuery, this.highlightWord, this.onWordFound});
+  const SearchScreen({
+    super.key,
+    this.initialQuery,
+    this.highlightWord,
+    this.onWordFound,
+    this.onGalleryFound,
+  });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -243,12 +249,18 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildGalleryMatchCard(GalleryItem g) {
     return HandDrawnCard(
       padding: EdgeInsets.zero,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => GalleryScreen(openItemId: g.id, focusItem: g),
-        ),
-      ),
+      onTap: () {
+        if (widget.onGalleryFound != null) {
+          widget.onGalleryFound!(g);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GalleryScreen(openItemId: g.id, focusItem: g),
+            ),
+          );
+        }
+      },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
