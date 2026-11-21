@@ -389,10 +389,6 @@ body.lb-open #galSortBtn { display: none !important; }
     <button type="button" id="uploadFab" onclick="openUpload()" title="上传图片 / 视频"
             style="position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;background:var(--blue);color:#fff;border:2.5px solid var(--pencil);box-shadow:4px 4px 0 var(--pencil);font-size:30px;line-height:1;cursor:pointer;z-index:6000;display:flex;align-items:center;justify-content:center;">+</button>
 
-    <div class="card mb-4" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end;">
-        <span id="galCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
-    </div>
-
     <!-- 排序悬浮在右下角上传键上方（点击直接切换，不弹出浏览器选择框） -->
     <button type="button" id="galSortBtn" onclick="toggleGallerySort()"
             style="position:fixed;right:22px;bottom:94px;z-index:6000;min-width:108px;padding:8px 12px;font-size:13px;font-family:var(--font-body);color:var(--pencil);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);box-shadow:4px 4px 0 var(--pencil);background:var(--white);cursor:pointer;">最新在前 ↓</button>

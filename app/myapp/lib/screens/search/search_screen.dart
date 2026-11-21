@@ -250,7 +250,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 96,
