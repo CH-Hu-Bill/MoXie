@@ -34,8 +34,8 @@
 | **默写记录** (`history.php`) | 历史任务列表（按日期倒序）、单词详情、一键重新创建任务 |
 | **周末大礼包** | 周末从本周已完成默写中随机抽最多 20 个单词组成加练任务；本周没有完成单词时显示「真懒」，每周只创建一次 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；**手写板嵌入「快捷白板 8.2.5 / ParkerStudio」的笔迹与分页引擎**（Pointer Events 统一鼠标/触摸/笔，笔压/速度模拟，白底黑色画笔，支持多页、图形、撤销/清屏；弹窗内嵌，插入时按页生成图片并依次放入 Quill；移除原版菜单、保存/加载、更多工具、板中板、插件等无关入口）；**编辑器支持拖拽图片直接上传插入**（配合原有 Ctrl+V 粘贴，绕开 Windows 触屏设备文件选择对话框卡死问题） |
-| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/视频上传 + 画廊展示；支持 GIF 动图与 MP4 视频（炸弹防护 + 原样存储，视频≤30s/15MB/4096×4096）；**MP4 自动生成首帧缩略图**（ffmpeg，`video_thumb.php` 提供，加载中/列表先显示首帧预览）；**网格视频进视口才播放**（preload=metadata + IntersectionObserver，首屏不并发全量下载）；支持修改描述；**灯箱布局为「左媒体 + 右描述整列」**，描述框宽度按媒体宽高比自适应（竖图更宽、横图更窄），描述过长在右列内**来回自动滚动**（缓慢、requestAnimationFrame 逐帧平滑、溢出时加边缘渐变蒙版防硬截断，鼠标悬停/触摸暂停、离开 2s 后恢复；描述存 JS 映射表按 id 取，不内嵌到 onclick，杜绝长描述/换行导致卡片打不开）；**打开详情时暂停网格所有预览视频/GIF（多解码器并发是点开视频卡顿的根源），关闭后只恢复之前正在播放的**；媒体失效显示「媒体已失效」占位；提供公开随机 API（每次随机返回一张图集图片，同一设备连续两次不重复） |
-| **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + **最近任务（单词 / 句子 / 作文）** + 班级图集轮播，严格遵循手绘设计风格；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询 + 图集预加载，性能友好；**图集描述过长在固定区域内来回自动滚动**（壁纸页纯自动、无手动打断，requestAnimationFrame 平滑 + 边缘渐变蒙版） |
+| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/GIF/MP4/实况照片上传 + 瀑布流展示；图片建议 15MB/硬上限 100MB，视频建议 50MB/硬上限 1GB（8MB 分片，无时长限制），GIF 16MB；**多文件上传弹窗 + 图片压缩强度与前后对比**；MP4 自动生成首帧缩略图；描述搜索/自动定位、时间正倒序、删除进 7 天回收站（仅管理员可见/恢复/彻底删除）；**灯箱布局为「左媒体 + 右描述整列」**，描述过长自动滚动；**打开详情时暂停网格所有预览视频/GIF**；提供公开随机 API（同一设备连续两次不重复） |
+| **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + **最近任务（单词 / 句子 / 作文）** + **「好好学习 天天向上」标语**；图集轮播已移除，不再加载图集媒体；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询，性能友好 |
 | **小游戏** (`games.php` / `game.php`) | 内置 2048、别踩白块、拳皇（双人同屏触屏键）、人生重开模拟器、数独工坊；小游戏页顶部有**近 7 天游玩时长曲线**（SVG，班级维度）；班级统一每日时长，管理员在后台按班设置上限（0/空 = 不限时），每天 0 点重置；只托管内置 HTML 游戏，不接外站 iframe；数据存 `classes/{classId}/game_time.json` |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数（跟读停顿 = 单词音频实际时长 + 缓冲时间，长词停得久、短词停得短；缓冲 **-0.5~5 秒**，负数让停顿比音频短、节奏更紧凑，实际停顿不低于 0）、图集公开 API 密钥保护、展示大屏 token、**英文字体切换（仅影响英文，可选 Andika 教学字体）**、**作文默写方式（思维导图 / 中文）**、**内网主网址展示**，均按班级隔离存储 |
 | **全球发音** (`pronunciation.php` + `app_api.php` + 单词库卡片) | 班级内真人发音共享：APP 端单词卡（单词库/错题本/搜索）地球按钮**长按录音（AAC/M4A ≤10s ≤2MB，`inc/audio_guard.php` 校验 magic bytes + mvhd 时长）**、松手上传，**短按播放列表**（选同学发音播放）；web 端单词库卡片地球按钮短按弹手绘风列表播放（只听不录）。数据：`data/classes/{cid}/pronunciations.json`（wordId→uid→{file,name,duration,size}）+ `pronunciations/{wordId}/{32hex}.m4a`；**每人每单词 1 条（重录覆盖）**；文件名随机不可枚举，输出端点无需鉴权（同图集模式） |
@@ -329,7 +329,7 @@ Web 端日历的"今天"以**浏览器本机时钟**计算（与 APP 端手机�
 | `task.php` | 默写任务：列表视图 + 执行视图（看词/默写/听写） | `?id={classId}` `?task_id={taskId}` |
 | `history.php` | 默写记录：历史任务、重新创建 | `?id={classId}` `?task_id={taskId}` |
 | `history_book.php` | 班级史记：月历 + Quill 编辑器 + 导出 | `?id={classId}` |
-| `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词 + 图集轮播） | `?id={classId}` 指定班级；`?token={token}` 免口令直达（壁纸场景）；`?json=1` 轮询数据接口 |
+| `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词/句子/作文 + 文字标语） | `?id={classId}` 指定班级；`?token={token}` 免口令直达（壁纸场景）；`?json=1` 轮询数据接口 |
 | `app_api.php` `get_announcements` | 获取当前有效公告（按班级 + 平台 + 时间段筛选） | POST `class_id` `platform` |
 | `gallery.php` | 图集：上传（图片/GIF/MP4）/ 编辑描述 / 删除 / 画廊，Lightbox 播放视频带声音开关；**上传区支持拖拽与 Ctrl+V 粘贴**（绕开 Windows 触屏文件选择对话框卡死），Lightbox 视频加载中显示**缓冲进度百分比**（`preload=auto` + progress 事件，避免低带宽下"点开没反应"的错觉）；界面图标全部为 SVG 线条风（不用 emoji） | `?id={classId}` |
 | `gallery_api.php` | 图集公开 API | `?class_id={id}` `?apikey=`（每次返回一张随机图片） |
@@ -463,7 +463,7 @@ data/
 
 - **公告**：仅 `mode=banner`（顶部跑马灯），超级霸屏通告不进壁纸页。跑马灯**复用顶部栏横幅的实现**（双副本 `translateX(-50%)` 无缝循环 + 左右 `mask` 渐隐遮罩），文本不溢出时居中显示
 - **单词 / 句子 / 作文**：取**最近一次任务**（优先最近未完成任务；无未完成则取历史最近已完成任务），展示其中的单词（大字网格，上限 20）、句子（一行一条，多行截断）、作文（按作文库卡片样式：标题 + 英文 + 中文预览）；顶部标题显示任务日期（含星期）+ 标签 + 状态。**字号自适应**：按内容区宽高 + 单词数（75 分位长度）动态算列数与字号（16~64px），个别超长单词单独缩小该卡片并滚动展示，保证后排可读
-- **图集**：仅班级图集 `gallery.json`，**固定 15s 节奏轮播**（setTimeout 锚定刻度，与加载耗时无关，放完自动从头循环）；**若 15s 时描述还没滚完，等它读完后再停 1s 才切换**，避免文字被切走；**预加载后两张**（视频用**挂载到 DOM 的隐藏 `<video preload=auto muted>`** 真正缓冲数据——未挂载的 video 浏览器不会下载，图片用 `Image` 预热缓存）；视频用 ffmpeg 首帧图作 `poster`，加载间隙显示"加载中…"占位而非黑屏；**描述过长时在描述卡片固定区域内来回自动滚动**（壁纸页纯自动、不可打断；requestAnimationFrame 逐帧驱动平滑、速度缓慢、端点停留；渐变蒙版挂在滚动容器上随视口固定，不随文字滚动、不啃底板边框）
+- **图集轮播已移除**：展示页只保留「好好学习 天天向上」，不再请求或预加载图集媒体，避免壁纸页后台下载大视频。
 - **可拖拽竖线**：调整可用区域左边界（存每台设备 `localStorage['display_left_pct']`），默认 33.3%
 - **底部避让**：后台「大屏壁纸设置」配置 `display_bottom_margin`（px），防止被任务栏遮挡
 
@@ -493,8 +493,8 @@ data/
 ### 性能设计
 
 - 服务端首屏直出（无白屏）；`common.css` 未改动，样式在独立 `display.css`
-- 60s 轮询一次（公告/单词/图集列表），图集 30s 纯客户端切换 + 预加载
-- `document.hidden` 暂停全部定时器；`prefers-reduced-motion` 禁用动画
+- 60s 轮询一次（公告/最近任务），图集不再请求或预加载
+- `document.hidden` 暂停轮询；`prefers-reduced-motion` 禁用动画
 - 图片沿用服务器 GD 压缩（≤1600px）+ `upload.php` 缓存
 ---
 
@@ -509,7 +509,7 @@ data/
 - **内联 JSON XSS 防护**：所有输出到 `<script>` 内联块的数据（班级名 / 单词 / 释义 / 图集描述 / 公告）统一用 `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)`，杜绝 `</script>` 逃逸注入。
 - **HTML 属性注入防护**：`speak()` 发音按钮等 `onclick` 内联调用均经 `htmlspecialchars(json_encode(..., JSON_HEX_*), ENT_QUOTES)` 双重转义，用户输入含引号无法逃逸属性。
 - **CSV 公式注入防护**：导出 CSV（单词库 / 任务 / 错题本）时，以 `=` `+` `-` `@` 开头的单元格前缀 `'`，防止 Excel 打开时执行公式。
-- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + **逐帧累加像素 ≤8000 万 + 单帧 ≤2500 万像素** + 单边 ≤8000px + 单文件 ≤16MB；块解析严格按 GIF 规范，截断文件直接拒绝），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，时长 ≤30s + 文件 ≤15MB + **分辨率 ≤4096×4096**（只认首个 mvhd，防双 mvhd 伪造时长）+ 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4`，**支持 HTTP HEAD 与 Range（206 Partial Content，含后缀 `bytes=-N`）**，视频 seek/流式播放必需，Cache-Control 用 `immutable` 强缓存（文件名随机不可变）；路径穿越防护沿用 32 位 hex 文件名校验。
+- **图片安全**：上传经 GD 重编码（防恶意图片），限制尺寸 / 像素 / 格式（JPEG/PNG/WebP），最长边缩放至 1600px；**GIF 动图**走独立 `inc/gif_guard.php` 校验（magic bytes + 帧数 ≤300 + **逐帧累加像素 ≤8000 万 + 单帧 ≤2500 万像素** + 单边 ≤8000px + 单文件 ≤16MB；块解析严格按 GIF 规范，截断文件直接拒绝），校验通过后原样存储保留动画；**MP4 视频**走 `inc/mp4_guard.php`（纯 PHP 解析 ftyp/mvhd，取消时长限制 + 文件 ≤1GB + **分辨率 ≤4096×4096**（只认首个 mvhd，防双 mvhd 伪造时长）+ 结构校验），原样存储；图集文件输出 MIME 白名单含 `image/gif`/`video/mp4`，**支持 HTTP HEAD 与 Range（206 Partial Content，含后缀 `bytes=-N`）**，视频 seek/流式播放必需，Cache-Control 用 `immutable` 强缓存（文件名随机不可变）；路径穿越防护沿用 32 位 hex 文件名校验。
 - **视频首帧缩略图**：由 `inc/db.php` 的 `generateVideoThumb()` 调用系统 ffmpeg（php-ffmpeg，`vendor/autoload.php`）提取第 0.1s 帧并缩放至 480px 宽；`video_thumb.php` **只读输出**——缩略图缺失时返回 404，调用方降级为直接播放视频；缩略图由 CLI 计划任务 `cron_gallery_thumbs.php` 预生成（FPM 禁 exec 无法现场生成，上传后最长 1 分钟补齐）；文件名仍为 32 位 hex（同上传文件名校验防穿越），输出 `Cache-Control: immutable` 长缓存；缩略图存放于 `data/classes/{classId}/thumbs/`（受 `data/` 目录保护）。
 - **路径穿越防护**：所有 classId / 文件名均经严格正则校验（`inc/db.php` `validateId` / `validateFilename`）。
 - **管理后台**：失败 5 次锁定 5 分钟；Session 30 分钟超时；`session_regenerate_id` 防固定。
@@ -529,7 +529,7 @@ return [
     // 允许的跨域来源；生产环境改为域名白名单
     'allowed_origins' => ['*'],
 
-    // 图片上传限制
+    // 史记 / 通用图片上传限制（图集图片硬上限见 inc/db.php 的 GALLERY_IMAGE_MAX_BYTES）
     'upload_max_bytes'  => 12582912,   // 12MB
     'upload_max_pixels' => 25000000,   // 2500 万像素
     'upload_max_edge'   => 1600,       // 最长边像素上限

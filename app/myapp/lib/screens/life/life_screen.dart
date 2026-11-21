@@ -57,7 +57,7 @@ class LifeScreenState extends State<LifeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!_isEditing) _loadData();
     });
   }

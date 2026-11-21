@@ -4,7 +4,7 @@ ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 
 - **应用名称**：ListenWrite
 - **Android 包名**：`billspace.listenwrite.flutter`
-- **当前版本**：2.0.0
+- **当前版本**：2.1.0
 
 > **注意**：GitHub Actions 自动构建的 APK 会通过 Secret `API_BASE_URL` 写入正式服务器地址；未设置该 Secret 时回退到 `http://127.0.0.1:8000/web`（本地测试）。如需连接真实服务器，请配置 GitHub Secret 或本地复制 `api_config.dart` 修改 `baseUrl` 后重新打包。
 
@@ -16,7 +16,9 @@ ListenWrite APP 客户端，基于 Flutter 开发，支持 Android / iOS。
 - **本地存储**：SharedPreferences
 - **字体**：Google Fonts（Kalam + Patrick Hand）
 - **日历**：table_calendar
-- **图片选择**：image_picker
+- **文件选择**：file_picker（支持图片/视频多选）
+- **本地压缩**：flutter_image_compress（图片）+ video_compress（视频，MediaCodec）
+- **瀑布流**：flutter_staggered_grid_view
 - **设计风格**：两端统一 **Hand-Drawn 手绘风格**，设计规范详见 [`web/风格.md`](../web/风格.md)
 
 ## 快速开始
@@ -96,13 +98,14 @@ lib/
 构建产物在 Actions → Build APK → Artifacts 下载（`listenwrite-release.apk`）。
 
 > **⚠️ 版本发布流程**：
-> 1. 修改 `pubspec.yaml` 中的 `version`（如 `1.0.2+1`）
-> 2. 同步更新 `lib/config/api_config.example.dart` 与 `.github/workflows/build.yml` 中的 `appVersion`
-> 3. 推送触发 CI 构建，产物即为正式 APK
+> 1. 修改 `pubspec.yaml` 中的 `version`（如 `2.1.0+6`）
+> 2. 同步更新 `lib/config/api_config.example.dart` 中的 `appVersion`
+> 3. 推送 `app-v2.1.0` tag 触发 CI，正式 Release 会产出 arm64 / armv7 两个 APK 并更新 `apk-latest`
+> 4. 手动运行 workflow 只上传 7 天有效的测试 artifact，不发正式 Release
 
 ## 刷新与搜索定位
 
-- **静默刷新**：学习/生活页的 30 秒自动刷新为静默模式——仅更新已有数据、保留滚动位置与当前选中日期，不显示全屏"加载中"遮罩（遮罩只在首次无数据时出现），刷新不会被拉回顶部或某页。
+- **静默刷新**：学习/图集页每 10 秒检查一次服务端区块指纹，只有变化才刷新；保留滚动位置与当前选中状态，不显示全屏"加载中"遮罩。
 - **升级弹窗**：检查到新版本时弹窗展示服务端 `notes` 更新内容（在"新版本 xxx 可用"下方以便签卡片显示），并提示前往 GitHub 下载。
 - **搜索单词定位**：在搜索页点中某单词后，会切换到学习页并滚动定位到该单词（卡片高亮约 3 秒）。由于单词库是分页懒加载（服务端单页上限 100），定位采用**分页拉取 + 双方向扫描**：
   1. 若当前已加载列表未含目标词，自动按页拉取直到覆盖该词；

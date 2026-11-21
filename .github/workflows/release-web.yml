@@ -20,6 +20,11 @@ jobs:
           VERSION="${GITHUB_REF_NAME#web-v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Web version: $VERSION"
+          FILE_VERSION=$(grep -oP "const LW_WEB_VERSION = '\K[0-9.]+" web/inc/version.php)
+          if [ "$VERSION" != "$FILE_VERSION" ]; then
+            echo "Tag web-v${VERSION} does not match web/inc/version.php ${FILE_VERSION}" >&2
+            exit 1
+          fi
 
       - name: Build source zip
         run: |

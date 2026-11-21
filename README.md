@@ -6,7 +6,7 @@
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
-- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`1.2.2`
+- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`2.1.0`　**Web 版本**：`2.1.0`
 - 历史版本与更新说明见 [app/README.md](app/README.md) 与 Web 端 `data/app_versions.json`
 - **开源协议**：[GPL-3.0](LICENSE)
 - **本应用为本地运行设计**：原线上服务器已下线，请在本地电脑启动服务，内网设备通过局域网访问。
@@ -16,8 +16,8 @@
 - **知识库**：单词 / 句子 / 作文三类同库，AI 补全 / 直译、CSV 导入导出、跟读发音
 - **默写任务**：看词 / 默写 / 听写三种模式，支持句子与作文；历史记录可一键重建任务
 - **班级史记**：Quill 富文本 + 手写板 + 拖拽 / 粘贴插图 + PDF / 长图导出
-- **班级图集**：图片 / GIF / MP4 照片墙，MP4 自动生成首帧缩略图
-- **展示大屏**：免口令壁纸链接（公告跑马灯 + 今日单词 + 图集轮播）
+- **班级图集**：图片 / GIF / MP4 / 实况照片，支持单文件与多文件上传、图片与视频高质量压缩、压缩前后对比、1GB 视频分片上传、瀑布流、描述搜索、时间排序与 7 天回收站
+- **展示大屏**：免口令壁纸链接（公告跑马灯 + 今日单词 + 「好好学习 天天向上」；图集轮播已移除）
 - **英文字体切换**：英文可在手写体与教学字体 **Andika** 之间切换（中文始终手写体）
 - **作文思维导图（实验性）**：导入作文时可选 AI 生成英文要点树，默写时看要点写全文（可切换按中文默写）
 - **本地优先**：Windows 一键安装 / 更新脚本，数据全部保存在自己电脑上
@@ -120,8 +120,8 @@ moxie restart
 APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 
 1. 在**你自己的 fork/仓库** Settings → Secrets → Actions 添加 `API_BASE_URL`，值为你的后端地址（如 `http://192.168.1.10:8000`，不带尾部斜杠、不带 `/app_api.php`）
-2. 推送代码到 `main` 分支（改动 `app/myapp/**` 触发），或在 Actions 页面手动 Run workflow
-3. 构建完成后在仓库 **Releases** 页下载 `listenwrite-release.apk`
+2. 手动运行 **Build APK** workflow 会产出 7 天有效的测试 artifact；推送 `app-v2.1.0` 这类 tag 才会正式发 Release 并更新 `apk-latest`
+3. 构建完成后在 Actions artifact 或仓库 **Releases** 页下载 arm64 / armv7 两个 APK
 
 > 如果未设置 `API_BASE_URL` Secret，CI 会使用 `api_config.example.dart` 中的本地地址（`127.0.0.1:8000`）。
 
