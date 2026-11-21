@@ -4,6 +4,7 @@ class GalleryItem {
   final String thumbUrl;
   final String description;
   final String uploadedAt;
+  final String uploaderName;
   final bool isGif;
   final bool isVideo;
   final bool isLive;
@@ -15,6 +16,7 @@ class GalleryItem {
     this.thumbUrl = '',
     this.description = '',
     this.uploadedAt = '',
+    this.uploaderName = '',
     this.isGif = false,
     this.isVideo = false,
     this.isLive = false,
@@ -31,6 +33,7 @@ class GalleryItem {
       thumbUrl: json['thumb_url'] ?? '',
       description: json['description'] ?? '',
       uploadedAt: json['uploaded_at'] ?? '',
+      uploaderName: (json['uploader_name'] ?? '').toString(),
       isGif:
           type == 'gif' || (imageUrl as String).toLowerCase().contains('.gif'),
       isVideo:
@@ -50,5 +53,6 @@ class GalleryItem {
         'live_video_url': liveVideoUrl,
         'description': description,
         'uploaded_at': uploadedAt,
+        'uploader_name': uploaderName,
       };
 }

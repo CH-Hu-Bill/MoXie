@@ -34,12 +34,12 @@ var STORE_FP = 'display_gallery_fp';
 /* 图集区展示模式：carousel（图片轮播，默认）/ motto（好好学习 天天向上 文字占位）。
    壁纸场景下图片轮播可能分散注意力，切换到文字占位保持专注。localStorage 记忆。 */
 var STORE_MODE = 'display_gallery_mode';
-var galleryMode = 'carousel';
+var galleryMode = 'motto'; // 定稿：展示页只保留「好好学习 天天向上」，轮播代码保留但不再启用
 
 function loadGalleryMode() {
     try {
         var m = localStorage.getItem(STORE_MODE);
-        if (m === 'carousel' || m === 'motto') galleryMode = m;
+        // 忽略历史偏好：展示页固定为 motto（好好学习 天天向上）
     } catch (e) {}
 }
 function applyGalleryMode() {
@@ -64,7 +64,7 @@ function applyGalleryMode() {
     if (gallery.length > 1) preloadUpcoming();
 }
 function switchGalleryMode(mode) {
-    if (mode !== 'carousel' && mode !== 'motto') return;
+    return; // 已固定为 motto，不再允许切换（函数保留，避免旧缓存页面报错）
     if (galleryMode === mode) return;
     galleryMode = mode;
     try { localStorage.setItem(STORE_MODE, galleryMode); } catch (e) {}

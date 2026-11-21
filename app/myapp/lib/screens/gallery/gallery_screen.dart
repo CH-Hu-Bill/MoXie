@@ -39,6 +39,86 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Timer? _refreshTimer;
   String _galleryRev = ''; // 图集区块指纹：只有变化时才重新拉取
 
+  // 搜索 / 排序（本地过滤，作用于已加载的条目）
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+  String _order = 'desc'; // desc=最新在前
+
+  /// 过滤 + 排序后的展示列表
+  List<GalleryItem> get _shownItems {
+    final q = _query.trim().toLowerCase();
+    final list = _items.where((e) {
+      if (q.isEmpty) return true;
+      return e.description.toLowerCase().contains(q);
+    }).toList();
+    list.sort((a, b) => _order == 'asc'
+        ? a.uploadedAt.compareTo(b.uploadedAt)
+        : b.uploadedAt.compareTo(a.uploadedAt));
+    return list;
+  }
+
+  Widget _buildGalleryBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v),
+              style: AppTheme.bodyStyle.copyWith(fontSize: 14),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '搜索描述…（${_items.length} 条）',
+                hintStyle: AppTheme.bodyStyle.copyWith(
+                  fontSize: 13,
+                  color: AppColors.muted,
+                ),
+                prefixIcon: const Icon(Icons.search, size: 18),
+                filled: true,
+                fillColor: AppColors.white,
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                border: OutlineInputBorder(
+                  borderRadius: AppTheme.wobblySm,
+                  borderSide:
+                      const BorderSide(color: AppColors.pencil, width: 2),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: AppTheme.wobblySm,
+                  borderSide:
+                      const BorderSide(color: AppColors.pencil, width: 2),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: () =>
+                setState(() => _order = _order == 'desc' ? 'asc' : 'desc'),
+            icon: Icon(
+              _order == 'desc' ? Icons.south_rounded : Icons.north_rounded,
+              size: 16,
+            ),
+            label: Text(
+              _order == 'desc' ? '最新' : '最早',
+              style: AppTheme.bodyStyle.copyWith(
+                fontSize: 13,
+                color: AppColors.pencil,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.pencil, width: 2),
+              shape: RoundedRectangleBorder(borderRadius: AppTheme.wobblySm),
+              foregroundColor: AppColors.pencil,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +155,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -523,9 +604,62 @@ class _GalleryScreenState extends State<GalleryScreen> {
         builder: (_) => _GalleryViewerScreen(
           item: item,
           onEditDescription: _editDescription,
+          onDelete: _deleteItem,
         ),
       ),
     );
+  }
+
+  /// 删除：先确认，再调接口（服务端进回收站，7 天内可在网页端恢复）
+  Future<void> _deleteItem(GalleryItem item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        title: Text('删除这一项？', style: AppTheme.headingStyle),
+        content: Text(
+          '删除后会进入回收站，7 天内可以在网页端恢复。',
+          style: AppTheme.bodyStyle.copyWith(fontSize: 14, height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('取消', style: AppTheme.bodyStyle),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              '删除',
+              style: AppTheme.bodyStyle.copyWith(color: AppColors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final classId = context.read<AuthProvider>().currentClassId;
+    if (classId == null || classId.isEmpty) return;
+    try {
+      await _api.deleteGallery(classId, item.id);
+      if (!mounted) return;
+      setState(() => _items.removeWhere((e) => e.id == item.id));
+      _storage.cacheGallery(
+        classId,
+        _items.map((e) => e.toCacheJson()).toList(),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已移入回收站，7 天内可在网页端恢复')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+    }
   }
 
   Future<void> _editDescription(GalleryItem item) async {
@@ -578,8 +712,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         thumbUrl: e.thumbUrl,
                         description: result,
                         uploadedAt: e.uploadedAt,
+                        uploaderName: e.uploaderName,
                         isGif: e.isGif,
                         isVideo: e.isVideo,
+                        isLive: e.isLive,
+                        liveVideoUrl: e.liveVideoUrl,
                       )
                     : e,
               )
@@ -610,7 +747,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
             ? const Center(child: CircularProgressIndicator())
             : _items.isEmpty
             ? const EmptyState(message: '画廊还是空的，上传第一张图片吧', icon: Icons.photo)
-            : RefreshIndicator(
+            : Column(
+                children: [
+                  _buildGalleryBar(),
+                  Expanded(
+                    child: RefreshIndicator(
                 onRefresh: () => _loadGallery(reset: true),
                 color: AppColors.red,
                 child: NotificationListener<ScrollNotification>(
@@ -633,9 +774,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                           mainAxisSpacing: 12,
                           childAspectRatio: 0.75,
                         ),
-                    itemCount: _items.length,
+                    itemCount: _shownItems.length,
                     itemBuilder: (ctx, i) {
-                      final item = _items[i];
+                      final item = _shownItems[i];
                       return HandDrawnCard(
                         padding: EdgeInsets.zero,
                         onTap: () => _viewImage(item),
@@ -695,14 +836,32 @@ class _GalleryScreenState extends State<GalleryScreen> {
                               ),
                             ),
                             Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Text(
-                                item.description,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTheme.bodyStyle.copyWith(
-                                  fontSize: 14,
-                                ),
+                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.description,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.bodyStyle.copyWith(
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  if (item.uploaderName.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        item.uploaderName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTheme.bodyStyle.copyWith(
+                                          fontSize: 11,
+                                          color: AppColors.muted,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ],
@@ -712,6 +871,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showUploadMenu,
@@ -779,10 +941,12 @@ class _LiveViewer extends StatelessWidget {
 class _GalleryViewerScreen extends StatelessWidget {
   final GalleryItem item;
   final void Function(GalleryItem item) onEditDescription;
+  final Future<void> Function(GalleryItem item) onDelete;
 
   const _GalleryViewerScreen({
     required this.item,
     required this.onEditDescription,
+    required this.onDelete,
   });
 
   @override
@@ -801,6 +965,15 @@ class _GalleryViewerScreen extends StatelessWidget {
             tooltip: '编辑描述',
             icon: const Icon(Icons.edit, color: Colors.white),
             onPressed: () => onEditDescription(item),
+          ),
+          IconButton(
+            tooltip: '删除',
+            icon: const Icon(Icons.delete_outline, color: Colors.white),
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              await onDelete(item);
+              if (nav.canPop()) nav.pop();
+            },
           ),
         ],
       ),
