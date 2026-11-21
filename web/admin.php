@@ -369,6 +369,42 @@ $versionData = Database::read('app_versions.json');
 if (!is_array($versionData)) $versionData = ['latest' => '1.0', 'history' => []];
 $versionHistory = array_reverse($versionData['history'] ?? []);
 ?><?php $pageTitle = '管理后台'; require 'inc/head.php'; ?>
+<style>
+/* ── S4 后台左侧导航 ── */
+.admin-shell { display: flex; gap: 18px; align-items: flex-start; }
+.admin-side {
+    position: sticky; top: 16px; flex: 0 0 200px; width: 200px;
+    background: var(--white); border: 2.5px solid var(--pencil);
+    border-radius: var(--wobbly); box-shadow: var(--shadow-sm); padding: 14px 10px;
+}
+.admin-side-brand {
+    font-family: var(--font-heading); font-size: 15px; padding: 0 8px 10px;
+    border-bottom: 2px dashed var(--old-paper); margin-bottom: 6px;
+}
+.admin-side-group {
+    font-size: 11px; letter-spacing: 0.08em; color: #9a9a9a; padding: 10px 8px 4px;
+}
+.admin-side-link {
+    display: block; padding: 7px 10px; border-radius: var(--wobbly-sm);
+    color: var(--pencil); text-decoration: none; font-size: 14px;
+    border: 2px solid transparent; transition: background 0.12s, border-color 0.12s;
+}
+.admin-side-link:hover { background: var(--old-paper); }
+.admin-side-link.active { background: var(--post-it); border-color: var(--pencil); box-shadow: var(--shadow-sm); }
+.admin-side-foot { margin-top: 12px; padding-top: 10px; border-top: 2px dashed var(--old-paper); }
+.admin-main { flex: 1; min-width: 0; }
+.admin-sections { display: flex; flex-direction: column; }
+/* 视觉顺序（DOM 不动，保证 #sec-* 锚点与已有深链继续可用） */
+#sec-overview { order: 1; } #sec-classes { order: 2; } #sec-announce { order: 3; }
+#sec-display { order: 4; } #sec-app { order: 5; } #sec-games { order: 6; } #sec-update { order: 7; }
+@media (max-width: 880px) {
+    .admin-shell { flex-direction: column; }
+    .admin-side { position: static; width: 100%; flex: none; }
+    .admin-side-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+    .admin-side-group { display: none; }
+    .admin-side-link { border-color: var(--pencil); }
+}
+</style>
 </head>
 <body>
 <div class="content">
@@ -394,21 +430,64 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 
 <?php if ($msg): ?><div class="card <?php echo strpos($msg,'已')!==false||strpos($msg,'成功')!==false||strpos($msg,'发布')!==false?'card-post-it':''; ?>" style="padding:10px 18px;margin-bottom:12px;font-size:14px;<?php echo strpos($msg,'已')!==false||strpos($msg,'成功')!==false||strpos($msg,'发布')!==false?'':'color:var(--red);'; ?>"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
 
-<!-- 分区导航：长页面快速跳转 -->
-<div style="position:sticky;top:0;z-index:100;display:flex;gap:8px;flex-wrap:wrap;background:var(--paper);padding:8px 0;margin-bottom:14px;border-bottom:2px solid var(--pencil);">
-    <a href="#sec-classes" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🏫 班级管理</a>
-    <a href="#sec-app" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">📱 APP 发布</a>
-    <a href="#sec-games" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🎮 小游戏时长</a>
-    <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 公告管理</a>
-    <a href="#sec-display" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🖥️ 大屏设置</a>
-    <a href="#sec-update" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">🔄 系统更新</a>
-    <span style="flex:1;"></span>
-    <span style="font-size:12px;opacity:0.55;align-self:center;margin-right:4px;">Web v<?php echo htmlspecialchars(LW_WEB_VERSION, ENT_QUOTES, 'UTF-8'); ?></span>
-    <form method="post" style="display:inline;margin:0;">
-        <input type="hidden" name="action" value="logout">
-        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
-        <button type="submit" class="btn btn-sm" style="margin:0;opacity:0.5;color:var(--pencil);">退出登录</button>
-    </form>
+<!-- S4：左侧导航 + 右侧内容。链接仍是 #sec-* 锚点，原有深链继续可用 -->
+<div class="admin-shell">
+<aside class="admin-side">
+    <div class="admin-side-brand">📚 管理后台</div>
+    <nav class="admin-side-nav">
+        <div class="admin-side-group">总览</div>
+        <a href="#sec-overview" class="admin-side-link">📊 概览</a>
+        <div class="admin-side-group">班级</div>
+        <a href="#sec-classes" class="admin-side-link">🏫 班级管理</a>
+        <div class="admin-side-group">内容</div>
+        <a href="#sec-announce" class="admin-side-link">📢 公告管理</a>
+        <a href="#sec-display" class="admin-side-link">🖥️ 大屏设置</a>
+        <div class="admin-side-group">系统</div>
+        <a href="#sec-app" class="admin-side-link">📱 APP 发布</a>
+        <a href="#sec-games" class="admin-side-link">🎮 小游戏时长</a>
+        <a href="#sec-update" class="admin-side-link">🔄 系统更新</a>
+    </nav>
+    <div class="admin-side-foot">
+        <div style="font-size:12px;opacity:0.55;padding:0 8px 8px;">Web v<?php echo htmlspecialchars(LW_WEB_VERSION, ENT_QUOTES, 'UTF-8'); ?></div>
+        <form method="post" style="margin:0;">
+            <input type="hidden" name="action" value="logout">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+            <button type="submit" class="btn btn-sm" style="width:100%;opacity:0.55;color:var(--pencil);">退出登录</button>
+        </form>
+    </div>
+</aside>
+<div class="admin-main">
+<div class="admin-sections">
+
+<?php
+$ovClasses = Database::getClasses();
+$ovAnn = Database::getAnnouncements();
+$ovUsers = Database::getAllUserIds();
+$ovStat = function ($label, $value, $hint = '') {
+    echo '<div style="border:2px solid var(--pencil);border-radius:var(--wobbly-sm);padding:10px 12px;background:var(--white);box-shadow:var(--shadow-sm);">';
+    echo '<div style="font-size:11px;color:#999;margin-bottom:4px;">' . htmlspecialchars($label) . '</div>';
+    echo '<div style="font-family:var(--font-heading);font-size:20px;">' . htmlspecialchars((string)$value) . '</div>';
+    if ($hint !== '') echo '<div style="font-size:11px;color:#999;margin-top:2px;">' . htmlspecialchars($hint) . '</div>';
+    echo '</div>';
+};
+?>
+<div class="card" id="sec-overview" style="margin-bottom:16px;scroll-margin-top:16px;">
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:10px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">📊 概览</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
+        <?php
+        $ovStat('班级', count(is_array($ovClasses) ? $ovClasses : []));
+        $ovStat('学生账号', count(is_array($ovUsers) ? $ovUsers : []));
+        $ovStat('公告', count(is_array($ovAnn) ? $ovAnn : []));
+        $ovStat('APP 版本', (string)($versionData['latest'] ?? '1.0'));
+        $ovStat('Web 版本', LW_WEB_VERSION);
+        $ovStat('运行状态', lwInMaintenance() ? '维护中' : '正常');
+        ?>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <a href="#sec-classes" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">新建/管理班级</a>
+        <a href="#sec-announce" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">发布公告</a>
+        <a href="#sec-update" class="btn btn-sm btn-secondary" style="text-decoration:none;margin:0;">检查更新</a>
+    </div>
 </div>
 
 <div class="card" id="sec-update" style="margin-bottom:16px;scroll-margin-top:60px;">
@@ -854,6 +933,42 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
     </div>
     <?php endif; ?>
 </div>
+
+<script>
+// 侧边栏高亮：按可视顺序（flex order 已重排）取「最后一个进入滚动区顶部」的分区。
+// 注意：本站的滚动容器是 .content，不是 window。
+(function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.admin-side-link'));
+    if (!links.length) return;
+    var scroller = document.querySelector('.content');
+    var sections = links
+        .map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); })
+        .filter(Boolean)
+        .sort(function (a, b) { return a.offsetTop - b.offsetTop; });
+    function setActive(id) {
+        links.forEach(function (a) {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+        });
+    }
+    function onScroll() {
+        if (!sections.length) return;
+        var base = scroller ? scroller.getBoundingClientRect().top : 0;
+        var active = sections[0].id;
+        for (var i = 0; i < sections.length; i++) {
+            if (sections[i].getBoundingClientRect().top - base <= 120) active = sections[i].id;
+        }
+        setActive(active);
+    }
+    (scroller || window).addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('hashchange', function () { setActive(location.hash.slice(1)); });
+    onScroll();
+    if (location.hash) setActive(location.hash.slice(1));
+})();
+</script>
+
+</div><!-- /admin-sections -->
+</div><!-- /admin-main -->
+</div><!-- /admin-shell -->
 
 <?php endif; ?>
 </div>

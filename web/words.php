@@ -1838,7 +1838,9 @@ PROMPT;
             }
 
             async function refreshPanels() {
-                var y = window.scrollY;
+                // 本站滚动容器是 .content（body 为纵向 flex），不是 window
+                var box = document.querySelector('.content');
+                var y = box ? box.scrollTop : window.scrollY;
                 var res = await fetch(location.pathname + '?id=' + encodeURIComponent(LW_CLASS_ID), { credentials: 'same-origin' });
                 if (!res.ok) return;
                 var html = await res.text();
@@ -1850,7 +1852,7 @@ PROMPT;
                     // 只换内容，保留当前 tab 的显示/隐藏状态（否则刷新会把 tab 弹回单词）
                     cur.innerHTML = fresh.innerHTML;
                 });
-                window.scrollTo(0, y);
+                if (box) box.scrollTop = y; else window.scrollTo(0, y);
             }
 
             async function poll() {
