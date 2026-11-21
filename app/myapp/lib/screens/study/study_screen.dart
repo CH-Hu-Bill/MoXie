@@ -473,8 +473,27 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     }
     if (!_kbLoaded[type]!) return; // 还没加载完，等加载完成时再触发
     _locateRequestType = null;
-    // 自动定位也要给提示：卡片高亮，用户手动滑动后自动清除
-    Future.microtask(() => _locate(type, id, highlight: true));
+    final classId = context.read<AuthProvider>().currentClassId;
+    // 自动定位也要给提示：卡片高亮，用户手动滑动后自动清除。
+    // 目标不在已加载分页里时先补齐，否则会出现“切过去没反应、也没高亮”。
+    Future.microtask(() async {
+      if (_kb[type]!.any((w) => w.id == id)) {
+        _locate(type, id, highlight: true);
+        return;
+      }
+      if (classId != null &&
+          classId.isNotEmpty &&
+          _kbHasMore[type] == true &&
+          _kbLoading[type] != true) {
+        final found = await _ensureContains(classId, type, id);
+        if (!mounted) return;
+        if (found) {
+          _locate(type, id, highlight: true);
+          return;
+        }
+      }
+      _locate(type, id, highlight: true);
+    });
   }
 
   // ── 错题本 / 任务 ──
