@@ -160,6 +160,9 @@ if (-not (Test-Path $phpExe)) {
     }
     Expand-Zip $phpZip $PhpDir
     Remove-Item $phpZip -Force -ErrorAction SilentlyContinue
+    # 去掉从网络压缩包继承的“阻止”标记；部分 Windows 应用控制策略会因此拦截 php.exe
+    Get-ChildItem -Path $PhpDir -Recurse -File -ErrorAction SilentlyContinue |
+        ForEach-Object { Unblock-File -LiteralPath $_.FullName -ErrorAction SilentlyContinue }
     Ok 'PHP 已解压到 runtime/php'
 } else {
     Ok 'PHP 已存在，跳过下载'
@@ -214,6 +217,8 @@ if (-not (Test-Path $ffmpegExe)) {
             $binDest = Join-Path $FfmpegDir 'bin'
             New-Item -ItemType Directory -Force -Path $binDest | Out-Null
             Copy-Item (Join-Path $found.DirectoryName '*') $binDest -Recurse -Force
+            Get-ChildItem -Path $FfmpegDir -Recurse -File -ErrorAction SilentlyContinue |
+                ForEach-Object { Unblock-File -LiteralPath $_.FullName -ErrorAction SilentlyContinue }
             Ok 'ffmpeg 已安装到 runtime/ffmpeg/bin'
         } else {
             Warn '未在压缩包中找到 ffmpeg.exe'
@@ -222,6 +227,27 @@ if (-not (Test-Path $ffmpegExe)) {
     }
 } else {
     Ok 'ffmpeg 已存在，跳过下载'
+}
+
+# ---------------- PHP 可执行性检查 ----------------
+Step '检查 PHP 是否可执行'
+try {
+    $phpProbe = & $phpExe -v 2>&1
+    if ($LASTEXITCODE -ne 0) { throw (($phpProbe | Out-String).Trim()) }
+    Ok (($phpProbe | Select-Object -First 1))
+} catch {
+    throw @"
+PHP 无法运行：Windows 应用控制策略阻止了 runtime\php\php.exe。
+这不是密码或安装包数据问题，必须让系统允许该文件执行：
+
+1. 右键下载的 ZIP → 属性 → 勾选“解除锁定” → 应用，然后重新解压；
+2. 或把整个程序目录移到 C:\ListenWrite（不要放在 Desktop/Downloads）后重试；
+3. 仍被阻止：检查 Windows 安全中心 → 应用和浏览器控制 → Smart App Control / AppLocker / WDAC。
+   Smart App Control 需关闭；学校或公司电脑可能需要管理员把 php.exe 加入允许列表。
+4. 也先手动运行 runtime\php\php.exe -v 确认是否被拦截。
+
+原始错误：$($_.Exception.Message)
+"@
 }
 
 # ---------------- 配置 ----------------
