@@ -155,6 +155,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
+        if ($isMp4 && !$liveFile) {
+            try { Database::generateVideoThumb($classId, $filename); } catch (Throwable $e) {}
+        }
     } catch (Throwable $e) {
         // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
         Database::deleteUploadedImage($classId, $filename);
@@ -271,6 +274,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'upload_finish') {
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
+        try { Database::generateVideoThumb($classId, $filename); } catch (Throwable $e) {}
     } catch (Throwable $e) {
         Database::deleteUploadedImage($classId, $filename);
         echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
@@ -340,7 +344,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
 <?php
 $backUrl = 'main.php?id=' . $classId;
 $className = $class['name'];
-$pageTitle = '班级图集';
+$pageTitle = '班级图集 · ' . count($gallery) . ' 张';
 require 'inc/header.php';
 ?>
 
@@ -350,26 +354,35 @@ require 'inc/header.php';
     outline: 3px solid var(--blue);
     outline-offset: 2px;
 }
+body.lb-open #uploadFab,
+body.lb-open #galSortBtn { display: none !important; }
 </style>
 <div class="content">
     <!-- 上传弹窗（S6）：右下角 + 打开，支持单文件/多文件 -->
     <div id="uploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:6200;align-items:center;justify-content:center;padding:20px;">
-        <div class="card" style="width:100%;max-width:680px;max-height:86vh;overflow:auto;padding:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+        <div class="card" style="width:100%;max-width:680px;max-height:86vh;overflow:hidden;padding:20px;display:flex;flex-direction:column;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex:0 0 auto;">
                 <h3 style="font-family:var(--font-heading);font-size:17px;margin:0;">上传到图集</h3>
             </div>
-            <label class="input upload-file-btn" for="galleryImage" style="display:flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;padding:14px;">
+            <label class="input upload-file-btn" for="galleryImage" style="display:flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;padding:14px;flex:0 0 auto;">
                 <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（可多选）</span>
                 <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" multiple style="display:none;" onchange="onFilesPicked()">
             </label>
-            <div id="uploadPreviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:12px;"></div>
-            <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="margin-top:12px;">
-            <div id="uploadDescHint" style="font-size:12px;color:#999;margin-top:6px;"></div>
-            <div id="uploadHint" style="font-size:13px;color:var(--red);min-height:18px;margin-top:6px;"></div>
-            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
-                <button type="button" class="btn" onclick="closeUpload()">取消</button>
-                <button type="button" class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
+            <div id="uploadPreviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:12px;flex:1 1 auto;min-height:100px;max-height:42vh;overflow:auto;padding-right:2px;"></div>
+            <div style="display:flex;gap:12px;align-items:flex-end;margin-top:12px;flex:0 0 auto;">
+                <div style="flex:1;min-width:0;">
+                    <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" oninput="updateDescCount()">
+                    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px;">
+                        <span id="uploadDescHint" style="font-size:12px;color:#999;"></span>
+                        <span id="descCount" style="font-size:12px;color:#999;white-space:nowrap;">0/500</span>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;flex:0 0 92px;">
+                    <button type="button" class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn" style="width:100%;">上传</button>
+                    <button type="button" class="btn" onclick="closeUpload()" style="width:100%;">取消</button>
+                </div>
             </div>
+            <div id="uploadHint" style="font-size:13px;color:var(--red);min-height:18px;margin-top:6px;flex:0 0 auto;"></div>
         </div>
     </div>
 
@@ -389,7 +402,7 @@ require 'inc/header.php';
 </div>
 
 <!-- Lightbox：左侧媒体 + 右侧描述整列。display 由 .lightbox/.lightbox.active 控制（勿内联 display:flex，否则常显关不掉）；固定定位/背景/层级必须内联补齐 -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:5000;align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
+<div class="lightbox" id="lightbox" onclick="closeLightbox()" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:6500;align-items:center;justify-content:center;gap:26px;padding:5vh 3vw;box-sizing:border-box;">
     <button class="btn" onclick="closeLightbox()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     <div id="lbMedia" onclick="event.stopPropagation()" style="flex:1 1 58%;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;position:relative;">
         <img id="lbImg" src="" alt="" style="display:none;max-width:100%;max-height:100%;border:3px solid var(--pencil);border-radius:var(--wobbly);box-shadow:var(--shadow-lg);object-fit:contain;">
@@ -403,7 +416,7 @@ require 'inc/header.php';
 </div>
 
 <!-- 压缩前后对比：左右各一个播放器/图片 -->
-<div id="compareModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:5100;align-items:center;justify-content:center;padding:4vh 3vw;box-sizing:border-box;">
+<div id="compareModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:6600;align-items:center;justify-content:center;padding:4vh 3vw;box-sizing:border-box;">
     <button class="btn" onclick="closeCompare()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;">×</button>
     <div id="comparePanels" style="display:flex;gap:16px;width:100%;height:100%;align-items:stretch;"></div>
 </div>
@@ -461,6 +474,11 @@ function renderGallery() {
         return order === 'asc' ? (ta < tb ? -1 : ta > tb ? 1 : 0) : (ta > tb ? -1 : ta < tb ? 1 : 0);
     });
     if (countEl) countEl.textContent = galleryData.length + ' 条';
+    var topTitle = '班级图集 · ' + galleryData.length + ' 张';
+    var pageTitleEl = document.getElementById('pageTitle');
+    if (pageTitleEl) pageTitleEl.textContent = topTitle;
+    var statusTitleEl = document.getElementById('statusPageName');
+    if (statusTitleEl) statusTitleEl.textContent = topTitle;
 
     if (!items.length) {
         grid.innerHTML = '';
@@ -522,6 +540,7 @@ function renderGallery() {
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + (item.description ? escapeHtml(item.description) : '<span style="color:#bbb;">未填写描述</span>') + '</div>'
+            + (item.uploader_name ? '<div style="font-size:11px;color:#999;margin-top:5px;">上传者：' + escapeHtml(item.uploader_name) + '</div>' : '')
             + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ' + dateText + '</span>'
             + '<span style="display:flex;gap:6px;">'
             + (item.compressed_image ? '<button class="btn btn-sm" onclick="event.stopPropagation();openCompare(\'' + item.id + '\')" style="padding:2px 8px;">对比</button>' : '')
@@ -785,9 +804,16 @@ function isVideoFile(f) { var e = fileExt(f); return e === 'mp4' || e === 'mov';
 function isGifFile(f) { return fileExt(f) === 'gif'; }
 function isImageFile(f) { var e = fileExt(f); return ['jpg', 'jpeg', 'png', 'webp'].indexOf(e) >= 0; }
 
+function updateDescCount() {
+    var desc = document.getElementById('galleryDesc');
+    var count = document.getElementById('descCount');
+    if (desc && count) count.textContent = desc.value.length + '/500';
+}
+
 function openUpload() {
     document.getElementById('uploadModal').style.display = 'flex';
     renderPending();
+    updateDescCount();
 }
 function closeUpload() {
     document.getElementById('uploadModal').style.display = 'none';
@@ -805,6 +831,7 @@ function clearPending() {
     if (input) input.value = '';
     var desc = document.getElementById('galleryDesc');
     if (desc) desc.value = '';
+    updateDescCount();
     var hint = document.getElementById('uploadHint');
     if (hint) hint.textContent = '';
     var box = document.getElementById('compressBox');

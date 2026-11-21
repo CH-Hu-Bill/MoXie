@@ -19,6 +19,12 @@ $filename = reqGet('file');
 if (Database::getUploadedImagePath($classId, $filename) === null) { http_response_code(404); exit; }
 
 $thumb = Database::getVideoThumbPath($classId, $filename);
+if ($thumb === null) {
+    // 先尝试现场补一帧（Windows 内置服务器/允许 proc_open 的环境可直接生效）；
+    // 若 FPM 禁用了进程函数，则仍返回 404，由 CLI cron 后续补齐。
+    try { Database::generateVideoThumb($classId, $filename); } catch (Throwable $e) {}
+    $thumb = Database::getVideoThumbPath($classId, $filename);
+}
 if ($thumb === null) { http_response_code(404); exit; }
 
 header('Content-Type: image/jpeg');

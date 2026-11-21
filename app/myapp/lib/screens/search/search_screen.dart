@@ -245,7 +245,9 @@ class _SearchScreenState extends State<SearchScreen> {
       padding: EdgeInsets.zero,
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => GalleryScreen(openItemId: g.id)),
+        MaterialPageRoute(
+          builder: (_) => GalleryScreen(openItemId: g.id, focusItem: g),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,15 +260,21 @@ class _SearchScreenState extends State<SearchScreen> {
                 topLeft: Radius.circular(18),
                 bottomLeft: Radius.circular(18),
               ),
-              child: CachedNetworkImage(
-                imageUrl: g.thumbUrl.isNotEmpty ? g.thumbUrl : g.imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: AppColors.oldPaper),
-                errorWidget: (_, __, ___) => Container(
-                  color: AppColors.muted,
-                  child: const Icon(Icons.image, size: 28),
-                ),
-              ),
+              child: (g.thumbUrl.isNotEmpty || g.imageUrl.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: g.thumbUrl.isNotEmpty ? g.thumbUrl : g.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          Container(color: AppColors.oldPaper),
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppColors.muted,
+                        child: const Icon(Icons.image, size: 28),
+                      ),
+                    )
+                  : Container(
+                      color: AppColors.oldPaper,
+                      child: const Icon(Icons.image, size: 28),
+                    ),
             ),
           ),
           Expanded(
@@ -298,39 +306,48 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildResults() {
-    return ListView(
+    final children = <Widget>[];
+    if (_result!.words.isNotEmpty) {
+      children.add(const StickyNote(text: '知识库'));
+      children.add(const SizedBox(height: 8));
+      for (final w in _result!.words) {
+        children.add(Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildWordMatchCard(w),
+        ));
+      }
+      children.add(const SizedBox(height: 16));
+    }
+    if (_result!.gallery.isNotEmpty) {
+      children.add(StickyNote(text: '图集 (${_result!.gallery.length})'));
+      children.add(const SizedBox(height: 8));
+      for (final g in _result!.gallery.take(20)) {
+        children.add(Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildGalleryMatchCard(g),
+        ));
+      }
+      children.add(const SizedBox(height: 16));
+    }
+    if (_result!.pendingTasks.isNotEmpty) {
+      children.add(StickyNote(text: '进行中任务', color: AppColors.postIt));
+      children.add(const SizedBox(height: 8));
+      for (final t in _result!.pendingTasks) {
+        children.add(_buildTaskCard(t, 'pending'));
+      }
+      children.add(const SizedBox(height: 16));
+    }
+    if (_result!.historyTasks.isNotEmpty) {
+      children.add(StickyNote(text: '历史任务', color: AppColors.postIt));
+      children.add(const SizedBox(height: 8));
+      for (final t in _result!.historyTasks) {
+        children.add(_buildTaskCard(t, 'history'));
+      }
+    }
+    return ListView.builder(
       padding: const EdgeInsets.all(16),
-      children: [
-        if (_result!.words.isNotEmpty) ...[
-          const StickyNote(text: '知识库'),
-          const SizedBox(height: 8),
-          ..._result!.words.map((w) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildWordMatchCard(w),
-              )),
-          const SizedBox(height: 16),
-        ],
-        if (_result!.gallery.isNotEmpty) ...[
-          const StickyNote(text: '图集'),
-          const SizedBox(height: 8),
-          ..._result!.gallery.map((g) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildGalleryMatchCard(g),
-              )),
-          const SizedBox(height: 16),
-        ],
-        if (_result!.pendingTasks.isNotEmpty) ...[
-          StickyNote(text: '进行中任务', color: AppColors.postIt),
-          const SizedBox(height: 8),
-          ..._result!.pendingTasks.map((t) => _buildTaskCard(t, 'pending')),
-          const SizedBox(height: 16),
-        ],
-        if (_result!.historyTasks.isNotEmpty) ...[
-          StickyNote(text: '历史任务', color: AppColors.postIt),
-          const SizedBox(height: 8),
-          ..._result!.historyTasks.map((t) => _buildTaskCard(t, 'history')),
-        ],
-      ],
+      itemCount: children.length,
+      itemBuilder: (_, index) => children[index],
     );
   }
 

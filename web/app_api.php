@@ -1254,6 +1254,9 @@ switch ($action) {
                 return $latest;
             });
             if ($res === false) throw new RuntimeException('数据保存失败');
+            if ($isVideo) {
+                try { Database::generateVideoThumb($classId, $fname); } catch (Throwable $e) {}
+            }
         } catch (Throwable $e) {
             Database::deleteUploadedImage($classId, $fname);
             appError('保存失败，请重试');
@@ -1346,6 +1349,9 @@ switch ($action) {
                 return $latest;
             });
             if ($res === false) throw new RuntimeException('数据保存失败');
+            if ($isMp4) {
+                try { Database::generateVideoThumb($classId, $fname); } catch (Throwable $e) {}
+            }
         } catch (Throwable $e) {
             // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
             Database::deleteUploadedImage($classId, $fname);

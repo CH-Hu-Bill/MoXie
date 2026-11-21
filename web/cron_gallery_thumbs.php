@@ -40,11 +40,19 @@ $classes = Database::getClasses();
 foreach ($classes as $cid => $c) {
     if (microtime(true) - $start > THUMB_BUDGET_SECONDS) break; // 单次时间预算 50s
     $gallery = Database::getClassData($cid, 'gallery');
-    if (!is_array($gallery)) continue;
-    foreach ($gallery as $item) {
+    $trash = Database::getClassData($cid, 'gallery_trash');
+    $items = array_merge(is_array($gallery) ? $gallery : [], is_array($trash) ? $trash : []);
+    $mp4Files = [];
+    foreach ($items as $item) {
+        foreach (['image', 'compressed_image'] as $key) {
+            $file = (string)($item[$key] ?? '');
+            if ($file !== '' && strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'mp4') {
+                $mp4Files[$file] = true;
+            }
+        }
+    }
+    foreach (array_keys($mp4Files) as $file) {
         if (microtime(true) - $start > THUMB_BUDGET_SECONDS) break 2; // 内层同样检查预算（单班积压也不超时）
-        $file = (string)($item['image'] ?? '');
-        if (strtolower(pathinfo($file, PATHINFO_EXTENSION)) !== 'mp4') continue;
         $scanned++;
         if (Database::getVideoThumbPath($cid, $file) !== null) continue; // 已存在
         // 失败退避：.failed 标记未过期则跳过（防止损坏/超大文件每轮重试拖满 50s）

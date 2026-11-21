@@ -21,10 +21,18 @@ class GalleryScreen extends StatefulWidget {
   /// 从全局搜索跳转时传入：加载完成后自动定位这条图集
   final String? openItemId;
 
+  /// 搜索页已经拿到的完整图集项：先直接展示，避免跳转后空白/等分页
+  final GalleryItem? focusItem;
+
   /// 通知外层顶部栏图集总数（放在班级名后面）
   final ValueChanged<int>? onCountChanged;
 
-  const GalleryScreen({super.key, this.openItemId, this.onCountChanged});
+  const GalleryScreen({
+    super.key,
+    this.openItemId,
+    this.focusItem,
+    this.onCountChanged,
+  });
 
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
@@ -97,6 +105,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
+    final focus = widget.focusItem;
+    if (focus != null) {
+      _items = [focus];
+      _openedInitialId = focus.id;
+      _highlightId = focus.id;
+      _firstLoadDone = true;
+      _remoteLoadDone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _notifyCount();
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadGallery();
       if (mounted) setState(() => _firstLoadDone = true);
@@ -146,7 +165,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final hasCache = cached != null && cached.isNotEmpty;
     if (hasCache && reset) {
       setState(() {
-        _items = cached.map((e) => GalleryItem.fromJson(e)).toList();
+        _items = _ensureFocus(
+          cached.map((e) => GalleryItem.fromJson(e)).toList(),
+        );
       });
       _notifyCount();
     }
@@ -167,7 +188,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           .toList();
       setState(() {
         if (reset) {
-          _items = items;
+          _items = _ensureFocus(items);
         } else {
           _items.addAll(items);
         }
@@ -206,7 +227,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (!mounted) return;
       setState(() {
         if (reset) {
-          _items = _mergeItems(items);
+          _items = _mergeItems(_ensureFocus(items));
         } else {
           final existingIds = {for (final e in _items) e.id};
           for (final e in items) {
@@ -476,6 +497,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   void _notifyCount() {
     widget.onCountChanged?.call(_items.length);
+  }
+
+  List<GalleryItem> _ensureFocus(List<GalleryItem> list) {
+    final focus = widget.focusItem;
+    if (focus == null) return list;
+    if (list.any((e) => e.id == focus.id)) return list;
+    return [focus, ...list];
   }
 
   /// 瀑布流卡片比例：服务端有真实宽高就用真实比例，旧数据回退到 4:3 / 16:9。
@@ -1574,6 +1602,8 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
 
   final _desc = TextEditingController();
   final _api = ApiService();
+  final _uploadValue = ValueNotifier<double>(0);
+  final _uploadLabel = ValueNotifier<String>('准备上传...');
   bool _preparing = true;
   bool _uploading = false;
 
@@ -1588,6 +1618,8 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
   @override
   void dispose() {
     _desc.dispose();
+    _uploadValue.dispose();
+    _uploadLabel.dispose();
     super.dispose();
   }
 
@@ -1640,13 +1672,49 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
     final multi = widget.files.length > 1;
     final desc = _desc.text.trim();
     setState(() => _uploading = true);
+    _uploadValue.value = 0;
+    _uploadLabel.value = '准备上传...';
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const LoadingOverlay(message: '上传中...'),
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.wobblyRadius,
+          side: const BorderSide(color: AppColors.border, width: 2),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ValueListenableBuilder<double>(
+              valueListenable: _uploadValue,
+              builder: (_, value, __) => LinearProgressIndicator(
+                value: value <= 0 ? null : value.clamp(0.0, 1.0).toDouble(),
+                minHeight: 8,
+                color: AppColors.blue,
+                backgroundColor: AppColors.oldPaper,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ValueListenableBuilder<String>(
+              valueListenable: _uploadLabel,
+              builder: (_, label, __) => Text(
+                label,
+                style: AppTheme.bodyStyle.copyWith(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
     try {
-      for (final p in widget.files) {
+      final total = widget.files.length;
+      for (var i = 0; i < total; i++) {
+        final p = widget.files[i];
+        final base = i / total;
+        _uploadLabel.value = '上传中 ${i + 1}/$total：${p.name}';
+        _uploadValue.value = base;
         if (p.liveVideo != null) {
           await _api.saveGallery(
             classId,
@@ -1661,8 +1729,16 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
             p.file,
             desc,
             multi: multi,
+            onProgress: (fraction) {
+              if (!mounted) return;
+              _uploadValue.value =
+                  ((i + fraction) / total).clamp(0.0, 1.0).toDouble();
+              _uploadLabel.value =
+                  '上传中 ${i + 1}/$total：${p.name} · ${(fraction * 100).round()}%';
+            },
           );
         } else {
+          _uploadValue.value = ((i + 0.5) / total).clamp(0.0, 1.0).toDouble();
           await _api.saveGallery(
             classId,
             p.file,
@@ -1670,6 +1746,7 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
             multi: multi,
           );
         }
+        _uploadValue.value = ((i + 1) / total).clamp(0.0, 1.0).toDouble();
       }
       if (!mounted) return;
       Navigator.pop(context);
