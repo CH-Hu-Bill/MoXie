@@ -2026,6 +2026,17 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
     if (widget.files.isEmpty) Navigator.pop(context, false);
   }
 
+  void _showVideoCompare(_GalleryPendingFile p) {
+    if (p.compressed == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => _VideoCompareDialog(
+        original: p.file,
+        compressed: p.compressed!,
+      ),
+    );
+  }
+
   String _mb(int bytes) => (bytes / 1048576).toStringAsFixed(1);
 
   Widget _preview(_GalleryPendingFile p, {required bool compressed}) {
@@ -2133,6 +2144,15 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
               ),
             ],
           ),
+          if (p.isVideo && p.compressed != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _showVideoCompare(p),
+                icon: const Icon(Icons.play_circle_outline, size: 18),
+                label: const Text('播放对比'),
+              ),
+            ),
           if (p.error != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -2299,6 +2319,175 @@ class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+/// 本地视频压缩前后对比：两个播放器互斥播放，便于检查画质与声音。
+class _VideoCompareDialog extends StatefulWidget {
+  final File original;
+  final File compressed;
+  const _VideoCompareDialog({
+    required this.original,
+    required this.compressed,
+  });
+
+  @override
+  State<_VideoCompareDialog> createState() => _VideoCompareDialogState();
+}
+
+class _VideoCompareDialogState extends State<_VideoCompareDialog> {
+  VideoPlayerController? _a;
+  VideoPlayerController? _b;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final a = VideoPlayerController.file(widget.original);
+    final b = VideoPlayerController.file(widget.compressed);
+    try {
+      await Future.wait([a.initialize(), b.initialize()]);
+      if (!mounted) {
+        await a.dispose();
+        await b.dispose();
+        return;
+      }
+      setState(() {
+        _a = a;
+        _b = b;
+      });
+    } catch (_) {
+      await a.dispose();
+      await b.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    _a?.dispose();
+    _b?.dispose();
+    super.dispose();
+  }
+
+  void _toggle(VideoPlayerController c) {
+    final a = _a;
+    final b = _b;
+    final other = identical(c, a) ? b : a;
+    if (c.value.isPlaying) {
+      c.pause();
+    } else {
+      other?.pause();
+      c.play();
+    }
+    setState(() {});
+  }
+
+  Widget _panel(String label, VideoPlayerController? c) {
+    if (c == null || !c.value.isInitialized) {
+      return const SizedBox(
+        height: 220,
+        child: Center(child: CircularProgressIndicator(color: AppColors.red)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: AppTheme.bodyStyle.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        AspectRatio(
+          aspectRatio: c.value.aspectRatio <= 0 ? 16 / 9 : c.value.aspectRatio,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              VideoPlayer(c),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black45,
+                  child: IconButton(
+                    onPressed: () => _toggle(c),
+                    icon: Icon(
+                      c.value.isPlaying
+                          ? Icons.pause_circle
+                          : Icons.play_circle,
+                      color: Colors.white,
+                      size: 38,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(14),
+      backgroundColor: AppColors.background,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppTheme.wobblyRadius,
+        side: const BorderSide(color: AppColors.border, width: 2),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('压缩前后播放对比', style: AppTheme.headingStyle),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (ctx, constraints) {
+                final wide = constraints.maxWidth > 620;
+                final panels = [
+                  _panel('原视频', _a),
+                  _panel('压缩后', _b),
+                ];
+                return wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: panels[0]),
+                          const SizedBox(width: 12),
+                          Expanded(child: panels[1]),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          panels[0],
+                          const SizedBox(height: 12),
+                          panels[1],
+                        ],
+                      );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

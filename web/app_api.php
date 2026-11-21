@@ -1125,6 +1125,12 @@ switch ($action) {
                     $item['type'] = 'image';
                     $cleaned = true;
                 }
+                $compressed = (string)($item['compressed_image'] ?? '');
+                if ($compressed !== '' && Database::getUploadedImagePath($classId, $compressed) === null) {
+                    unset($item['compressed_image']);
+                    $item['compression_status'] = 'failed';
+                    $cleaned = true;
+                }
                 $valid[] = $item;
             } else { $cleaned = true; }
         }
@@ -1139,6 +1145,11 @@ switch ($action) {
                         if ($live !== '' && Database::getUploadedImagePath($classId, $live) === null) {
                             unset($item['live_video']);
                             $item['type'] = 'image';
+                        }
+                        $compressed = (string)($item['compressed_image'] ?? '');
+                        if ($compressed !== '' && Database::getUploadedImagePath($classId, $compressed) === null) {
+                            unset($item['compressed_image']);
+                            $item['compression_status'] = 'failed';
                         }
                         $valid[] = $item;
                     }

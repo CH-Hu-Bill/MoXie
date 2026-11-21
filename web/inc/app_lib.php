@@ -59,7 +59,8 @@ function appGalleryRev(array $gallery): string {
     $sig = [];
     foreach ($gallery as $it) {
         $sig[] = (string)($it['id'] ?? '') . '|' . ($it['image'] ?? '')
-            . '|' . ($it['live_video'] ?? '') . '|' . ($it['type'] ?? '')
+            . '|' . ($it['live_video'] ?? '') . '|' . ($it['compressed_image'] ?? '')
+            . '|' . ($it['compression_status'] ?? '') . '|' . ($it['type'] ?? '')
             . '|' . ($it['description'] ?? '') . '|' . ($it['uploaded_at'] ?? '');
     }
     return appRevHash($sig);
@@ -123,7 +124,9 @@ function appVersionGate(
 function appGalleryItemOut(array $item, string $classId, string $base): array {
     $imgFile = (string)($item['image'] ?? '');
     $liveFile = (string)($item['live_video'] ?? '');
-    $ext = strtolower(pathinfo($imgFile, PATHINFO_EXTENSION));
+    $compressedFile = (string)($item['compressed_image'] ?? '');
+    $effectiveFile = $compressedFile !== '' ? $compressedFile : $imgFile;
+    $ext = strtolower(pathinfo($effectiveFile, PATHINFO_EXTENSION));
     $mediaUrl = function (string $file) use ($base, $classId): string {
         return $base . '/upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($file);
     };
@@ -141,20 +144,22 @@ function appGalleryItemOut(array $item, string $classId, string $base): array {
             'uploader_name' => (string)($item['uploader_name'] ?? ''),
             'width' => (int)($item['width'] ?? 0),
             'height' => (int)($item['height'] ?? 0),
+            'compression_status' => (string)($item['compression_status'] ?? ''),
         ];
     }
 
     $isMp4 = $ext === 'mp4';
     return [
         'id' => (string)($item['id'] ?? ''),
-        'image_url' => $mediaUrl($imgFile),
+        'image_url' => $mediaUrl($effectiveFile),
         'type' => $ext === 'gif' ? 'gif' : ($isMp4 ? 'mp4' : 'static'),
         'description' => (string)($item['description'] ?? ''),
         'uploaded_at' => (string)($item['uploaded_at'] ?? ''),
-        'thumb_url' => $isMp4 ? ($base . '/video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile)) : null,
+        'thumb_url' => $isMp4 ? ($base . '/video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($effectiveFile)) : null,
         'live_video_url' => null,
         'uploader_name' => (string)($item['uploader_name'] ?? ''),
         'width' => (int)($item['width'] ?? 0),
         'height' => (int)($item['height'] ?? 0),
+        'compression_status' => (string)($item['compression_status'] ?? ''),
     ];
 }

@@ -435,6 +435,15 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 }
 .admin-side-link:hover { background: var(--old-paper); }
 .admin-side-link.active { background: var(--post-it); border-color: var(--pencil); box-shadow: var(--shadow-sm); }
+.admin-side-details { margin: 0; }
+.admin-side-details > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.admin-side-details > summary::-webkit-details-marker { display: none; }
+.admin-side-details > summary::after { content: '▾'; font-size: 12px; opacity: .65; }
+.admin-side-details:not([open]) > summary::after { content: '▸'; }
+.admin-side-children { padding-left: 6px; }
 .admin-side-foot { margin-top: 12px; padding-top: 10px; border-top: 2px dashed var(--old-paper); }
 .admin-main { flex: 1; min-width: 0; }
 .admin-sections { display: flex; flex-direction: column; }
@@ -483,14 +492,22 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
         <a href="#sec-overview" class="admin-side-link">📊 概览</a>
         <div class="admin-side-group">班级</div>
         <a href="#sec-classes" class="admin-side-link">🏫 班级管理</a>
-        <div class="admin-side-group">内容</div>
-        <a href="#sec-announce" class="admin-side-link">📢 公告管理</a>
-        <a href="#sec-display" class="admin-side-link">🖥️ 大屏设置</a>
-        <a href="#sec-trash" class="admin-side-link">🗑️ 图集回收站</a>
-        <div class="admin-side-group">系统</div>
-        <a href="#sec-app" class="admin-side-link">📱 APP 发布</a>
-        <a href="#sec-games" class="admin-side-link">🎮 小游戏时长</a>
-        <a href="#sec-update" class="admin-side-link">🔄 系统更新</a>
+        <details class="admin-side-details" open>
+            <summary class="admin-side-group">内容</summary>
+            <div class="admin-side-children">
+                <a href="#sec-announce" class="admin-side-link">📢 公告管理</a>
+                <a href="#sec-display" class="admin-side-link">🖥️ 大屏设置</a>
+                <a href="#sec-trash" class="admin-side-link">🗑️ 图集回收站</a>
+            </div>
+        </details>
+        <details class="admin-side-details" open>
+            <summary class="admin-side-group">系统</summary>
+            <div class="admin-side-children">
+                <a href="#sec-app" class="admin-side-link">📱 APP 发布</a>
+                <a href="#sec-games" class="admin-side-link">🎮 小游戏时长</a>
+                <a href="#sec-update" class="admin-side-link">🔄 系统更新</a>
+            </div>
+        </details>
     </nav>
     <div class="admin-side-foot">
         <div style="font-size:12px;opacity:0.55;padding:0 8px 8px;">Web v<?php echo htmlspecialchars(LW_WEB_VERSION, ENT_QUOTES, 'UTF-8'); ?></div>
@@ -551,6 +568,12 @@ $ovStat = function ($label, $value, $hint = '') {
         <button type="button" class="btn btn-sm" onclick="exitMaintenance()">退出维护模式</button>
     </div>
     <div id="updateBox" style="margin-top:10px;font-size:14px;line-height:1.8;color:var(--pencil);"></div>
+    <div style="margin-top:14px;padding-top:12px;border-top:2px dashed var(--old-paper);font-size:13px;line-height:1.8;color:var(--pencil);">
+        <b>视频压缩队列</b>：超过 100MB 的视频上传后会显示「压缩中」，由后台 worker 自动处理。
+        若长时间未完成，可在服务器执行
+        <code style="background:var(--old-paper);padding:2px 6px;border-radius:4px;">php web/bin/compress_gallery.php</code>；
+        建议用计划任务每分钟运行一次。
+    </div>
 </div>
 
 <script>

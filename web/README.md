@@ -34,7 +34,7 @@
 | **默写记录** (`history.php`) | 历史任务列表（按日期倒序）、单词详情、一键重新创建任务 |
 | **周末大礼包** | 周末从本周已完成默写中随机抽最多 20 个单词组成加练任务；本周没有完成单词时显示「真懒」，每周只创建一次 |
 | **班级史记** (`history_book.php`) | Vlog 风格日记，Quill 富文本编辑器 + 月历导航；仅今日可编辑（带时钟容差，详见下文）；个人列传（需授权）；**手写板嵌入「快捷白板 8.2.5 / ParkerStudio」的笔迹与分页引擎**（Pointer Events 统一鼠标/触摸/笔，笔压/速度模拟，白底黑色画笔，支持多页、图形、撤销/清屏；弹窗内嵌，插入时按页生成图片并依次放入 Quill；移除原版菜单、保存/加载、更多工具、板中板、插件等无关入口）；**编辑器支持拖拽图片直接上传插入**（配合原有 Ctrl+V 粘贴，绕开 Windows 触屏设备文件选择对话框卡死问题） |
-| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/GIF/MP4/实况照片上传 + 瀑布流展示；图片建议 15MB/硬上限 100MB，视频建议 50MB/硬上限 1GB（8MB 分片，无时长限制），GIF 16MB；**多文件上传弹窗 + 图片压缩强度与前后对比**；MP4 自动生成首帧缩略图；描述搜索/自动定位、时间正倒序、删除进 7 天回收站（仅管理员可见/恢复/彻底删除）；**灯箱布局为「左媒体 + 右描述整列」**，描述过长自动滚动；**打开详情时暂停网格所有预览视频/GIF**；提供公开随机 API（同一设备连续两次不重复） |
+| **班级图集** (`gallery.php` / `gallery_api.php`) | 图片/GIF/MP4/实况照片上传 + 瀑布流展示；图片建议 15MB/硬上限 100MB，视频建议 50MB/硬上限 1GB（8MB 分片，无时长限制），GIF 16MB；**多文件上传弹窗 + 图片浏览器压缩 + 视频服务端 ffmpeg 压缩 + 前后对比**；MP4 自动生成首帧缩略图；描述搜索/自动定位、时间正倒序、删除进 7 天回收站（仅管理员可见/恢复/彻底删除）；**灯箱布局为「左媒体 + 右描述整列」**，描述过长自动滚动；**打开详情时暂停网格所有预览视频/GIF**；提供公开随机 API（同一设备连续两次不重复） |
 | **展示大屏** (`display.php`) | 壁纸投屏页（用于 Lively Wallpaper / 希沃大屏）：顶部公告跑马灯 + **最近任务（单词 / 句子 / 作文）** + **「好好学习 天天向上」标语**；图集轮播已移除，不再加载图集媒体；班级鉴权状态机自动处理口令重置 / 班级删除 / cookie 失效；60s 轮询，性能友好 |
 | **小游戏** (`games.php` / `game.php`) | 内置 2048、别踩白块、拳皇（双人同屏触屏键）、人生重开模拟器、数独工坊；小游戏页顶部有**近 7 天游玩时长曲线**（SVG，班级维度）；班级统一每日时长，管理员在后台按班设置上限（0/空 = 不限时），每天 0 点重置；只托管内置 HTML 游戏，不接外站 iframe；数据存 `classes/{classId}/game_time.json` |
 | **设置** (`settings.php`) | 听写 / 朗读 / 跟读参数（跟读停顿 = 单词音频实际时长 + 缓冲时间，长词停得久、短词停得短；缓冲 **-0.5~5 秒**，负数让停顿比音频短、节奏更紧凑，实际停顿不低于 0）、图集公开 API 密钥保护、展示大屏 token、**英文字体切换（仅影响英文，可选 Andika 教学字体）**、**作文默写方式（思维导图 / 中文）**、**内网主网址展示**，均按班级隔离存储 |
@@ -63,7 +63,7 @@
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 | 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |
 
-> 核心业务零第三方 PHP 依赖（`require_once` 手动加载）。仅**视频首帧缩略图**一项可选依赖 Composer。
+> 核心业务零第三方 PHP 依赖（`require_once` 手动加载）。视频首帧缩略图与视频压缩直接调用系统/便携 ffmpeg（可选）。
 
 ### 视频首帧缩略图依赖（Composer + ffmpeg）
 
@@ -120,6 +120,7 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 ├── upload.php             # 图片上传 / 查看（GD 安全处理）
 ├── video_thumb.php        # MP4 首帧缩略图（ffmpeg 生成 + 长缓存，供图集卡片/APP 用）
 ├── cron_gallery_thumbs.php # CLI 计划任务：每分钟为 MP4 图集生成缺失首帧缩略图（FPM 无法 exec；仅 CLI 可运行，Web 请求 404）
+├── bin/compress_gallery.php # CLI worker：处理 >100MB 的视频压缩队列
 ├── bin/                   # ffmpeg/ffprobe 包装脚本（绕过 open_basedir 对 /usr/bin 的探测，须 LF）
 ├── download.php           # 导出文件下载（token + 自动 GC）
 ├── common.css             # 公共样式（CSS 变量设计令牌、组件系统、Hand-Drawn 风格）
@@ -137,6 +138,7 @@ composer require php-ffmpeg/php-ffmpeg:^1.4
 │   ├── api.php            # DeepSeek API 封装
 │   ├── history.php        # 史记：HTML 消毒 / 导出渲染 / 图片清理
 │   ├── app_auth.php       # APP 用户 / token / 班级绑定鉴权
+│   ├── gallery_compress.php # 视频压缩（ffmpeg + 队列）
 │   ├── ratelimit.php      # 持久限流器（滑动窗口）
 │   ├── config.php         # 真实配置（被 .gitignore 忽略，不入库）
 │   └── config.example.php # 配置模板（入库）
@@ -331,7 +333,7 @@ Web 端日历的"今天"以**浏览器本机时钟**计算（与 APP 端手机�
 | `history_book.php` | 班级史记：月历 + Quill 编辑器 + 导出 | `?id={classId}` |
 | `display.php` | 壁纸投屏页（公告跑马灯 + 今日单词/句子/作文 + 文字标语） | `?id={classId}` 指定班级；`?token={token}` 免口令直达（壁纸场景）；`?json=1` 轮询数据接口 |
 | `app_api.php` `get_announcements` | 获取当前有效公告（按班级 + 平台 + 时间段筛选） | POST `class_id` `platform` |
-| `gallery.php` | 图集：上传（图片/GIF/MP4）/ 编辑描述 / 删除 / 画廊，Lightbox 播放视频带声音开关；**上传区支持拖拽与 Ctrl+V 粘贴**（绕开 Windows 触屏文件选择对话框卡死），Lightbox 视频加载中显示**缓冲进度百分比**（`preload=auto` + progress 事件，避免低带宽下"点开没反应"的错觉）；界面图标全部为 SVG 线条风（不用 emoji） | `?id={classId}` |
+| `gallery.php` | 图集：图片/GIF/MP4/实况上传（单/多文件、图片浏览器压缩、视频服务端 ffmpeg 压缩、前后对比）、描述搜索、排序、7 天回收站、Lightbox 播放；上传区支持拖拽与 Ctrl+V 粘贴 | `?id={classId}` |
 | `gallery_api.php` | 图集公开 API | `?class_id={id}` `?apikey=`（每次返回一张随机图片） |
 | `settings.php` | 听写 / 朗读 / 跟读参数、图集 API 密钥、展示大屏 token | `?id={classId}` |
 | `admin.php` | 管理后台（独立 Session，30 分钟有效） | — |

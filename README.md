@@ -6,7 +6,7 @@
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
-- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`2.1.0`　**Web 版本**：`2.1.0`
+- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`2.1.1`　**Web 版本**：`2.1.1`
 - 历史版本与更新说明见 [app/README.md](app/README.md) 与 Web 端 `data/app_versions.json`
 - **开源协议**：[GPL-3.0](LICENSE)
 - **本应用为本地运行设计**：原线上服务器已下线，请在本地电脑启动服务，内网设备通过局域网访问。
@@ -120,7 +120,7 @@ moxie restart
 APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 
 1. 在**你自己的 fork/仓库** Settings → Secrets → Actions 添加 `API_BASE_URL`，值为你的后端地址（如 `http://192.168.1.10:8000`，不带尾部斜杠、不带 `/app_api.php`）
-2. 手动运行 **Build APK** workflow 会产出 7 天有效的测试 artifact；推送 `app-v2.1.0` 这类 tag 才会正式发 Release 并更新 `apk-latest`
+2. 手动运行 **Build APK** workflow 会产出 7 天有效的测试 artifact；推送 `app-v2.1.1` 这类 tag 才会正式发 Release 并更新 `apk-latest`
 3. 构建完成后在 Actions artifact 或仓库 **Releases** 页下载 arm64 / armv7 两个 APK
 
 > 如果未设置 `API_BASE_URL` Secret，CI 会使用 `api_config.example.dart` 中的本地地址（`127.0.0.1:8000`）。

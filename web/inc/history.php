@@ -354,6 +354,8 @@ function historyCollectReferencedUploadNames(array $history, array $gallery, arr
         if ($file !== '') $referenced[$file] = true;
         $live = (string)($item['live_video'] ?? '');
         if ($live !== '') $referenced[$live] = true;
+        $compressed = (string)($item['compressed_image'] ?? '');
+        if ($compressed !== '') $referenced[$compressed] = true;
     }
     return $referenced;
 }

@@ -57,6 +57,11 @@ function galleryTrashDeleteFiles(string $classId, array $item): void {
         Database::deleteUploadedImage($classId, $live);
         Database::deleteVideoThumb($classId, $live);
     }
+    $compressed = (string)($item['compressed_image'] ?? '');
+    if ($compressed !== '') {
+        Database::deleteUploadedImage($classId, $compressed);
+        Database::deleteVideoThumb($classId, $compressed);
+    }
 }
 
 /**

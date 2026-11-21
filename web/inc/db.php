@@ -794,6 +794,13 @@ class Database {
     }
 
     /**
+     * 对外暴露 ffmpeg 路径（图集压缩队列复用同一套运行时查找逻辑）。
+     */
+    public static function ffmpegBinary() {
+        return self::resolveFfmpegBinary();
+    }
+
+    /**
      * 解析 ffmpeg 可执行文件路径（跨平台，无 Composer 依赖）。
      * 查找顺序：环境变量 LISTENWRITE_FFMPEG > runtime/ffmpeg/bin > web/bin > PATH。
      *

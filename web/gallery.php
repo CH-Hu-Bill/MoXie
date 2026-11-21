@@ -8,6 +8,7 @@ require_once 'inc/security.php';
 require_once 'inc/history.php';
 require_once 'inc/motion_photo.php';
 require_once 'inc/gallery_trash.php';
+require_once 'inc/gallery_compress.php';
 $classId = reqGet('id');
 if (!$classId) { header('Location: index.php'); exit; }
 $classes = Database::getClasses();
@@ -34,6 +35,13 @@ foreach ($gallery as $item) {
             $item['type'] = 'image';
             $cleaned = true;
         }
+        $compressed = (string)($item['compressed_image'] ?? '');
+        if ($compressed !== '' && Database::getUploadedImagePath($classId, $compressed) === null) {
+            unset($item['compressed_image']);
+            $item['compression_status'] = 'failed';
+            $item['compression_error'] = '压缩文件已丢失，已回退原视频';
+            $cleaned = true;
+        }
         $validGallery[] = $item;
     } else {
         $cleaned = true;
@@ -50,6 +58,12 @@ if ($cleaned) {
                 if ($live !== '' && Database::getUploadedImagePath($classId, $live) === null) {
                     unset($item['live_video']);
                     $item['type'] = 'image';
+                }
+                $compressed = (string)($item['compressed_image'] ?? '');
+                if ($compressed !== '' && Database::getUploadedImagePath($classId, $compressed) === null) {
+                    unset($item['compressed_image']);
+                    $item['compression_status'] = 'failed';
+                    $item['compression_error'] = '压缩文件已丢失，已回退原视频';
                 }
                 $valid[] = $item;
             }
@@ -123,9 +137,36 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 禁用了 exec/proc_open，
     // 这里不再内联调用，避免在请求路径加载 composer/php-ffmpeg 引发偶发超时或 PHP 警告污染 JSON）
 
+    $compressFields = [];
+    $compressWarning = '';
+    $compressKick = false;
+    $compressWanted = reqPost('compress') === '1' && $isMp4 && !$liveFile;
+    $compressQuality = galleryCompressQuality(reqPost('compress_quality', '80'));
+    if ($compressWanted) {
+        if ((int)($image['size'] ?? 0) <= GALLERY_COMPRESS_SYNC_MAX_BYTES) {
+            @set_time_limit(300);
+            try {
+                $compressFields = galleryCompressVideo($classId, ['image' => $filename], $compressQuality);
+                try { Database::generateVideoThumb($classId, (string)$compressFields['compressed_image']); } catch (Throwable $e) {}
+            } catch (Throwable $e) {
+                $compressFields = [
+                    'compression_status' => 'failed',
+                    'compression_error' => mb_substr($e->getMessage(), 0, 300),
+                ];
+                $compressWarning = '视频已保存，但压缩失败：' . $e->getMessage();
+            }
+        } else {
+            $compressFields = [
+                'compression_status' => 'pending',
+                'compression_quality' => $compressQuality,
+            ];
+            $compressKick = true;
+        }
+    }
+
     $id = bin2hex(random_bytes(16));
     try {
-        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4, $galleryW, $galleryH) {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4, $galleryW, $galleryH, $compressFields) {
             if (!is_array($latest)) $latest = [];
             $item = [
                 'id' => $id,
@@ -138,10 +179,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
                 'uploader_name' => '网页',
             ];
             if ($liveFile) $item['live_video'] = $liveFile;
+            foreach ($compressFields as $k => $v) $item[$k] = $v;
             array_unshift($latest, $item);
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
+        if ($compressKick) galleryCompressKick($classId);
     } catch (Throwable $e) {
         // 写库失败：回滚已落盘的文件与缩略图，避免孤儿文件泄漏
         Database::deleteUploadedImage($classId, $filename);
@@ -150,9 +193,13 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
             Database::deleteUploadedImage($classId, $liveFile);
             Database::deleteVideoThumb($classId, $liveFile);
         }
+        if (!empty($compressFields['compressed_image'])) {
+            Database::deleteUploadedImage($classId, (string)$compressFields['compressed_image']);
+            Database::deleteVideoThumb($classId, (string)$compressFields['compressed_image']);
+        }
         echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
     }
-    echo json_encode(['success' => true, 'id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null]); exit;
+    echo json_encode(['success' => true, 'id' => $id, 'live' => $liveFile !== null, 'live_warning' => $liveWarning ?: null, 'compress_warning' => $compressWarning ?: null]); exit;
 }
 
 // ========== 分片上传（S5）：大视频按 8MB 切片传，最后服务端拼装校验 ==========
@@ -243,26 +290,59 @@ if (isset($_POST['action']) && $_POST['action'] === 'upload_finish') {
     }
     galleryChunkCleanup($classId, $uid);
 
+    $compressFields = [];
+    $compressWarning = '';
+    $compressKick = false;
+    $compressQuality = galleryCompressQuality(reqPost('compress_quality', '80'));
+    if (reqPost('compress') === '1') {
+        if ($size <= GALLERY_COMPRESS_SYNC_MAX_BYTES) {
+            @set_time_limit(300);
+            try {
+                $compressFields = galleryCompressVideo($classId, ['image' => $filename], $compressQuality);
+                try { Database::generateVideoThumb($classId, (string)$compressFields['compressed_image']); } catch (Throwable $e) {}
+            } catch (Throwable $e) {
+                $compressFields = [
+                    'compression_status' => 'failed',
+                    'compression_error' => mb_substr($e->getMessage(), 0, 300),
+                ];
+                $compressWarning = '视频已保存，但压缩失败：' . $e->getMessage();
+            }
+        } else {
+            $compressFields = [
+                'compression_status' => 'pending',
+                'compression_quality' => $compressQuality,
+            ];
+            $compressKick = true;
+        }
+    }
+
     $id = bin2hex(random_bytes(16));
     try {
-        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc) {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $compressFields) {
             if (!is_array($latest)) $latest = [];
-            array_unshift($latest, [
+            $item = [
                 'id' => $id,
                 'image' => $filename,
                 'description' => $desc,
                 'uploaded_at' => date('Y-m-d H:i:s'),
                 'type' => 'video',
                 'uploader_name' => '网页',
-            ]);
+            ];
+            foreach ($compressFields as $k => $v) $item[$k] = $v;
+            array_unshift($latest, $item);
             return $latest;
         });
         if ($result === false) throw new RuntimeException('数据保存失败');
+        if ($compressKick) galleryCompressKick($classId);
     } catch (Throwable $e) {
         Database::deleteUploadedImage($classId, $filename);
+        if (!empty($compressFields['compressed_image'])) {
+            Database::deleteUploadedImage($classId, (string)$compressFields['compressed_image']);
+            Database::deleteVideoThumb($classId, (string)$compressFields['compressed_image']);
+        }
         echo json_encode(['success' => false, 'error' => '保存失败，请重试']); exit;
     }
-    echo json_encode(['success' => true, 'id' => $id, 'chunked' => true]); exit;
+    echo json_encode(['success' => true, 'id' => $id, 'chunked' => true, 'compress_warning' => $compressWarning ?: null]); exit;
 }
 
 // GET 请求顺手清理 3 小时前没传完的分片目录
@@ -347,14 +427,14 @@ require 'inc/header.php';
             <div id="compressBox" style="display:none;margin-top:12px;padding:10px 12px;border:2px dashed var(--old-paper);border-radius:var(--wobbly-sm);background:rgba(255,255,255,.55);">
                 <label class="hd-check" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
                     <input type="checkbox" id="compressToggle" checked onchange="onCompressToggle()">
-                    <span>压缩超过建议大小的图片 <span style="color:#999;">（建议 <?php echo round(Database::GALLERY_IMAGE_RECOMMEND_BYTES / 1048576); ?>MB）</span></span>
+                    <span>压缩超过建议大小的图片 / 视频 <span style="color:#999;">（图片建议 <?php echo round(Database::GALLERY_IMAGE_RECOMMEND_BYTES / 1048576); ?>MB，视频建议 50MB）</span></span>
                 </label>
                 <div id="compressSliderBox" style="display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--pencil);">
                     <span>压缩强度</span>
                     <input type="range" id="compressQuality" min="60" max="95" value="80" step="5" style="flex:1;accent-color:var(--blue);" oninput="onCompressQualityChange()">
                     <b id="compressQualityLabel" style="min-width:38px;text-align:right;">80%</b>
                 </div>
-                <div id="compressHint" style="font-size:12px;color:#999;margin-top:6px;">原图与压缩结果会并排显示；若压缩后更大，将自动保留原图。</div>
+                <div id="compressHint" style="font-size:12px;color:#999;margin-top:6px;">图片在浏览器即时压缩并并排对比；视频上传后由服务器压缩，完成后卡片会出现「已压缩」和「对比」。</div>
             </div>
             <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="margin-top:12px;">
             <div id="uploadDescHint" style="font-size:12px;color:#999;margin-top:6px;"></div>
@@ -396,6 +476,12 @@ require 'inc/header.php';
     </div>
 </div>
 
+<!-- 压缩前后对比：左右各一个播放器/图片 -->
+<div id="compareModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:5100;align-items:center;justify-content:center;padding:4vh 3vw;box-sizing:border-box;">
+    <button class="btn" onclick="closeCompare()" style="position:fixed;top:18px;right:18px;width:44px;height:44px;border-radius:50%;font-size:20px;z-index:2;">×</button>
+    <div id="comparePanels" style="display:flex;gap:16px;width:100%;height:100%;align-items:stretch;"></div>
+</div>
+
 <script src="common.js?v=15"></script>
 <script>
 var classId = <?php echo json_encode($classId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
@@ -418,6 +504,12 @@ var LW_LIMIT_LABEL = {
 var galleryData = <?php echo json_encode($gallery, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 // 描述不内嵌到 HTML onclick 属性（含换行/过长会破坏 JS 导致卡片打不开），统一存映射表按 id 取
 var galleryDescMap = {};
+var galleryCompareMap = {};
+var _compressPollTimer = null;
+
+function galleryEffectiveFile(item) {
+    return item.compressed_image ? item.compressed_image : item.image;
+}
 
 function renderGallery() {
     var grid = document.getElementById('galleryGrid');
@@ -450,15 +542,23 @@ function renderGallery() {
     empty.style.display = 'none';
     grid.innerHTML = items.map(function(item, idx) {
         galleryDescMap[item.id] = item.description;
-        var url = 'upload.php?class_id=' + classId + '&file=' + item.image;
+        var effectiveFile = galleryEffectiveFile(item);
+        var url = 'upload.php?class_id=' + classId + '&file=' + effectiveFile;
+        var originalUrl = 'upload.php?class_id=' + classId + '&file=' + item.image;
         var dateText = formatDate(item.uploaded_at);
-        var isGif = /\.gif$/i.test(item.image);
-        var isMp4 = /\.mp4$/i.test(item.image);
+        var isGif = /\.gif$/i.test(effectiveFile);
+        var isMp4 = /\.mp4$/i.test(effectiveFile);
         var isLive = item.type === 'live' && !!item.live_video;
         var liveUrl = isLive ? ('upload.php?class_id=' + classId + '&file=' + item.live_video) : '';
         var detailUrl = isLive ? liveUrl : url;
         var detailIsMp4 = isMp4 || isLive;
-        var detailThumb = isMp4 ? ('video_thumb.php?class_id=' + classId + '&file=' + item.image) : (isLive ? url : '');
+        var detailThumb = isMp4 ? ('video_thumb.php?class_id=' + classId + '&file=' + effectiveFile) : (isLive ? url : '');
+        galleryCompareMap[item.id] = item.compressed_image ? {
+            original: originalUrl,
+            compressed: url,
+            isVideo: isMp4,
+            thumb: detailThumb
+        } : null;
         var media;
         // 占位层 z-index:2 位于媒体之上；媒体加载完成后由 hideGalleryPlaceholder 隐藏
         var placeholder = '<div class="gallery-placeholder" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9c2b6;font-size:28px;pointer-events:none;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:11px;color:#bbb;margin-top:4px;">加载中…</span></div>';
@@ -469,7 +569,7 @@ function renderGallery() {
             // - 占位只在真正开始播放时才隐藏（onplaying），缓冲慢时仍能看到"加载中…"；
             // - preload=metadata + IntersectionObserver 视口调度：进视口才 play() 下载/解码，
             //   不再首屏全量并发下载所有视频（多解码器并发是点开视频卡顿的根源）。
-            var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + item.image;
+            var thumbUrl = 'video_thumb.php?class_id=' + classId + '&file=' + effectiveFile;
             media = '<img class="video-poster" src="' + thumbUrl + '" alt="" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;z-index:1;" onload="hideGalleryPlaceholder(this)" onerror="this.hidden=true">'
                 + '<video src="' + url + '" poster="' + thumbUrl + '" muted loop playsinline preload="metadata" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;pointer-events:none;background:transparent;z-index:1;" onplaying="hideGalleryPlaceholder(this)" onerror="galleryVideoError(this)"></video>';
         } else if (isLive) {
@@ -489,15 +589,30 @@ function renderGallery() {
             + (isGif ? '<span class="gif-badge">GIF</span>' : '')
             + (isMp4 ? '<span class="gif-badge mp4-badge">MP4</span>' : '')
             + (isLive ? '<span class="gif-badge" style="background:var(--blue);">实况</span>' : '')
+            + ((item.compression_status === 'pending' || item.compression_status === 'processing') ? '<span class="gif-badge" style="background:#b87500;">压缩中</span>' : '')
+            + (item.compression_status === 'failed' ? '<span class="gif-badge" style="background:var(--red);" title="' + escapeHtml(item.compression_error || '') + '">压缩失败</span>' : '')
+            + (item.compressed_image ? '<span class="gif-badge" style="background:#2d7a46;">已压缩</span>' : '')
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
             + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + (item.description ? escapeHtml(item.description) : '<span style="color:#bbb;">未填写描述</span>') + '</div>'
             + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ' + dateText + '</span>'
-            + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\')" style="padding:2px 10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
+            + '<span style="display:flex;gap:6px;">'
+            + (item.compressed_image ? '<button class="btn btn-sm" onclick="event.stopPropagation();openCompare(\'' + item.id + '\')" style="padding:2px 8px;">对比</button>' : '')
+            + '<button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\')" style="padding:2px 10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
             + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button></span>'
             + '</div></div></div>';
     }).join('');
     initGridVideos(); // 重渲染后重新挂视口调度（新 video 元素需要重新 observe）
+
+    // 有视频在排队/压缩时，每 5 秒静默刷新一次，完成后自动切换为压缩版
+    if (galleryData.some(function(it) { return it.compression_status === 'pending' || it.compression_status === 'processing'; })) {
+        if (!_compressPollTimer) {
+            _compressPollTimer = setTimeout(function() {
+                _compressPollTimer = null;
+                refreshGalleryGrid();
+            }, 5000);
+        }
+    }
 
     // 搜索时自动定位到第一张命中项（需求：图集搜索仍要自动定位）
     if (q && items.length) {
@@ -654,7 +769,45 @@ function closeLightbox() {
     var tip = document.getElementById('lbLoadTip');
     if (tip) tip.style.display = 'none';
 }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { closeLightbox(); closeCompare(); }
+});
+
+function comparePanel(label, url, isVideo, thumb) {
+    var media = isVideo
+        ? '<video src="' + url + '" controls playsinline preload="metadata"' + (thumb ? ' poster="' + thumb + '"' : '') + ' style="width:100%;height:calc(100% - 34px);background:#000;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);"></video>'
+        : '<img src="' + url + '" alt="" style="width:100%;height:calc(100% - 34px);object-fit:contain;background:#111;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">';
+    return '<div style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column;gap:8px;">'
+        + '<div style="color:#fff;text-align:center;font-size:14px;">' + label + '</div>'
+        + media
+        + '</div>';
+}
+
+function openCompare(id) {
+    var info = galleryCompareMap[id];
+    if (!info) return;
+    closeLightbox();
+    var modal = document.getElementById('compareModal');
+    var panels = document.getElementById('comparePanels');
+    panels.innerHTML = comparePanel('原文件', info.original, info.isVideo, info.thumb)
+        + comparePanel('压缩后', info.compressed, info.isVideo, info.thumb);
+    modal.style.display = 'flex';
+    // 暂停网格预览，避免同时解码多路视频
+    document.querySelectorAll('.gallery-card video').forEach(function(v) { try { v.pause(); } catch (e) {} });
+}
+
+function closeCompare() {
+    var modal = document.getElementById('compareModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    var panels = document.getElementById('comparePanels');
+    if (panels) {
+        panels.querySelectorAll('video').forEach(function(v) {
+            try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
+        });
+        panels.innerHTML = '';
+    }
+}
 
 /* 灯箱描述自动滚动（来回往返式，参考单词跑马灯）：缓慢滚到底 → 停留 → 缓慢滚回顶部 → 停留，循环。
    用 requestAnimationFrame 逐帧驱动，平滑无跳变；边缘渐变蒙版（CSS mask）隐藏截断。
@@ -775,6 +928,7 @@ function removePending(i) {
     compressAll();
 }
 function overRecommend(p) {
+    if (isVideoFile(p.file)) return p.file.size > LW_LIMITS.mp4Recommend;
     return isImageFile(p.file) && p.file.size > LW_LIMITS.imageRecommend;
 }
 function updateCompressControls() {
@@ -852,7 +1006,7 @@ async function compressAll() {
     pendingFiles.forEach(function (p) { p.compressing = false; });
     for (var i = 0; i < pendingFiles.length; i++) {
         var p = pendingFiles[i];
-        if (!overRecommend(p) || p.compressing) continue;
+        if (isVideoFile(p.file) || isGifFile(p.file) || !overRecommend(p) || p.compressing) continue;
         p.compressing = true;
         p.compressError = '';
         renderPending();
@@ -910,7 +1064,9 @@ function renderPending() {
         var border = tooBig ? 'var(--red)' : (rec && !p.compressedFile ? '#b87500' : 'var(--pencil)');
         var media;
         if (isMp4) {
-            media = '<div style="width:100%;height:88px;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频</div>';
+            var compressToggleEl = document.getElementById('compressToggle');
+            var willCompress = rec && compressToggleEl && compressToggleEl.checked;
+            media = '<div style="width:100%;height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频' + (willCompress ? '<span style="color:#b87500;margin-top:3px;">上传后服务器压缩</span>' : '') + '</div>';
         } else if (rec) {
             var compressedCell = p.compressedUrl
                 ? previewThumb(p, p.compressedUrl)
@@ -930,13 +1086,15 @@ function renderPending() {
     }).join('');
 }
 
-function uploadOneFile(file, desc, multi) {
+function uploadOneFile(file, desc, multi, compress, quality) {
     return new Promise(function (resolve, reject) {
         var fd = new FormData();
         fd.append('action', 'save_gallery');
         fd.append('image', file);
         fd.append('description', desc);
         fd.append('multi', multi);
+        fd.append('compress', compress ? '1' : '0');
+        fd.append('compress_quality', String(quality || 80));
         fd.append('csrf_token', document.getElementById('csrfToken').value);
         var controller = new AbortController();
         var timeoutMs = file.size > 10 * 1048576 ? 300000 : 60000;
@@ -986,6 +1144,9 @@ async function uploadGallery() {
 
     var multi = pendingFiles.length > 1 ? '1' : '0';
     var okCount = 0, failCount = 0;
+    var compressToggle = document.getElementById('compressToggle');
+    var compressQuality = parseInt((document.getElementById('compressQuality') || {}).value || '80', 10);
+    var compressVideos = !!(compressToggle && compressToggle.checked);
     btn.disabled = true;
     try {
         for (var j = 0; j < pendingFiles.length; j++) {
@@ -994,12 +1155,15 @@ async function uploadGallery() {
             btn.textContent = '上传中 ' + (j + 1) + '/' + pendingFiles.length;
             var e2 = fileExt(file);
             var mp42 = e2 === 'mp4' || e2 === 'mov';
+            var wantCompress = mp42 && compressVideos && overRecommend(item);
             try {
+                var result;
                 if (mp42 && file.size > 16 * 1048576) {
-                    await uploadChunkedGallery(file, desc, multi);
+                    result = await uploadChunkedGallery(file, desc, multi, wantCompress, compressQuality);
                 } else {
-                    await uploadOneFile(file, desc, multi);
+                    result = await uploadOneFile(file, desc, multi, wantCompress, compressQuality);
                 }
+                if (result && result.compress_warning && hint) hint.textContent = result.compress_warning;
                 okCount++;
             } catch (err) {
                 failCount++;
@@ -1018,7 +1182,7 @@ async function uploadGallery() {
 }
 
 // 分片上传：8MB 一片，最后服务端拼装 + MP4 校验；支持到 1GB
-async function uploadChunkedGallery(file, desc, multi) {
+async function uploadChunkedGallery(file, desc, multi, compress, quality) {
     var hint = document.getElementById('uploadHint');
     var csrf = document.getElementById('csrfToken').value;
     var CHUNK = LW_LIMITS.chunk || 8388608;
@@ -1049,10 +1213,13 @@ async function uploadChunkedGallery(file, desc, multi) {
     fd2.append('total', String(total));
     fd2.append('description', desc);
     fd2.append('multi', multi || '0');
+    fd2.append('compress', compress ? '1' : '0');
+    fd2.append('compress_quality', String(quality || 80));
     fd2.append('csrf_token', csrf);
     var r2 = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd2 })).json();
     if (!r2.success) throw new Error(r2.error || '拼装失败');
     if (hint) hint.textContent = '';
+    return r2;
 }
 
 async function deleteGallery(id) {

@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_widget_from_html/flutter_widget_from_html.dart' hide ImageSource;
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart'
+    hide ImageSource;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/vlog_entry.dart';
@@ -28,6 +29,7 @@ class LifeScreenState extends State<LifeScreen> {
     });
     _loadData();
   }
+
   int _tab = 0;
   final _api = ApiService();
 
@@ -106,7 +108,8 @@ class LifeScreenState extends State<LifeScreen> {
 
   void _changeMonth(int delta) {
     setState(() {
-      _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month + delta);
+      _calendarMonth =
+          DateTime(_calendarMonth.year, _calendarMonth.month + delta);
       _selectedDate = null;
     });
     _loadData();
@@ -150,7 +153,8 @@ class LifeScreenState extends State<LifeScreen> {
     _editLocationCtrl.text = existing?.location ?? '';
     _editTagsCtrl.text = existing?.tags.join(', ') ?? '';
     _editMood = (existing?.mood.isNotEmpty == true) ? existing!.mood : '😊';
-    _editWeather = (existing?.weather.isNotEmpty == true) ? existing!.weather : '☀️';
+    _editWeather =
+        (existing?.weather.isNotEmpty == true) ? existing!.weather : '☀️';
     final delta = existing?.delta ?? '';
     final html = existing != null ? _resolveHtmlImages(existing.content) : '';
     setState(() => _isEditing = true);
@@ -203,7 +207,10 @@ class LifeScreenState extends State<LifeScreen> {
                       WobblyTabBar(
                         tabs: const ['我的', '他人', '班级'],
                         selectedIndex: _tab,
-                        onTap: (i) => setState(() { _tab = i; _selectedDate = null; }),
+                        onTap: (i) => setState(() {
+                          _tab = i;
+                          _selectedDate = null;
+                        }),
                       ),
                       _buildCalendar(),
                       _buildContentArea(todayStr),
@@ -234,7 +241,8 @@ class LifeScreenState extends State<LifeScreen> {
               ),
               Text(
                 '${_calendarMonth.year}年${_calendarMonth.month}月',
-                style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22),
+                style:
+                    TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 22),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right, size: 28),
@@ -287,7 +295,8 @@ class LifeScreenState extends State<LifeScreen> {
                     borderRadius: AppTheme.wobblyRadius,
                     border: canClick
                         ? Border.all(
-                            color: isSelected ? AppColors.red : AppColors.pencil,
+                            color:
+                                isSelected ? AppColors.red : AppColors.pencil,
                             width: isSelected ? 3 : 2,
                           )
                         : null,
@@ -340,7 +349,12 @@ class LifeScreenState extends State<LifeScreen> {
           child: _VlogViewer(
             entry: entry,
             isToday: true,
-            onEdit: () => setState(() { _isEditing = true; _viewMode = false; _editingCancelled = false; _startEditing(entry); }),
+            onEdit: () => setState(() {
+              _isEditing = true;
+              _viewMode = false;
+              _editingCancelled = false;
+              _startEditing(entry);
+            }),
             scrollable: false,
           ),
         );
@@ -367,7 +381,8 @@ class LifeScreenState extends State<LifeScreen> {
       }).toList();
 
       if (authors.isEmpty) {
-        return const EmptyState(message: '当天没有授权用户的史记', icon: Icons.people_outline);
+        return const EmptyState(
+            message: '当天没有授权用户的史记', icon: Icons.people_outline);
       }
 
       return ListView.builder(
@@ -382,27 +397,30 @@ class LifeScreenState extends State<LifeScreen> {
               _selectedDate!, entries[_selectedDate!] as Map<String, dynamic>);
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-              child: HandDrawnCard(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(
-                          title: Text('${author['author_name']} - $_selectedDate'),
-                          backgroundColor: AppColors.white,
-                          shape: const Border(bottom: BorderSide(color: AppColors.pencil, width: 3)),
-                        ),
-                        body: PaperTexture(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(16),
-                            child: _VlogViewer(entry: entry, scrollable: false),
-                          ),
+            child: HandDrawnCard(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(
+                        title:
+                            Text('${author['author_name']} - $_selectedDate'),
+                        backgroundColor: AppColors.white,
+                        shape: const Border(
+                            bottom:
+                                BorderSide(color: AppColors.pencil, width: 3)),
+                      ),
+                      body: PaperTexture(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: _VlogViewer(entry: entry, scrollable: false),
                         ),
                       ),
                     ),
-                  );
-                },
+                  ),
+                );
+              },
               child: Row(
                 children: [
                   const Icon(Icons.person, size: 28, color: AppColors.blue),
@@ -410,7 +428,8 @@ class LifeScreenState extends State<LifeScreen> {
                   Expanded(
                     child: Text(
                       author['author_name'] as String,
-                      style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 18),
+                      style: TextStyle(
+                          fontFamily: AppTheme.fontHeading, fontSize: 18),
                     ),
                   ),
                   const Icon(Icons.chevron_right),
@@ -482,22 +501,26 @@ class LifeScreenState extends State<LifeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          HandDrawnInput(label: '标题', hint: '给今天起个标题', controller: _editTitleCtrl),
+          HandDrawnInput(
+              label: '标题', hint: '给今天起个标题', controller: _editTitleCtrl),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: AppColors.paper,
               borderRadius: AppTheme.wobblyRadius,
-              border: Border.all(color: AppColors.pencil.withValues(alpha: 0.3), width: 1.5),
+              border: Border.all(
+                  color: AppColors.pencil.withValues(alpha: 0.3), width: 1.5),
             ),
             child: Wrap(
               spacing: 16,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _buildInlineSelector('心情', _moods, _editMood, (v) => setState(() => _editMood = v)),
-                _buildInlineSelector('天气', _weathers, _editWeather, (v) => setState(() => _editWeather = v)),
+                _buildInlineSelector('心情', _moods, _editMood,
+                    (v) => setState(() => _editMood = v)),
+                _buildInlineSelector('天气', _weathers, _editWeather,
+                    (v) => setState(() => _editWeather = v)),
                 SizedBox(
                   width: 120,
                   child: TextField(
@@ -505,10 +528,12 @@ class LifeScreenState extends State<LifeScreen> {
                     decoration: const InputDecoration(
                       isDense: true,
                       hintText: '📍 地点',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       border: OutlineInputBorder(),
                     ),
-                    style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
+                    style:
+                        TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14),
                   ),
                 ),
               ],
@@ -555,11 +580,16 @@ class LifeScreenState extends State<LifeScreen> {
     );
   }
 
-  Widget _buildInlineSelector(String label, List<String> options, String selected, ValueChanged<String> onTap) {
+  Widget _buildInlineSelector(String label, List<String> options,
+      String selected, ValueChanged<String> onTap) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 13, color: AppColors.pencil.withValues(alpha: 0.6))),
+        Text(label,
+            style: TextStyle(
+                fontFamily: AppTheme.fontBody,
+                fontSize: 13,
+                color: AppColors.pencil.withValues(alpha: 0.6))),
         const SizedBox(width: 4),
         ...options.map((opt) {
           final isSelected = opt == selected;
@@ -571,7 +601,9 @@ class LifeScreenState extends State<LifeScreen> {
               decoration: BoxDecoration(
                 color: isSelected ? AppColors.postIt : Colors.transparent,
                 borderRadius: AppTheme.wobblySm,
-                border: isSelected ? Border.all(color: AppColors.pencil, width: 2) : null,
+                border: isSelected
+                    ? Border.all(color: AppColors.pencil, width: 2)
+                    : null,
               ),
               child: Text(opt, style: const TextStyle(fontSize: 18)),
             ),
@@ -612,7 +644,11 @@ class _VlogViewer extends StatelessWidget {
   final VoidCallback? onEdit;
   final bool scrollable;
 
-  const _VlogViewer({required this.entry, this.isToday = false, this.onEdit, this.scrollable = true});
+  const _VlogViewer(
+      {required this.entry,
+      this.isToday = false,
+      this.onEdit,
+      this.scrollable = true});
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +664,8 @@ class _VlogViewer extends StatelessWidget {
               child: GestureDetector(
                 onTap: onEdit,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppColors.postIt,
                     borderRadius: AppTheme.wobblyRadius,
@@ -640,7 +677,8 @@ class _VlogViewer extends StatelessWidget {
                       const Icon(Icons.edit, size: 16, color: AppColors.pencil),
                       const SizedBox(width: 4),
                       Text('编辑',
-                          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
+                          style: TextStyle(
+                              fontFamily: AppTheme.fontBody, fontSize: 14)),
                     ],
                   ),
                 ),
@@ -650,13 +688,20 @@ class _VlogViewer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(entry.title,
-                  style: TextStyle(fontFamily: AppTheme.fontHeading, fontSize: 24)),
+                  style: TextStyle(
+                      fontFamily: AppTheme.fontHeading, fontSize: 24)),
             ),
           Row(
             children: [
               if (entry.mood.isNotEmpty) _buildChip(entry.mood),
-              if (entry.weather.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.weather)],
-              if (entry.location.isNotEmpty) ...[const SizedBox(width: 8), _buildChip(entry.location)],
+              if (entry.weather.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                _buildChip(entry.weather)
+              ],
+              if (entry.location.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                _buildChip(entry.location)
+              ],
             ],
           ),
           if (entry.tags.isNotEmpty) ...[
@@ -665,7 +710,8 @@ class _VlogViewer extends StatelessWidget {
               spacing: 8,
               children: entry.tags
                   .map((t) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.blue.withValues(alpha: 0.1),
                           borderRadius: AppTheme.wobblyRadius,
@@ -709,7 +755,8 @@ class _VlogViewer extends StatelessWidget {
         color: AppColors.postIt,
         borderRadius: AppTheme.wobblyRadius,
       ),
-      child: Text(label, style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
+      child: Text(label,
+          style: TextStyle(fontFamily: AppTheme.fontBody, fontSize: 14)),
     );
   }
 
@@ -729,4 +776,3 @@ class _VlogViewer extends StatelessWidget {
     }
   }
 }
-
