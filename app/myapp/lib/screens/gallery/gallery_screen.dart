@@ -27,7 +27,7 @@ class GalleryScreen extends StatefulWidget {
 class _GalleryScreenState extends State<GalleryScreen> {
   static const _maxBytes = 12582912; // 静态图 12MB
   static const _gifMaxBytes = 16777216; // GIF 动图 16MB
-  static const _mp4MaxBytes = 15728640; // MP4 视频 15MB
+  static const _mp4MaxBytes = 209715200; // MP4 视频 200MB
   static const _allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
   final _api = ApiService();
   final _storage = StorageService();
@@ -217,7 +217,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               const SizedBox(height: 10),
               _UploadMenuTile(
                 icon: Icons.videocam_outlined,
-                label: '上传视频（MP4，30秒 / 15MB 以内）',
+                label: '上传视频（MP4，3 分钟 / 200MB 以内）',
                 onTap: () {
                   Navigator.pop(ctx);
                   _pickAndUploadVideo();
@@ -434,7 +434,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('视频大小不能超过 15MB')));
+        ).showSnackBar(const SnackBar(content: Text('视频大小不能超过 200MB')));
       }
       return;
     }

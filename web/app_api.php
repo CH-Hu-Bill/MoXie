@@ -784,7 +784,7 @@ switch ($action) {
         }
         if (($file['size'] ?? 0) <= 0) appError('上传文件无效');
         if (!is_uploaded_file($file['tmp_name'])) appError('上传文件无效');
-        // 按类型分段限值（与 save_gallery / gallery.php / upload.php 一致）：GIF 16MB / MP4 15MB / 图片 12MB
+        // 按类型分段限值（与 save_gallery / gallery.php / upload.php 一致）：GIF 16MB / MP4 200MB / 图片 12MB
         $isGifUp = false;
         $isMp4Up = false;
         if (is_file($file['tmp_name'])) {
@@ -793,7 +793,7 @@ switch ($action) {
             if (!$isGifUp) $isMp4Up = Database::isMp4File($file['tmp_name']);
         }
         if ($isMp4Up) {
-            if (($file['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 15MB', null, 413);
+            if (($file['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 ' . round(Database::MP4_MAX_BYTES / 1048576) . 'MB', null, 413);
         } else {
             $maxBytesUp = $isGifUp ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
             if (($file['size'] ?? 0) > $maxBytesUp) appError($isGifUp ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
@@ -803,7 +803,7 @@ switch ($action) {
             $filename = Database::saveUploadedImage($classId, $file['tmp_name']);
         } catch (RuntimeException $e) {
             $msg = $e->getMessage();
-            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500;
+            $code = (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '200MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500;
             appError($msg, null, $code);
         }
 
@@ -1130,7 +1130,7 @@ switch ($action) {
             if (!$isGif) $isMp4 = Database::isMp4File($tmpName);
         }
         if ($isMp4) {
-            if (($img['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 15MB', null, 413);
+            if (($img['size'] ?? 0) > Database::MP4_MAX_BYTES) appError('视频最大 ' . round(Database::MP4_MAX_BYTES / 1048576) . 'MB', null, 413);
         } else {
             $maxBytes = $isGif ? Database::GIF_MAX_BYTES : Database::UPLOAD_MAX_BYTES;
             if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 12MB', null, 413);
@@ -1145,7 +1145,7 @@ switch ($action) {
         $hasLiveUpload = is_array($liveUpload) && ($liveUpload['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
         if ($hasLiveUpload && ($liveUpload['size'] ?? 0) > Database::MP4_MAX_BYTES) {
             $hasLiveUpload = false;
-            $liveWarning = '实况视频超过 15MB，已按普通图片上传';
+            $liveWarning = '实况视频超过 ' . round(Database::MP4_MAX_BYTES / 1048576) . 'MB，已按普通图片上传';
         }
         if (!$hasLiveUpload && !$isMp4 && !$isGif && is_string($tmpName) && is_file($tmpName)) {
             $liveTmp = motionPhotoExtractVideo($tmpName);
@@ -1156,7 +1156,7 @@ switch ($action) {
         } catch (RuntimeException $e) {
             if ($liveTmp) @unlink($liveTmp);
             $msg = $e->getMessage();
-            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500);
+            appError($msg, null, (str_contains($msg, '像素') || str_contains($msg, '12MB') || str_contains($msg, '15MB') || str_contains($msg, '200MB') || str_contains($msg, '16MB') || str_contains($msg, '秒') || str_contains($msg, '分辨率')) ? 413 : 500);
         }
 
         $liveFile = null;
@@ -1212,20 +1212,22 @@ switch ($action) {
 
     case 'delete_gallery':
         $gid = appStrictId($_POST['id'] ?? '', 'id');
-        Database::updateClassData($classId, 'gallery', function($latest) use ($gid, $classId) {
+        $removedItem = null;
+        Database::updateClassData($classId, 'gallery', function($latest) use ($gid, &$removedItem) {
             if (!is_array($latest)) return null;
             foreach ($latest as $i => $item) if (($item['id'] ?? '') === $gid) {
-                Database::deleteUploadedImage($classId, $item['image'] ?? '');
-                Database::deleteVideoThumb($classId, $item['image'] ?? '');
-                if (!empty($item['live_video'])) {
-                    Database::deleteUploadedImage($classId, $item['live_video']);
-                    Database::deleteVideoThumb($classId, $item['live_video']);
-                }
+                $removedItem = $item;
                 array_splice($latest, $i, 1);
                 return $latest;
             }
             return null;
         });
+        // 与网页端一致：先进回收站保留 7 天，可在网页端恢复
+        if ($removedItem !== null) {
+            require_once 'inc/gallery_trash.php';
+            galleryTrashAdd($classId, $removedItem);
+            galleryTrashPurge($classId);
+        }
         appJson(['success' => true]);
 
     case 'update_gallery':
