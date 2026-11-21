@@ -516,6 +516,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
     widget.onCountChanged?.call(_items.length);
   }
 
+  void _clearHighlight() {
+    if (_highlightId == null || !mounted) return;
+    setState(() => _highlightId = null);
+  }
+
   List<GalleryItem> _ensureFocus(List<GalleryItem> list) {
     final focus = widget.focusItem ?? _externalFocusItem;
     if (focus == null) return list;
@@ -642,137 +647,152 @@ class _GalleryScreenState extends State<GalleryScreen> {
                               }
                               return false;
                             },
-                            child: MasonryGridView.count(
-                              controller: _gridController,
-                              padding: const EdgeInsets.all(12),
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              itemCount: _shownItems.length,
-                              itemBuilder: (ctx, i) {
-                                final item = _shownItems[i];
-                                return HandDrawnCard(
-                                  key: _cardKey(item.id),
-                                  padding: EdgeInsets.zero,
-                                  borderColor: _highlightId == item.id
-                                      ? AppColors.blue
-                                      : null,
-                                  borderWidth: _highlightId == item.id ? 3 : 2,
-                                  onTap: () => _viewImage(item),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      AspectRatio(
-                                        aspectRatio: _itemAspect(item),
-                                        child: Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.only(
-                                                topLeft: Radius.circular(18),
-                                                topRight: Radius.circular(18),
-                                              ),
-                                              child: item.isVideo
-                                                  ? (item.thumbUrl.isNotEmpty
-                                                      ? _VideoThumbView(
-                                                          thumbUrl:
-                                                              item.thumbUrl,
-                                                          videoUrl:
-                                                              item.imageUrl,
-                                                        )
-                                                      : _VideoThumbnail(
-                                                          videoUrl:
-                                                              item.imageUrl,
-                                                        ))
-                                                  : item.isGif
-                                                      ? _GifThumbnail(
-                                                          imageUrl:
-                                                              item.imageUrl)
-                                                      : CachedNetworkImage(
-                                                          imageUrl:
-                                                              item.imageUrl,
-                                                          fit: BoxFit.cover,
-                                                          placeholder:
-                                                              (_, __) =>
-                                                                  Container(
-                                                            color: AppColors
-                                                                .oldPaper,
-                                                            child: const Center(
+                            child: NotificationListener<UserScrollNotification>(
+                              onNotification: (_) {
+                                _clearHighlight();
+                                return false;
+                              },
+                              child: MasonryGridView.count(
+                                controller: _gridController,
+                                padding: const EdgeInsets.all(12),
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                itemCount: _shownItems.length,
+                                itemBuilder: (ctx, i) {
+                                  final item = _shownItems[i];
+                                  return HandDrawnCard(
+                                    key: _cardKey(item.id),
+                                    padding: EdgeInsets.zero,
+                                    borderColor: _highlightId == item.id
+                                        ? AppColors.blue
+                                        : null,
+                                    borderWidth:
+                                        _highlightId == item.id ? 3 : 2,
+                                    onTap: () {
+                                      _clearHighlight();
+                                      _viewImage(item);
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        AspectRatio(
+                                          aspectRatio: _itemAspect(item),
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                  topLeft: Radius.circular(18),
+                                                  topRight: Radius.circular(18),
+                                                ),
+                                                child: item.isVideo
+                                                    ? (item.thumbUrl.isNotEmpty
+                                                        ? _VideoThumbView(
+                                                            thumbUrl:
+                                                                item.thumbUrl,
+                                                            videoUrl:
+                                                                item.imageUrl,
+                                                          )
+                                                        : _VideoThumbnail(
+                                                            videoUrl:
+                                                                item.imageUrl,
+                                                          ))
+                                                    : item.isGif
+                                                        ? _GifThumbnail(
+                                                            imageUrl:
+                                                                item.imageUrl)
+                                                        : CachedNetworkImage(
+                                                            imageUrl:
+                                                                item.imageUrl,
+                                                            fit: BoxFit.cover,
+                                                            placeholder:
+                                                                (_, __) =>
+                                                                    Container(
+                                                              color: AppColors
+                                                                  .oldPaper,
                                                               child:
-                                                                  CircularProgressIndicator(
-                                                                color: AppColors
-                                                                    .red,
-                                                                strokeWidth: 2,
+                                                                  const Center(
+                                                                child:
+                                                                    CircularProgressIndicator(
+                                                                  color:
+                                                                      AppColors
+                                                                          .red,
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            errorWidget:
+                                                                (_, __, ___) =>
+                                                                    Container(
+                                                              color: AppColors
+                                                                  .muted,
+                                                              child:
+                                                                  const Center(
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .broken_image,
+                                                                  size: 40,
+                                                                ),
                                                               ),
                                                             ),
                                                           ),
-                                                          errorWidget:
-                                                              (_, __, ___) =>
-                                                                  Container(
-                                                            color:
-                                                                AppColors.muted,
-                                                            child: const Center(
-                                                              child: Icon(
-                                                                Icons
-                                                                    .broken_image,
-                                                                size: 40,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                            ),
-                                            if (item.isLive)
-                                              Positioned(
-                                                top: 8,
-                                                right: 8,
-                                                child: _LiveBadge(),
                                               ),
-                                          ],
+                                              if (item.isLive)
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: _LiveBadge(),
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            8, 8, 8, 8),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              item.description.isEmpty
-                                                  ? '未填写描述'
-                                                  : item.description,
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                              style:
-                                                  AppTheme.bodyStyle.copyWith(
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            if (item.uploaderName.isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 2),
-                                                child: Text(
-                                                  item.uploaderName,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: AppTheme.bodyStyle
-                                                      .copyWith(
-                                                    fontSize: 11,
-                                                    color: AppColors.muted,
-                                                  ),
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              8, 8, 8, 8),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                item.description.isEmpty
+                                                    ? '未填写描述'
+                                                    : item.description,
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                                style:
+                                                    AppTheme.bodyStyle.copyWith(
+                                                  fontSize: 14,
                                                 ),
                                               ),
-                                          ],
+                                              if (item.uploaderName.isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          top: 2),
+                                                  child: Text(
+                                                    item.uploaderName,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: AppTheme.bodyStyle
+                                                        .copyWith(
+                                                      fontSize: 11,
+                                                      color: AppColors.muted,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ),
