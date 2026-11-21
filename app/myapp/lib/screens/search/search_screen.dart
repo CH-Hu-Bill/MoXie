@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/vlog_entry.dart';
 import '../../models/word.dart';
+import '../../models/gallery_item.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
@@ -9,6 +10,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 import '../study/task_detail_screen.dart';
 import '../study/essay_detail_screen.dart';
+import '../gallery/gallery_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SearchScreen extends StatefulWidget {
   final String? initialQuery;
@@ -236,6 +239,65 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  Widget _buildGalleryMatchCard(GalleryItem g) {
+    return HandDrawnCard(
+      padding: EdgeInsets.zero,
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => GalleryScreen(openItemId: g.id)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 96,
+            height: 96,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+              ),
+              child: CachedNetworkImage(
+                imageUrl: g.thumbUrl.isNotEmpty ? g.thumbUrl : g.imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: AppColors.oldPaper),
+                errorWidget: (_, __, ___) => Container(
+                  color: AppColors.muted,
+                  child: const Icon(Icons.image, size: 28),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    g.description.isEmpty ? '未填写描述' : g.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.bodyStyle.copyWith(fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${g.isVideo ? '视频' : (g.isLive ? '实况' : '图片')} · ${g.uploadedAt}',
+                    style: AppTheme.bodyStyle.copyWith(
+                      fontSize: 11,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildResults() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -246,6 +308,15 @@ class _SearchScreenState extends State<SearchScreen> {
           ..._result!.words.map((w) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _buildWordMatchCard(w),
+              )),
+          const SizedBox(height: 16),
+        ],
+        if (_result!.gallery.isNotEmpty) ...[
+          const StickyNote(text: '图集'),
+          const SizedBox(height: 8),
+          ..._result!.gallery.map((g) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildGalleryMatchCard(g),
               )),
           const SizedBox(height: 16),
         ],

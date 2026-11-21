@@ -18,7 +18,9 @@ import '../../theme/app_theme.dart';
 import '../../widgets/hand_drawn.dart';
 
 class GalleryScreen extends StatefulWidget {
-  const GalleryScreen({super.key});
+  /// 从全局搜索跳转时传入：加载完成后自动打开这条图集
+  final String? openItemId;
+  const GalleryScreen({super.key, this.openItemId});
 
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
@@ -39,18 +41,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Timer? _refreshTimer;
   String _galleryRev = ''; // 图集区块指纹：只有变化时才重新拉取
 
-  // 搜索 / 排序（本地过滤，作用于已加载的条目）
-  final _searchCtrl = TextEditingController();
-  String _query = '';
+  // 排序（搜索统一走主界面搜索，这里只保留排序）
   String _order = 'desc'; // desc=最新在前
 
-  /// 过滤 + 排序后的展示列表
+  /// 排序后的展示列表
   List<GalleryItem> get _shownItems {
-    final q = _query.trim().toLowerCase();
-    final list = _items.where((e) {
-      if (q.isEmpty) return true;
-      return e.description.toLowerCase().contains(q);
-    }).toList();
+    final list = _items.toList();
     list.sort((a, b) => _order == 'asc'
         ? a.uploadedAt.compareTo(b.uploadedAt)
         : b.uploadedAt.compareTo(a.uploadedAt));
@@ -61,35 +57,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _query = v),
-              style: AppTheme.bodyStyle.copyWith(fontSize: 14),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: '搜索描述…（${_items.length} 条）',
-                hintStyle: AppTheme.bodyStyle.copyWith(
-                  fontSize: 13,
-                  color: AppColors.muted,
-                ),
-                prefixIcon: const Icon(Icons.search, size: 18),
-                filled: true,
-                fillColor: AppColors.white,
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                border: OutlineInputBorder(
-                  borderRadius: AppTheme.wobblySm,
-                  borderSide:
-                      const BorderSide(color: AppColors.pencil, width: 2),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: AppTheme.wobblySm,
-                  borderSide:
-                      const BorderSide(color: AppColors.pencil, width: 2),
-                ),
-              ),
+          Text(
+            '共 ${_items.length} 条',
+            style: AppTheme.bodyStyle.copyWith(
+              fontSize: 12,
+              color: AppColors.muted,
             ),
           ),
           const SizedBox(width: 8),
@@ -155,7 +129,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -739,8 +712,24 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
   }
 
+  String? _openedInitialId;
+
+  /// 从全局搜索跳转进来：列表就绪后自动打开目标图集（只做一次）
+  void _maybeOpenInitial() {
+    final id = widget.openItemId;
+    if (id == null || id.isEmpty || _openedInitialId == id) return;
+    final idx = _items.indexWhere((e) => e.id == id);
+    if (idx < 0) return;
+    _openedInitialId = id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _viewImage(_items[idx]);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _maybeOpenInitial();
     return Scaffold(
       body: PaperTexture(
         child: _items.isEmpty && _loading

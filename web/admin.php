@@ -7,6 +7,7 @@ require_once 'inc/security.php';
 require_once 'inc/game_time.php';
 require_once 'inc/version.php';
 require_once 'inc/update_apply.php';
+require_once 'inc/gallery_trash.php';
 // 后台页面一律禁止缓存：删除公告等操作后刷新必须拿到最新数据，
 // 避免浏览器缓存导致"删了还在/改了没变"的错觉。
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -364,6 +365,39 @@ if ($isAuthed) {
             $msg = '保存失败：服务器数据目录不可写';
         }
     }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'restore_gallery_trash') {
+        $cid = trim(reqPost('class_id'));
+        $tid = trim(reqPost('id'));
+        if (isset($classes[$cid]) && preg_match('/\A[a-f0-9]{32}\z/D', $tid)) {
+            $entry = galleryTrashForget($cid, $tid);
+            if ($entry !== null) {
+                unset($entry['deleted_at']);
+                Database::updateClassData($cid, 'gallery', function ($latest) use ($entry) {
+                    if (!is_array($latest)) $latest = [];
+                    array_unshift($latest, $entry);
+                    return $latest;
+                });
+                $msg = '已恢复 1 张图集到「' . htmlspecialchars($classes[$cid]['name']) . '」';
+            } else {
+                $msg = '回收站里没有这条记录（可能已被清理）';
+            }
+        }
+    }
+
+    if (isset($_POST['action']) && $_POST['action'] === 'purge_gallery_trash') {
+        $cid = trim(reqPost('class_id'));
+        $tid = trim(reqPost('id'));
+        if (isset($classes[$cid]) && preg_match('/\A[a-f0-9]{32}\z/D', $tid)) {
+            $entry = galleryTrashForget($cid, $tid);
+            if ($entry !== null) {
+                galleryTrashDeleteFiles($cid, $entry);
+                $msg = '已彻底删除 1 张图集';
+            } else {
+                $msg = '回收站里没有这条记录（可能已被清理）';
+            }
+        }
+    }
 }
 $versionData = Database::read('app_versions.json');
 if (!is_array($versionData)) $versionData = ['latest' => '1.0', 'history' => []];
@@ -395,8 +429,8 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
 .admin-main { flex: 1; min-width: 0; }
 .admin-sections { display: flex; flex-direction: column; }
 /* 视觉顺序（DOM 不动，保证 #sec-* 锚点与已有深链继续可用） */
-#sec-overview { order: 1; } #sec-classes { order: 2; } #sec-announce { order: 3; }
-#sec-display { order: 4; } #sec-app { order: 5; } #sec-games { order: 6; } #sec-update { order: 7; }
+#sec-overview { order: 1; } #sec-classes { order: 2; } #sec-trash { order: 3; }
+#sec-announce { order: 4; } #sec-display { order: 5; } #sec-app { order: 6; } #sec-games { order: 7; } #sec-update { order: 8; }
 @media (max-width: 880px) {
     .admin-shell { flex-direction: column; }
     .admin-side { position: static; width: 100%; flex: none; }
@@ -442,6 +476,7 @@ $versionHistory = array_reverse($versionData['history'] ?? []);
         <div class="admin-side-group">内容</div>
         <a href="#sec-announce" class="admin-side-link">📢 公告管理</a>
         <a href="#sec-display" class="admin-side-link">🖥️ 大屏设置</a>
+        <a href="#sec-trash" class="admin-side-link">🗑️ 图集回收站</a>
         <div class="admin-side-group">系统</div>
         <a href="#sec-app" class="admin-side-link">📱 APP 发布</a>
         <a href="#sec-games" class="admin-side-link">🎮 小游戏时长</a>
@@ -761,6 +796,71 @@ $displayBottomMargin = max(0, (int)($displaySettings['display_bottom_margin'] ??
         </div>
     </form>
 </div>
+<div class="card" id="sec-trash" style="margin-bottom:16px;scroll-margin-top:16px;">
+    <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:10px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;">🗑️ 图集回收站</h2>
+    <p style="font-size:13px;color:#888;line-height:1.7;margin-bottom:10px;">
+        班级里删除的图片 / 视频会在这里保留 7 天（班级端看不到回收站）。到期自动清理，期间可恢复或彻底删除。
+    </p>
+    <?php
+    $trashTotal = 0;
+    foreach ($classes as $cid => $c) {
+        try { galleryTrashPurge($cid); } catch (Throwable $e) {}
+        $trashItems = galleryTrashAll($cid);
+        if (!$trashItems) continue;
+        $trashTotal += count($trashItems);
+        ?>
+        <div style="margin-top:14px;">
+            <div style="font-family:var(--font-heading);font-size:14px;margin-bottom:8px;">
+                <?php echo htmlspecialchars($c['name']); ?>
+                <span style="font-size:12px;color:#999;font-weight:400;">（<?php echo count($trashItems); ?> 条）</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+                <?php foreach ($trashItems as $it):
+                    $tImg = (string)($it['image'] ?? '');
+                    $tIsMp4 = strtolower(pathinfo($tImg, PATHINFO_EXTENSION)) === 'mp4';
+                    $tThumb = $tIsMp4
+                        ? ('video_thumb.php?class_id=' . rawurlencode($cid) . '&file=' . rawurlencode($tImg))
+                        : ('upload.php?class_id=' . rawurlencode($cid) . '&file=' . rawurlencode($tImg));
+                    ?>
+                    <div style="border:2px solid var(--pencil);border-radius:var(--wobbly-sm);background:var(--white);padding:8px;box-shadow:var(--shadow-sm);">
+                        <img src="<?php echo htmlspecialchars($tThumb, ENT_QUOTES, 'UTF-8'); ?>" alt=""
+                             style="width:100%;height:120px;object-fit:cover;border-radius:6px;border:1.5px solid var(--old-paper);background:#f0f0f0;"
+                             onerror="this.style.opacity=0.25;">
+                        <div style="font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?php echo htmlspecialchars((string)($it['description'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                            <?php echo htmlspecialchars((string)($it['description'] ?? '（无描述）')); ?>
+                        </div>
+                        <div style="font-size:11px;color:#999;margin-top:2px;">
+                            <?php echo htmlspecialchars((string)($it['deleted_at'] ?? '')); ?> 删除 · 还剩 <?php echo galleryTrashDaysLeft($it); ?> 天
+                        </div>
+                        <div style="display:flex;gap:6px;margin-top:8px;">
+                            <form method="post" style="flex:1;margin:0;">
+                                <input type="hidden" name="action" value="restore_gallery_trash">
+                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="class_id" value="<?php echo htmlspecialchars($cid, ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="id" value="<?php echo htmlspecialchars((string)($it['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                                <button type="submit" class="btn btn-sm" style="width:100%;">恢复</button>
+                            </form>
+                            <form method="post" style="flex:1;margin:0;"
+                                  onsubmit="return lwConfirmSubmit(this, '彻底删除后文件不可恢复。', { okText: '彻底删除', danger: true })">
+                                <input type="hidden" name="action" value="purge_gallery_trash">
+                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="class_id" value="<?php echo htmlspecialchars($cid, ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="id" value="<?php echo htmlspecialchars((string)($it['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                                <button type="submit" class="btn btn-danger btn-sm" style="width:100%;">彻底删除</button>
+                            </form>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php
+    }
+    if ($trashTotal === 0) {
+        echo '<div style="color:#888;font-size:13px;">回收站是空的</div>';
+    }
+    ?>
+</div>
+
 <div class="card" id="sec-announce" style="margin-bottom:16px;scroll-margin-top:60px;">
     <h2 style="font-family:var(--font-heading);font-size:18px;margin-bottom:16px;border-bottom:2px solid var(--old-paper);padding-bottom:10px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg> 全服公告</h2>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--post-it);border:2px solid var(--pencil);border-radius:var(--wobbly-sm);">

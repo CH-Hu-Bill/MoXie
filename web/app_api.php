@@ -644,11 +644,23 @@ switch ($action) {
             elseif (in_array($task['status'] ?? '', ['completed', 'cancelled'], true)) { $item['type'] = 'history_task'; $history[] = $item; }
         }
         usort($history, function($a, $b) { return $b['date'] <=> $a['date']; });
-        $total = count($wordMatches) + count($pending) + count($history);
+        // 图集：按描述搜索（需求文档「图集搜索」），命中后由 APP 跳转并定位
+        $galleryMatches = [];
+        foreach ((array)Database::getClassData($classId, 'gallery') as $gItem) {
+            $gDesc = (string)($gItem['description'] ?? '');
+            if ($gDesc === '' || mb_stripos($gDesc, $query) === false) continue;
+            if (($gItem['image'] ?? '') === '') continue;
+            $gOut = appGalleryItemOut($gItem, $classId, lwBaseUrl());
+            $gOut['matched'] = 'gallery';
+            $gOut['is_video'] = (($gOut['type'] ?? '') === 'mp4') || !empty($gOut['live_video_url']);
+            $galleryMatches[] = $gOut;
+        }
+        $total = count($wordMatches) + count($pending) + count($history) + count($galleryMatches);
         $data = [
             'words' => ['items' => array_slice($wordMatches, 0, 10), 'total' => count($wordMatches)],
             'pending_tasks' => ['items' => array_slice($pending, 0, 10), 'total' => count($pending)],
             'history_tasks' => ['items' => array_slice($history, 0, 10), 'total' => count($history)],
+            'gallery' => ['items' => array_slice($galleryMatches, 0, 20), 'total' => count($galleryMatches)],
             'total' => $total,
             'has_more' => count($wordMatches) > 10 || count($pending) > 10 || count($history) > 10
         ];

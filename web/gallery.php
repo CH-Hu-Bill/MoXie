@@ -77,7 +77,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
         echo json_encode(['success' => false, 'error' => '请选择图片']); exit;
     }
     $desc = trim(sanitizePlainText(reqPost('description')));
-    if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
+    $isMultiUpload = reqPost('multi') === '1';
+    if ($desc === '' && !$isMultiUpload) { echo json_encode(['success' => false, 'error' => '单文件上传请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
     $isGif = false;
     $isMp4 = false;
@@ -200,7 +201,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'upload_finish') {
     $total = (int)reqPost('total');
     if ($total < 1 || $total > 8192) { echo json_encode(['success' => false, 'error' => '分片参数无效']); exit; }
     $desc = trim(sanitizePlainText(reqPost('description')));
-    if ($desc === '') { echo json_encode(['success' => false, 'error' => '请填写描述']); exit; }
+    $isMultiUpload = reqPost('multi') === '1';
+    if ($desc === '' && !$isMultiUpload) { echo json_encode(['success' => false, 'error' => '单文件上传请填写描述']); exit; }
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
 
     $dir = galleryChunkDir($classId, $uid);
@@ -312,54 +314,6 @@ if (isset($_POST['action']) && $_POST['action'] === 'delete_gallery') {
     echo json_encode(['success' => true, 'trashed' => $removed !== null]); exit;
 }
 
-// ========== list_trash ==========
-if (isset($_POST['action']) && $_POST['action'] === 'list_trash') {
-    header('Content-Type: application/json; charset=UTF-8');
-    $items = [];
-    foreach (galleryTrashAll($classId) as $entry) {
-        $image = (string)($entry['image'] ?? '');
-        $isMp4 = strtolower(pathinfo($image, PATHINFO_EXTENSION)) === 'mp4';
-        $items[] = [
-            'id' => (string)($entry['id'] ?? ''),
-            'description' => (string)($entry['description'] ?? ''),
-            'deleted_at' => (string)($entry['deleted_at'] ?? ''),
-            'days_left' => galleryTrashDaysLeft($entry),
-            'thumb' => $isMp4
-                ? ('video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($image))
-                : ('upload.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($image)),
-            'is_video' => $isMp4,
-        ];
-    }
-    echo json_encode(['success' => true, 'items' => $items], JSON_UNESCAPED_UNICODE); exit;
-}
-
-// ========== restore_trash ==========
-if (isset($_POST['action']) && $_POST['action'] === 'restore_trash') {
-    header('Content-Type: application/json; charset=UTF-8');
-    requireCsrf();
-    $id = reqPost('id');
-    if (!preg_match('/\A[a-f0-9]{32}\z/D', $id)) { echo json_encode(['success' => false, 'error' => '无效ID']); exit; }
-    $entry = galleryTrashForget($classId, $id);
-    if ($entry === null) { echo json_encode(['success' => false, 'error' => '回收站里没有这条']); exit; }
-    unset($entry['deleted_at']);
-    Database::updateClassData($classId, 'gallery', function($latest) use ($entry) {
-        if (!is_array($latest)) $latest = [];
-        array_unshift($latest, $entry);
-        return $latest;
-    });
-    echo json_encode(['success' => true]); exit;
-}
-
-// ========== purge_trash（彻底删除，不可恢复）==========
-if (isset($_POST['action']) && $_POST['action'] === 'purge_trash') {
-    header('Content-Type: application/json; charset=UTF-8');
-    requireCsrf();
-    $id = reqPost('id');
-    if (!preg_match('/\A[a-f0-9]{32}\z/D', $id)) { echo json_encode(['success' => false, 'error' => '无效ID']); exit; }
-    $entry = galleryTrashForget($classId, $id);
-    if ($entry !== null) galleryTrashDeleteFiles($classId, $entry);
-    echo json_encode(['success' => true]); exit;
-}
 ?>
 <?php $pageTitle = '班级图集'; require 'inc/head.php'; ?>
 <body>
@@ -373,43 +327,30 @@ require 'inc/header.php';
 ?>
 
 <div class="content">
-    <div class="card mb-4" id="uploadCard">
-        <h3 style="font-family:var(--font-heading);margin-bottom:12px;color:var(--pencil);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> 上传图片 / 视频</h3>
-        <div class="upload-form" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;">
-            <div class="upload-preview-wrap" id="uploadPreviewWrap" style="display:none;width:100%;justify-content:center;margin-bottom:6px;">
-                <div style="position:relative;max-width:100%;overflow:hidden;">
-                    <img id="uploadPreview" alt="" style="display:none;max-width:100%;max-height:180px;border-radius:var(--wobbly-sm);border:2px solid var(--pencil);box-shadow:var(--shadow-sm);">
-                    <video id="uploadPreviewVideo" style="display:none;max-width:100%;max-height:180px;border-radius:var(--wobbly-sm);border:2px solid var(--pencil);box-shadow:var(--shadow-sm);" controls muted playsinline></video>
-                    <span class="gif-badge" id="previewGifBadge" style="display:none;">GIF</span>
-                    <span class="gif-badge mp4-badge" id="previewMp4Badge" style="display:none;">MP4</span>
-                </div>
+    <!-- 上传弹窗（S6）：右下角 + 打开，支持单文件/多文件 -->
+    <div id="uploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:6200;align-items:center;justify-content:center;padding:20px;">
+        <div class="card" style="width:100%;max-width:680px;max-height:86vh;overflow:auto;padding:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+                <h3 style="font-family:var(--font-heading);font-size:17px;margin:0;">上传到图集</h3>
+                <button type="button" class="btn btn-sm" onclick="closeUpload()">关闭</button>
             </div>
-            <div id="uploadHint" style="width:100%;text-align:center;font-size:13px;color:var(--red);min-height:18px;margin-bottom:4px;"></div>
-            <label class="input upload-file-btn" for="galleryImage" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;min-width:220px;flex:1;">
-                <span id="uploadFileName"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（JPG/PNG/WebP/GIF/MP4）</span>
-                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" style="display:none;" onchange="previewUpload()">
+            <label class="input upload-file-btn" for="galleryImage" style="display:flex;align-items:center;gap:8px;cursor:pointer;border-style:dashed;justify-content:center;padding:14px;">
+                <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（可多选）</span>
+                <input type="file" id="galleryImage" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" multiple style="display:none;" onchange="onFilesPicked()">
             </label>
-            <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="flex:2;min-width:250px;">
-            <button class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
-            <button class="btn" onclick="clearUpload()" id="clearBtn" style="display:none;">清除</button>
-            <button class="btn" onclick="openTrash()" title="删除的图片/视频保留 7 天，可恢复">🗑️ 回收站</button>
-        </div>
-    </div>
-
-    <!-- 回收站（S5）：删除先进回收站，7 天后自动清理 -->
-    <div id="trashModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:6000;align-items:center;justify-content:center;padding:20px;">
-        <div class="card" style="width:100%;max-width:720px;max-height:82vh;overflow:auto;padding:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;">
-                <h3 style="font-family:var(--font-heading);font-size:17px;margin:0;">🗑️ 回收站 <span style="font-size:12px;color:#888;font-weight:400;">（保留 7 天，可恢复）</span></h3>
-                <button class="btn btn-sm" onclick="closeTrash()">关闭</button>
+            <div id="uploadPreviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:12px;"></div>
+            <input type="text" class="input" id="galleryDesc" placeholder="写一段关于这张图片/视频的话…" maxlength="500" style="margin-top:12px;">
+            <div id="uploadDescHint" style="font-size:12px;color:#999;margin-top:6px;"></div>
+            <div id="uploadHint" style="font-size:13px;color:var(--red);min-height:18px;margin-top:6px;"></div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+                <button type="button" class="btn" onclick="closeUpload()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="uploadGallery()" id="uploadBtn">上传</button>
             </div>
-            <div id="trashList" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
     </div>
 
-    <div class="card mb-4" style="font-size:13px;color:#888;">
-<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg> 公开 API：<code class="tag">gallery_api.php?class_id=<?php echo htmlspecialchars($classId); ?></code>，每次随机返回一张图集图片；可在<a href="settings.php?id=<?php echo htmlspecialchars($classId); ?>" style="color:var(--blue);">设置页</a>为本班启用 API 密钥保护，启用后调用需加 <code class="tag">&amp;apikey=你的密钥</code>
-    </div>
+    <button type="button" id="uploadFab" onclick="openUpload()" title="上传图片 / 视频"
+            style="position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;background:var(--blue);color:#fff;border:2.5px solid var(--pencil);box-shadow:4px 4px 0 var(--pencil);font-size:30px;line-height:1;cursor:pointer;z-index:6000;display:flex;align-items:center;justify-content:center;">+</button>
 
     <div class="card mb-4" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <input type="search" class="input" id="galSearch" placeholder="搜索描述…" oninput="renderGallery()" style="flex:2;min-width:200px;">
@@ -420,7 +361,7 @@ require 'inc/header.php';
         <span id="galCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
     </div>
 
-    <div class="gallery-grid" id="galleryGrid" style="columns:280px;column-gap:20px;"></div>
+    <div class="gallery-grid" id="galleryGrid" style="display:block;columns:280px;column-gap:20px;"></div>
     <div class="empty-state" id="emptyState" style="display:none"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-8px;"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><p>还没有图片，上传第一张吧</p></div>
 </div>
 
@@ -529,7 +470,7 @@ function renderGallery() {
             + (isLive ? '<span class="gif-badge" style="background:var(--blue);">实况</span>' : '')
             + '</div>'
             + '<div class="info" style="padding:14px 16px;">'
-            + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(item.description) + '</div>'
+            + '<div class="desc" style="font-size:14px;line-height:1.6;color:var(--pencil);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + (item.description ? escapeHtml(item.description) : '<span style="color:#bbb;">未填写描述</span>') + '</div>'
             + '<div class="meta" style="font-size:12px;color:#888;margin-top:8px;display:flex;justify-content:space-between;align-items:center;"><span class="date"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ' + dateText + '</span>'
             + '<span style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="event.stopPropagation();editGallery(\'' + item.id + '\')" style="padding:2px 10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
             + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteGallery(\'' + item.id + '\')">🗑️</button></span>'
@@ -730,204 +671,202 @@ function lbDescScroll() {
     box.addEventListener('touchend', function() { setTimeout(lbDescScroll, 2000); });
 })();
 
-function previewUpload() {
+// ── 上传（S6）：右下角 + 打开弹窗，支持单文件 / 多文件 ──
+var pendingFiles = [];
+
+function openUpload() {
+    document.getElementById('uploadModal').style.display = 'flex';
+    renderPending();
+}
+function closeUpload() {
+    document.getElementById('uploadModal').style.display = 'none';
+    clearPending();
+}
+function clearPending() {
+    pendingFiles.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
+    pendingFiles = [];
     var input = document.getElementById('galleryImage');
-    var wrap = document.getElementById('uploadPreviewWrap');
-    var img = document.getElementById('uploadPreview');
-    var video = document.getElementById('uploadPreviewVideo');
-    var gifBadge = document.getElementById('previewGifBadge');
-    var mp4Badge = document.getElementById('previewMp4Badge');
-    var nameEl = document.getElementById('uploadFileName');
-    var clearBtn = document.getElementById('clearBtn');
-    var btn = document.getElementById('uploadBtn');
+    if (input) input.value = '';
+    var desc = document.getElementById('galleryDesc');
+    if (desc) desc.value = '';
     var hint = document.getElementById('uploadHint');
-    if (!input.files || !input.files[0]) return;
-    var file = input.files[0];
-    if (nameEl) nameEl.textContent = file.name;
-    var ext = (file.name.split('.').pop() || '').toLowerCase();
-    var isGif = ext === 'gif';
-    var isMp4 = ext === 'mp4' || ext === 'mov';
-    if (gifBadge) gifBadge.style.display = isGif ? '' : 'none';
-    if (mp4Badge) mp4Badge.style.display = isMp4 ? '' : 'none';
-    img.style.display = 'none';
-    video.style.display = 'none';
-    if (video.src) { URL.revokeObjectURL(video.src); video.removeAttribute('src'); }
-    btn.disabled = false;
-    btn.textContent = '上传';
     if (hint) hint.textContent = '';
-
-    // 格式预校验
-    var imgExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-    if (!imgExts.includes(ext) && !isMp4) {
-        if (hint) hint.textContent = '不支持的文件格式：' + file.name + '（仅支持 JPG/PNG/WebP/GIF/MP4）';
-        btn.disabled = true;
-        btn.textContent = '无法上传';
-        wrap.style.display = 'flex';
-        if (clearBtn) clearBtn.style.display = '';
-        return;
-    }
-
-    // 大小预校验
-    var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
-    var maxLabel = isMp4 ? LW_LIMIT_LABEL.mp4 : (isGif ? LW_LIMIT_LABEL.gif : LW_LIMIT_LABEL.image);
-    if (file.size > maxBytes) {
-        if (hint) hint.textContent = '文件过大：' + (file.size / 1024 / 1024).toFixed(1) + 'MB（' + maxLabel + ' 以内）';
-        btn.disabled = true;
-        btn.textContent = '无法上传';
-        wrap.style.display = 'flex';
-        if (clearBtn) clearBtn.style.display = '';
-        return;
-    }
-
-    if (isMp4) {
-        video.src = URL.createObjectURL(file);
-        video.style.display = '';
-        video.muted = true;
-        video.load();
-        // 视频时长预校验（≤30s）
-        video.onloadedmetadata = function() {
-            if (video.duration && video.duration > 30.5) {
-                if (hint) hint.textContent = '视频时长 ' + Math.round(video.duration) + ' 秒，不能超过 30 秒';
-                btn.disabled = true;
-                btn.textContent = '无法上传';
-            }
-        };
+    renderPending();
+}
+function addFiles(list) {
+    var added = 0;
+    Array.prototype.forEach.call(list || [], function (f) {
+        if (!f) return;
+        var isVideo = f.type && f.type.indexOf('video/') === 0;
+        pendingFiles.push({ file: f, url: isVideo ? '' : URL.createObjectURL(f) });
+        added++;
+    });
+    if (!added) return;
+    document.getElementById('uploadModal').style.display = 'flex';
+    renderPending();
+}
+function onFilesPicked() {
+    var input = document.getElementById('galleryImage');
+    addFiles(input.files);
+    input.value = '';
+}
+function removePending(i) {
+    var p = pendingFiles[i];
+    if (!p) return;
+    if (p.url) URL.revokeObjectURL(p.url);
+    pendingFiles.splice(i, 1);
+    renderPending();
+}
+function renderPending() {
+    var box = document.getElementById('uploadPreviewList');
+    if (!box) return;
+    var descEl = document.getElementById('galleryDesc');
+    var descHint = document.getElementById('uploadDescHint');
+    if (pendingFiles.length === 1) {
+        descEl.placeholder = '写一段关于这张图片/视频的话…（必填）';
+        descHint.textContent = '单文件上传需要填写描述';
+    } else if (pendingFiles.length > 1) {
+        descEl.placeholder = '多文件上传可不填描述（留空显示“未填写描述”）';
+        descHint.textContent = '已选 ' + pendingFiles.length + ' 个文件';
     } else {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            img.src = e.target.result;
-            img.style.display = '';
-        };
-        reader.readAsDataURL(file);
+        descEl.placeholder = '写一段关于这张图片/视频的话…';
+        descHint.textContent = '';
     }
-    wrap.style.display = 'flex';
-    if (clearBtn) clearBtn.style.display = '';
+    box.innerHTML = pendingFiles.map(function (p, i) {
+        var f = p.file;
+        var ext = (f.name.split('.').pop() || '').toLowerCase();
+        var isMp4 = ext === 'mp4' || ext === 'mov';
+        var maxBytes = isMp4 ? LW_LIMITS.mp4 : (ext === 'gif' ? LW_LIMITS.gif : LW_LIMITS.image);
+        var tooBig = f.size > maxBytes;
+        var media = isMp4
+            ? '<div style="width:100%;height:88px;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:12px;color:#888;">🎬 视频</div>'
+            : '<img src="' + p.url + '" alt="" style="width:100%;height:88px;object-fit:cover;">';
+        return '<div style="position:relative;border:2px solid ' + (tooBig ? 'var(--red)' : 'var(--pencil)') + ';border-radius:8px;overflow:hidden;background:#fff;">'
+            + media
+            + '<button type="button" onclick="removePending(' + i + ')" title="移除" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;line-height:1;">×</button>'
+            + '<div style="padding:4px 6px;font-size:11px;line-height:1.3;">'
+            + '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(f.name) + '">' + escapeHtml(f.name) + '</div>'
+            + '<div style="color:' + (tooBig ? 'var(--red)' : '#999') + ';">' + (f.size / 1048576).toFixed(1) + 'MB' + (tooBig ? ' 超出上限' : '') + '</div>'
+            + '</div></div>';
+    }).join('');
 }
 
-function clearUpload() {
-    document.getElementById('galleryImage').value = '';
-    document.getElementById('galleryDesc').value = '';
-    var wrap = document.getElementById('uploadPreviewWrap');
-    wrap.style.display = 'none';
-    var img = document.getElementById('uploadPreview');
-    var video = document.getElementById('uploadPreviewVideo');
-    var hint = document.getElementById('uploadHint');
-    if (hint) hint.textContent = '';
-    img.style.display = 'none'; img.src = '';
-    if (video.src) URL.revokeObjectURL(video.src);
-    video.removeAttribute('src'); video.style.display = 'none';
-    document.getElementById('uploadFileName').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> 点击选择 / 拖拽 / Ctrl+V 粘贴（JPG/PNG/WebP/GIF/MP4）';
-    document.getElementById('clearBtn').style.display = 'none';
-    document.getElementById('uploadBtn').disabled = false;
-    document.getElementById('uploadBtn').textContent = '上传';
+function uploadOneFile(file, desc, multi) {
+    return new Promise(function (resolve, reject) {
+        var fd = new FormData();
+        fd.append('action', 'save_gallery');
+        fd.append('image', file);
+        fd.append('description', desc);
+        fd.append('multi', multi);
+        fd.append('csrf_token', document.getElementById('csrfToken').value);
+        var controller = new AbortController();
+        var timeoutMs = file.size > 30 * 1048576 ? 300000 : 60000;
+        var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+        fetch('gallery.php?id=' + classId, { method: 'POST', body: fd, signal: controller.signal })
+            .then(function (resp) { return resp.text(); })
+            .then(function (txt) {
+                clearTimeout(timer);
+                var r;
+                try { r = JSON.parse(txt); } catch (e) { reject(new Error('服务器响应异常')); return; }
+                if (!r.success) { reject(new Error(r.error || '上传失败')); return; }
+                resolve(r);
+            })
+            .catch(function (e) {
+                clearTimeout(timer);
+                reject(new Error(e.name === 'AbortError' ? '上传超时' : '网络错误'));
+            });
+    });
 }
 
 async function uploadGallery() {
-    var fileInput = document.getElementById('galleryImage');
-    var desc = document.getElementById('galleryDesc').value.trim();
     var hint = document.getElementById('uploadHint');
+    var btn = document.getElementById('uploadBtn');
     if (hint) hint.textContent = '';
-    if (!fileInput.files || !fileInput.files[0]) { showToast('请选择文件'); return; }
-    if (!desc) { showToast('请填写描述'); return; }
-    var file = fileInput.files[0];
-    var ext = (file.name.split('.').pop() || '').toLowerCase();
-    var isMp4 = ext === 'mp4' || ext === 'mov';
-    var isGif = ext === 'gif';
-    var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
-    if (file.size > maxBytes) { showToast(isMp4 ? ('视频最大 ' + LW_LIMIT_LABEL.mp4) : (isGif ? ('GIF 最大 ' + LW_LIMIT_LABEL.gif) : ('图片最大 ' + LW_LIMIT_LABEL.image))); return; }
-    // 大视频走分片上传：绕开 PHP post_max_size，硬上限 1GB
-    if (isMp4 && file.size > 16 * 1048576) { await uploadChunkedGallery(file, desc); return; }
-    if (!isMp4 && !['jpg','jpeg','png','webp','gif'].includes(ext)) { showToast('不支持的文件格式'); return; }
-    var btn = document.getElementById('uploadBtn'); btn.disabled = true; btn.textContent = '上传中…';
-    var fd = new FormData();
-    fd.append('action', 'save_gallery');
-    fd.append('image', file);
-    fd.append('description', desc);
-    fd.append('csrf_token', document.getElementById('csrfToken').value);
-    // 大文件给更长超时：200MB 在慢速局域网上传需要更久
-    var controller = new AbortController();
-    var timeoutMs = file.size > 30 * 1048576 ? 300000 : 60000;
-    var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
-    try {
-        var resp = await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd, signal: controller.signal });
-        // 先取文本再解析：服务器若混入 PHP 警告/错误会破坏 JSON，给用户明确提示而非晦涩的"网络错误"
-        var txt = await resp.text();
-        var r;
-        try { r = JSON.parse(txt); } catch (e) {
-            var msg = '服务器响应异常' + (resp.ok ? '' : '（HTTP ' + resp.status + '）') + '，请重试';
-            showToast(msg);
-            if (hint) hint.textContent = '上传失败：' + msg;
+    if (!pendingFiles.length) { showToast('请选择文件'); return; }
+    var desc = document.getElementById('galleryDesc').value.trim();
+    if (pendingFiles.length === 1 && !desc) { showToast('单文件上传请填写描述'); return; }
+
+    for (var i = 0; i < pendingFiles.length; i++) {
+        var f = pendingFiles[i].file;
+        var ext = (f.name.split('.').pop() || '').toLowerCase();
+        var isMp4 = ext === 'mp4' || ext === 'mov';
+        var isGif = ext === 'gif';
+        if (!isMp4 && !isGif && ['jpg', 'jpeg', 'png', 'webp'].indexOf(ext) < 0) {
+            showToast('不支持的文件格式：' + f.name);
             return;
         }
-        if (r.success) {
-            showToast('上传成功');
-            clearUpload();
-            // 局部刷新网格（不整页跳转，保留滚动位置）
-            var j = await (await fetch('gallery.php?id=' + classId + '&json=1', { cache: 'no-store' })).json();
-            if (j.success) { galleryData = j.items || []; renderGallery(); }
-        } else {
-            var em = r.error || '上传失败，请重试';
-            showToast(em);
-            if (hint) hint.textContent = '上传失败：' + em;
+        var maxBytes = isMp4 ? LW_LIMITS.mp4 : (isGif ? LW_LIMITS.gif : LW_LIMITS.image);
+        if (f.size > maxBytes) { showToast('「' + f.name + '」超过大小上限'); return; }
+    }
+
+    var multi = pendingFiles.length > 1 ? '1' : '0';
+    var okCount = 0, failCount = 0;
+    btn.disabled = true;
+    try {
+        for (var j = 0; j < pendingFiles.length; j++) {
+            var file = pendingFiles[j].file;
+            btn.textContent = '上传中 ' + (j + 1) + '/' + pendingFiles.length;
+            var e2 = (file.name.split('.').pop() || '').toLowerCase();
+            var mp42 = e2 === 'mp4' || e2 === 'mov';
+            try {
+                if (mp42 && file.size > 16 * 1048576) {
+                    await uploadChunkedGallery(file, desc, multi);
+                } else {
+                    await uploadOneFile(file, desc, multi);
+                }
+                okCount++;
+            } catch (err) {
+                failCount++;
+                if (hint) hint.textContent = '「' + file.name + '」失败：' + (err.message || '网络错误');
+            }
         }
-    } catch(e) {
-        var msg2 = e.name === 'AbortError' ? '上传超时，请检查网络或换小一点的文件' : '网络错误，请重试';
-        showToast(msg2);
-        if (hint) hint.textContent = '上传失败：' + msg2;
-    } finally { clearTimeout(timer); }
-    btn.disabled = false; btn.textContent = '上传';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '上传';
+    }
+    if (okCount > 0) {
+        showToast('上传完成 ' + okCount + ' 个' + (failCount ? '，失败 ' + failCount + ' 个' : ''));
+        closeUpload();
+        await refreshGalleryGrid();
+    }
 }
 
 // 分片上传：8MB 一片，最后服务端拼装 + MP4 校验；支持到 1GB
-async function uploadChunkedGallery(file, desc) {
+async function uploadChunkedGallery(file, desc, multi) {
     var hint = document.getElementById('uploadHint');
-    var btn = document.getElementById('uploadBtn');
     var csrf = document.getElementById('csrfToken').value;
     var CHUNK = LW_LIMITS.chunk || 8388608;
     var total = Math.ceil(file.size / CHUNK);
     var bytes = new Uint8Array(16);
     (window.crypto || window.msCrypto).getRandomValues(bytes);
     var uid = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
-    btn.disabled = true;
-    btn.textContent = '上传中…';
-    if (hint) hint.textContent = '';
-    try {
-        for (var i = 0; i < total; i++) {
-            var blob = file.slice(i * CHUNK, Math.min(file.size, (i + 1) * CHUNK));
-            var fd = new FormData();
-            fd.append('action', 'upload_chunk');
-            fd.append('upload_id', uid);
-            fd.append('index', String(i));
-            fd.append('total', String(total));
-            fd.append('chunk', blob, 'part');
-            fd.append('csrf_token', csrf);
-            var resp = await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd });
-            var txt = await resp.text();
-            var r = null;
-            try { r = JSON.parse(txt); } catch (e) { throw new Error('服务器响应异常（HTTP ' + resp.status + '）'); }
-            if (!r.success) throw new Error(r.error || ('第 ' + (i + 1) + ' 片上传失败'));
-            if (hint) hint.textContent = '上传中 ' + Math.round((i + 1) / total * 100) + '%（' + (i + 1) + '/' + total + ' 片）';
-        }
-        if (hint) hint.textContent = '正在拼装与校验…';
-        var fd2 = new FormData();
-        fd2.append('action', 'upload_finish');
-        fd2.append('upload_id', uid);
-        fd2.append('total', String(total));
-        fd2.append('description', desc);
-        fd2.append('csrf_token', csrf);
-        var r2 = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd2 })).json();
-        if (!r2.success) throw new Error(r2.error || '拼装失败');
-        if (hint) hint.textContent = '';
-        showToast('上传成功');
-        clearUpload();
-        await refreshGalleryGrid();
-    } catch (e) {
-        if (hint) hint.textContent = '上传失败：' + (e.message || '网络错误');
-        showToast(e.message || '上传失败');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '上传';
+    for (var i = 0; i < total; i++) {
+        var blob = file.slice(i * CHUNK, Math.min(file.size, (i + 1) * CHUNK));
+        var fd = new FormData();
+        fd.append('action', 'upload_chunk');
+        fd.append('upload_id', uid);
+        fd.append('index', String(i));
+        fd.append('total', String(total));
+        fd.append('chunk', blob, 'part');
+        fd.append('csrf_token', csrf);
+        var resp = await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd });
+        var txt = await resp.text();
+        var r = null;
+        try { r = JSON.parse(txt); } catch (e) { throw new Error('服务器响应异常（HTTP ' + resp.status + '）'); }
+        if (!r.success) throw new Error(r.error || ('第 ' + (i + 1) + ' 片上传失败'));
+        if (hint) hint.textContent = file.name + '：' + Math.round((i + 1) / total * 100) + '%（' + (i + 1) + '/' + total + ' 片）';
     }
+    if (hint) hint.textContent = file.name + '：正在拼装与校验…';
+    var fd2 = new FormData();
+    fd2.append('action', 'upload_finish');
+    fd2.append('upload_id', uid);
+    fd2.append('total', String(total));
+    fd2.append('description', desc);
+    fd2.append('multi', multi || '0');
+    fd2.append('csrf_token', csrf);
+    var r2 = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd2 })).json();
+    if (!r2.success) throw new Error(r2.error || '拼装失败');
+    if (hint) hint.textContent = '';
 }
 
 async function deleteGallery(id) {
@@ -946,70 +885,12 @@ async function deleteGallery(id) {
     } catch(e) { showToast('删除失败'); }
 }
 
-// ── 回收站（S5）──
-async function openTrash() {
-    document.getElementById('trashModal').style.display = 'flex';
-    await loadTrash();
-}
-function closeTrash() {
-    document.getElementById('trashModal').style.display = 'none';
-}
-
-async function trashPost(action, id) {
-    var fd = new FormData();
-    fd.append('action', action);
-    if (id) fd.append('id', id);
-    fd.append('csrf_token', document.getElementById('csrfToken').value);
-    try {
-        var r = await (await fetch('gallery.php?id=' + classId, { method: 'POST', body: fd })).json();
-        if (!r.success) { showToast(r.error || '操作失败'); return null; }
-        return r;
-    } catch (e) { showToast('网络异常'); return null; }
-}
-
-async function loadTrash() {
-    var box = document.getElementById('trashList');
-    box.innerHTML = '<div style="color:#888;font-size:13px;">加载中…</div>';
-    var r = await trashPost('list_trash');
-    if (!r) { box.innerHTML = '<div style="color:var(--red);font-size:13px;">读取失败</div>'; return; }
-    var items = r.items || [];
-    if (!items.length) {
-        box.innerHTML = '<div style="color:#888;font-size:13px;">回收站是空的</div>';
-        return;
-    }
-    box.innerHTML = items.map(function(it) {
-        return '<div style="display:flex;gap:12px;align-items:center;border:2px solid var(--pencil);border-radius:var(--wobbly-sm);padding:8px;background:var(--white);">'
-            + '<img src="' + it.thumb + '" alt="" style="width:84px;height:63px;object-fit:cover;border-radius:6px;border:1.5px solid var(--old-paper);flex:0 0 auto;background:#f0f0f0;">'
-            + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(it.description || '（无描述）') + '</div>'
-            + '<div style="font-size:11px;color:#999;margin-top:3px;">' + it.deleted_at + ' 删除 · 还剩 ' + it.days_left + ' 天</div>'
-            + '</div>'
-            + '<button class="btn btn-sm" onclick="restoreTrash(\'' + it.id + '\')">恢复</button>'
-            + '<button class="btn btn-danger btn-sm" onclick="purgeTrash(this, \'' + it.id + '\')">彻底删除</button>'
-            + '</div>';
-    }).join('');
-}
-
+// 回收站移到管理员后台（班级侧不提供入口）
 async function refreshGalleryGrid() {
     try {
         var j = await (await fetch('gallery.php?id=' + classId + '&json=1', { cache: 'no-store' })).json();
         if (j.success) { galleryData = j.items || []; renderGallery(); }
     } catch (e) {}
-}
-
-async function restoreTrash(id) {
-    if (!await trashPost('restore_trash', id)) return;
-    showToast('已恢复');
-    await loadTrash();
-    await refreshGalleryGrid();
-}
-
-// 彻底删除不用原生 confirm：第一次点变成「再点一次确认」，4 秒后回落
-async function purgeTrash(btn, id) {
-    if (!await lwConfirm('彻底删除后文件不可恢复。', { title: '彻底删除？', okText: '彻底删除', danger: true })) return;
-    if (!await trashPost('purge_trash', id)) return;
-    showToast('已彻底删除');
-    await loadTrash();
 }
 
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -1047,13 +928,7 @@ function setupUploadHelpers() {
     var input = document.getElementById('galleryImage');
     var dropZone = input.closest('.upload-file-btn');
     var setFile = function(f) {
-        if (!f) return;
-        try {
-            var dt = new DataTransfer();
-            dt.items.add(f);
-            input.files = dt.files;
-        } catch (err) {}
-        previewUpload();
+        if (f) addFiles([f]);
     };
     if (dropZone) {
         ['dragenter', 'dragover'].forEach(function(ev) {
@@ -1073,8 +948,8 @@ function setupUploadHelpers() {
             });
         });
         dropZone.addEventListener('drop', function(e) {
-            var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-            setFile(f);
+            e.preventDefault();
+            addFiles(e.dataTransfer && e.dataTransfer.files);
         });
     }
     document.addEventListener('paste', function(e) {

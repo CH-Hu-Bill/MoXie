@@ -98,7 +98,7 @@ class Mp4Guard {
 
             $duration = $info['duration'];
             if ($duration <= 0) throw new RuntimeException('MP4 文件损坏（时长无效）');
-            if ($duration > $maxSeconds) {
+            if ($maxSeconds > 0 && $duration > $maxSeconds) {
                 throw new RuntimeException('视频时长不能超过 ' . $maxSeconds . ' 秒（当前 ' . round($duration, 1) . ' 秒）');
             }
 

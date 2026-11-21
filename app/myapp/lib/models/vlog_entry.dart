@@ -1,3 +1,5 @@
+import 'gallery_item.dart';
+
 class VlogEntry {
   final String date;
   final String content;
@@ -53,12 +55,14 @@ class SearchResult {
   final List<WordMatch> words;
   final List<TaskMatch> pendingTasks;
   final List<TaskMatch> historyTasks;
+  final List<GalleryItem> gallery;
   final int total;
 
   SearchResult({
     this.words = const [],
     this.pendingTasks = const [],
     this.historyTasks = const [],
+    this.gallery = const [],
     this.total = 0,
   });
 
@@ -74,6 +78,10 @@ class SearchResult {
           [],
       historyTasks: ((json['history_tasks']?['items']) as List<dynamic>?)
               ?.map((t) => TaskMatch.fromJson(t as Map<String, dynamic>))
+              .toList() ??
+          [],
+      gallery: ((json['gallery']?['items']) as List<dynamic>?)
+              ?.map((g) => GalleryItem.fromJson(g as Map<String, dynamic>))
               .toList() ??
           [],
       total: json['total'] ?? 0,
