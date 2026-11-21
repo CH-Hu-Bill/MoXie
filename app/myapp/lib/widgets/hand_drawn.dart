@@ -1320,8 +1320,8 @@ class SentenceCard extends StatelessWidget {
         color: highlight ? AppColors.postIt : AppColors.white,
         borderRadius: AppTheme.wobblyRadius,
         border: Border.all(
-          color: isWrong ? AppColors.red : AppColors.pencil,
-          width: isWrong ? 3 : 2,
+          color: isWrong ? AppColors.red : (highlight ? AppColors.blue : AppColors.pencil),
+          width: isWrong ? 3 : (highlight ? 3 : 2),
         ),
         boxShadow: [
           BoxShadow(
@@ -1407,8 +1407,8 @@ class EssayCard extends StatelessWidget {
         color: highlight ? AppColors.postIt : AppColors.white,
         borderRadius: AppTheme.wobblyRadius,
         border: Border.all(
-          color: isWrong ? AppColors.red : AppColors.pencil,
-          width: isWrong ? 3 : 2,
+          color: isWrong ? AppColors.red : (highlight ? AppColors.blue : AppColors.pencil),
+          width: isWrong ? 3 : (highlight ? 3 : 2),
         ),
         boxShadow: [
           BoxShadow(
@@ -1560,8 +1560,8 @@ class WordCard extends StatelessWidget {
         color: highlight ? AppColors.postIt : AppColors.white,
         borderRadius: AppTheme.wobblyRadius,
         border: Border.all(
-          color: isWrong ? AppColors.red : AppColors.pencil,
-          width: isWrong ? 3 : 2,
+          color: isWrong ? AppColors.red : (highlight ? AppColors.blue : AppColors.pencil),
+          width: isWrong ? 3 : (highlight ? 3 : 2),
         ),
         boxShadow: [
           BoxShadow(
