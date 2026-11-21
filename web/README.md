@@ -60,7 +60,7 @@
 | 数据库 | 无，使用 JSON 文件存储（`inc/db.php` 封装，原子写入 + 文件锁） |
 | APP 运行环境 | Android 7.0（API 24）+ |
 | 最低兼容版本 | Web 要求 APP **2.0.0+**；APP 要求 Web **2.0.0+** |
-| 当前正式版本 | Web **2.1.3** / APP **2.1.2** |
+| 当前正式版本 | Web **2.1.4** / APP **2.1.2** |
 | 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；中文字体 [ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（**自托管于 `web/fonts/`，无外部 CDN**）；可选英文字体 **Andika**（`web/fonts/Andika-*.ttf`，班级设置页切换）；富文本编辑器 [Quill 2.x](https://quilljs.com)（**本地 `web/lib/quill/`**）；手写板基于 **快捷白板 8.2.5 / ParkerStudio**（`web/lib/handwrite/`）；图标 **Font Awesome Free 6.5.0**（`web/lib/fontawesome/`）；内置 2048 来自 [gabrielecirulli/2048](https://github.com/gabrielecirulli/2048)（MIT，`web/games/2048/`）；数独工坊来自 [mini-browser-games](https://github.com/wangzifan396-wzf/mini-browser-games)（MIT，`web/games/mini/`）；别踩白块来自 [DontTapTheWhiteTile](https://github.com/zero-icespirit/DontTapTheWhiteTile)（MIT）；拳皇来自 [kaiyanWang/kof](https://github.com/kaiyanWang/kof)（原仓库未附许可证，含本地触屏改动）；人生重开模拟器来自 [AliyunWorkbench/lifeRestart](https://github.com/AliyunWorkbench/lifeRestart)（上游 [VickScarlet/lifeRestart](https://github.com/VickScarlet/lifeRestart)，MIT）；拳皇使用本地 `jquery-3.3.1.min.js` |
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 | 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |

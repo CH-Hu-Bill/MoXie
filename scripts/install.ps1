@@ -232,7 +232,14 @@ if (-not (Test-Path $cfg)) {
     $adminPw = 'admin' + (Get-Random -Minimum 1000 -Maximum 9999)
     $tpl = Get-Content (Join-Path $WebDir 'inc\config.example.php') -Raw -Encoding UTF8
     $tpl = $tpl -replace "'replace-with-at-least-32-random-characters'", "'$secret'"
-    $tpl = $tpl -replace "'change-this-password'", "'$adminPw'"
+    # 当前模板使用 admin_password_hash；用 PHP 生成 bcrypt，避免明文落盘。
+    # 注意用 .Replace() 而不是 -replace，bcrypt 里的 $ 不能交给正则替换解析。
+    $adminHash = (& $phpExe -r "echo password_hash('$adminPw', PASSWORD_DEFAULT);").Trim()
+    if ([string]::IsNullOrWhiteSpace($adminHash)) { throw '生成管理员密码哈希失败' }
+    $tpl = $tpl.Replace("'admin_password_hash' => '',", "'admin_password_hash' => '$adminHash',")
+    if ($tpl -match "'admin_password_hash'\s*=>\s*''") {
+        throw '管理员密码初始化失败：config.example.php 中未找到 admin_password_hash 占位行'
+    }
     # 必须写为「无 BOM 的 UTF-8」：BOM 会在 PHP 输出 header 前产生字节，破坏 JSON/重定向
     [System.IO.File]::WriteAllText($cfg, $tpl, (New-Object System.Text.UTF8Encoding($false)))
     Ok '已生成 web/inc/config.php'
