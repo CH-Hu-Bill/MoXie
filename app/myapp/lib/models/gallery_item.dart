@@ -9,6 +9,8 @@ class GalleryItem {
   final bool isVideo;
   final bool isLive;
   final String liveVideoUrl;
+  final int width;
+  final int height;
 
   GalleryItem({
     required this.id,
@@ -21,6 +23,8 @@ class GalleryItem {
     this.isVideo = false,
     this.isLive = false,
     this.liveVideoUrl = '',
+    this.width = 0,
+    this.height = 0,
   });
 
   factory GalleryItem.fromJson(Map<String, dynamic> json) {
@@ -40,6 +44,8 @@ class GalleryItem {
           type == 'mp4' || (imageUrl as String).toLowerCase().contains('.mp4'),
       isLive: type == 'live' || liveVideoUrl.isNotEmpty,
       liveVideoUrl: liveVideoUrl,
+      width: (json['width'] is num) ? (json['width'] as num).toInt() : 0,
+      height: (json['height'] is num) ? (json['height'] as num).toInt() : 0,
     );
   }
 
@@ -47,12 +53,13 @@ class GalleryItem {
         'id': id,
         'image_url': imageUrl,
         'thumb_url': thumbUrl,
-        'type': isLive
-            ? 'live'
-            : (isVideo ? 'mp4' : (isGif ? 'gif' : 'static')),
+        'type':
+            isLive ? 'live' : (isVideo ? 'mp4' : (isGif ? 'gif' : 'static')),
         'live_video_url': liveVideoUrl,
         'description': description,
         'uploaded_at': uploadedAt,
         'uploader_name': uploaderName,
+        'width': width,
+        'height': height,
       };
 }

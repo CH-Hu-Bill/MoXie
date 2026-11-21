@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:motion_photos/motion_photos.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:video_compress/video_compress.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:video_player/video_player.dart';
 import '../../models/gallery_item.dart';
@@ -27,10 +29,17 @@ class GalleryScreen extends StatefulWidget {
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
-  static const _maxBytes = 12582912; // 静态图 12MB
+  static const _maxBytes = 104857600; // 图片硬上限 100MB
   static const _gifMaxBytes = 16777216; // GIF 动图 16MB
-  static const _mp4MaxBytes = 209715200; // MP4 视频 200MB
-  static const _allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+  static const _allowedExts = [
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'gif',
+    'mp4',
+    'mov'
+  ];
   final _api = ApiService();
   final _storage = StorageService();
   List<GalleryItem> _items = [];
@@ -241,7 +250,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
         a.isVideo == b.isVideo &&
         a.isGif == b.isGif &&
         a.isLive == b.isLive &&
-        a.liveVideoUrl == b.liveVideoUrl;
+        a.liveVideoUrl == b.liveVideoUrl &&
+        a.width == b.width &&
+        a.height == b.height;
   }
 
   void _showUploadMenu() {
@@ -261,20 +272,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
               Text('上传到画廊', style: AppTheme.headingStyle),
               const SizedBox(height: 16),
               _UploadMenuTile(
-                icon: Icons.photo_outlined,
-                label: '上传图片（JPG / PNG / WebP / GIF）',
+                icon: Icons.perm_media_outlined,
+                label: '选择图片 / 视频（可多选，1GB 以内）',
                 onTap: () {
                   Navigator.pop(ctx);
-                  _pickAndUploadImage();
-                },
-              ),
-              const SizedBox(height: 10),
-              _UploadMenuTile(
-                icon: Icons.videocam_outlined,
-                label: '上传视频（MP4，3 分钟 / 200MB 以内）',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickAndUploadVideo();
+                  _pickAndUploadMedia();
                 },
               ),
               const SizedBox(height: 10),
@@ -293,14 +295,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    // 不限制 maxWidth/maxHeight：避免 image_picker 重新采样导致 GIF 动图丢失动画
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null || !mounted) return;
-    await _uploadPickedImage(File(image.path), image.name);
-  }
-
   /// 兜底：直接选原图文件，确保 motion 元数据不被 image_picker 副本丢掉。
   Future<void> _pickAndUploadLive() async {
     FilePickerResult? result;
@@ -308,7 +302,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
       result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
-        allowCompression: false,
       );
     } catch (_) {
       if (mounted) {
@@ -323,6 +316,54 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final path = picked?.path;
     if (path == null) return;
     await _uploadPickedImage(File(path), picked!.name, preferLive: true);
+  }
+
+  Future<void> _pickAndUploadMedia() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.media,
+        allowMultiple: true,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('打开文件选择器失败，请重试')),
+        );
+      }
+      return;
+    }
+    if (result == null) return;
+    final pending = <_GalleryPendingFile>[];
+    for (final f in result.files) {
+      final path = f.path;
+      if (path == null) continue;
+      final ext = f.name.split('.').last.toLowerCase();
+      if (!_allowedExts.contains(ext)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已跳过不支持的文件：${f.name}')),
+          );
+        }
+        continue;
+      }
+      pending.add(_GalleryPendingFile(
+        file: File(path),
+        name: f.name,
+        isVideo: ext == 'mp4' || ext == 'mov',
+        isGif: ext == 'gif',
+      ));
+    }
+    if (pending.isEmpty || !mounted) return;
+    final uploaded = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _GalleryUploadReviewPage(files: pending),
+      ),
+    );
+    if (uploaded == true) {
+      _loadGallery(reset: true);
+    }
   }
 
   Future<File?> _extractLiveVideo(String path) async {
@@ -352,7 +393,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isGif ? 'GIF 动图大小不能超过 16MB' : '图片大小不能超过 12MB'),
+            content: Text(isGif ? 'GIF 动图大小不能超过 16MB' : '图片大小不能超过 100MB'),
           ),
         );
       }
@@ -464,65 +505,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
     controller.dispose();
     return result;
-  }
-
-  Future<void> _pickAndUploadVideo() async {
-    final picker = ImagePicker();
-    final video = await picker.pickVideo(
-      source: ImageSource.gallery,
-      maxDuration: const Duration(seconds: 30),
-    );
-    if (video == null) return;
-
-    final ext = video.name.split('.').last.toLowerCase();
-    if (ext != 'mp4' && ext != 'mov') {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('仅支持 MP4 / MOV 视频格式')));
-      }
-      return;
-    }
-    final fileSize = await video.length();
-    if (fileSize > _mp4MaxBytes) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('视频大小不能超过 200MB')));
-      }
-      return;
-    }
-
-    final descController = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        scrollable: true,
-        backgroundColor: AppColors.background,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppTheme.wobblyRadius,
-          side: const BorderSide(color: AppColors.border, width: 2),
-        ),
-        title: Text('添加描述', style: AppTheme.headingStyle),
-        content: TextField(
-          controller: descController,
-          decoration: const InputDecoration(hintText: '描述这段视频...'),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: AppTheme.bodyStyle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, descController.text.trim()),
-            child: Text('上传', style: AppTheme.bodyStyle),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    await _uploadFile(File(video.path), result);
   }
 
   Future<void> _uploadFile(File file, String desc, {File? liveVideo}) async {
@@ -690,6 +672,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         isVideo: e.isVideo,
                         isLive: e.isLive,
                         liveVideoUrl: e.liveVideoUrl,
+                        width: e.width,
+                        height: e.height,
                       )
                     : e,
               )
@@ -710,6 +694,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
         ).showSnackBar(SnackBar(content: Text('更新失败: $e')));
       }
     }
+  }
+
+  /// 瀑布流卡片比例：服务端有真实宽高就用真实比例，旧数据回退到 4:3 / 16:9。
+  double _itemAspect(GalleryItem item) {
+    if (item.width > 0 && item.height > 0) {
+      return (item.width / item.height).clamp(0.6, 1.8);
+    }
+    return item.isVideo ? 16 / 9 : 4 / 3;
   }
 
   String? _openedInitialId;
@@ -735,134 +727,157 @@ class _GalleryScreenState extends State<GalleryScreen> {
         child: _items.isEmpty && _loading
             ? const Center(child: CircularProgressIndicator())
             : _items.isEmpty
-            ? const EmptyState(message: '画廊还是空的，上传第一张图片吧', icon: Icons.photo)
-            : Column(
-                children: [
-                  _buildGalleryBar(),
-                  Expanded(
-                    child: RefreshIndicator(
-                onRefresh: () => _loadGallery(reset: true),
-                color: AppColors.red,
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notif) {
-                    if (notif is ScrollEndNotification &&
-                        notif.metrics.pixels >=
-                            notif.metrics.maxScrollExtent - 100 &&
-                        _hasMore &&
-                        !_loading) {
-                      _loadGallery(reset: false);
-                    }
-                    return false;
-                  },
-                  child: GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.75,
-                        ),
-                    itemCount: _shownItems.length,
-                    itemBuilder: (ctx, i) {
-                      final item = _shownItems[i];
-                      return HandDrawnCard(
-                        padding: EdgeInsets.zero,
-                        onTap: () => _viewImage(item),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(18),
-                                  topRight: Radius.circular(18),
-                                ),
-                                child: item.isVideo
-                                    ? (item.thumbUrl.isNotEmpty
-                                          ? _VideoThumbView(
-                                              thumbUrl: item.thumbUrl,
-                                              videoUrl: item.imageUrl,
-                                            )
-                                          : _VideoThumbnail(
-                                              videoUrl: item.imageUrl,
-                                            ))
-                                    : item.isGif
-                                    ? _GifThumbnail(imageUrl: item.imageUrl)
-                                    : CachedNetworkImage(
-                                        imageUrl: item.imageUrl,
-                                        fit: BoxFit.cover,
-                                        placeholder: (_, __) => Container(
-                                          color: AppColors.oldPaper,
-                                          child: const Center(
-                                            child: CircularProgressIndicator(
-                                              color: AppColors.red,
-                                              strokeWidth: 2,
+                ? const EmptyState(
+                    message: '画廊还是空的，上传第一张图片吧', icon: Icons.photo)
+                : Column(
+                    children: [
+                      _buildGalleryBar(),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: () => _loadGallery(reset: true),
+                          color: AppColors.red,
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: (notif) {
+                              if (notif is ScrollEndNotification &&
+                                  notif.metrics.pixels >=
+                                      notif.metrics.maxScrollExtent - 100 &&
+                                  _hasMore &&
+                                  !_loading) {
+                                _loadGallery(reset: false);
+                              }
+                              return false;
+                            },
+                            child: MasonryGridView.count(
+                              padding: const EdgeInsets.all(12),
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              itemCount: _shownItems.length,
+                              itemBuilder: (ctx, i) {
+                                final item = _shownItems[i];
+                                return HandDrawnCard(
+                                  padding: EdgeInsets.zero,
+                                  onTap: () => _viewImage(item),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      AspectRatio(
+                                        aspectRatio: _itemAspect(item),
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                topLeft: Radius.circular(18),
+                                                topRight: Radius.circular(18),
+                                              ),
+                                              child: item.isVideo
+                                                  ? (item.thumbUrl.isNotEmpty
+                                                      ? _VideoThumbView(
+                                                          thumbUrl:
+                                                              item.thumbUrl,
+                                                          videoUrl:
+                                                              item.imageUrl,
+                                                        )
+                                                      : _VideoThumbnail(
+                                                          videoUrl:
+                                                              item.imageUrl,
+                                                        ))
+                                                  : item.isGif
+                                                      ? _GifThumbnail(
+                                                          imageUrl:
+                                                              item.imageUrl)
+                                                      : CachedNetworkImage(
+                                                          imageUrl:
+                                                              item.imageUrl,
+                                                          fit: BoxFit.cover,
+                                                          placeholder:
+                                                              (_, __) =>
+                                                                  Container(
+                                                            color: AppColors
+                                                                .oldPaper,
+                                                            child: const Center(
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                color: AppColors
+                                                                    .red,
+                                                                strokeWidth: 2,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          errorWidget:
+                                                              (_, __, ___) =>
+                                                                  Container(
+                                                            color:
+                                                                AppColors.muted,
+                                                            child: const Center(
+                                                              child: Icon(
+                                                                Icons
+                                                                    .broken_image,
+                                                                size: 40,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
                                             ),
-                                          ),
-                                        ),
-                                        errorWidget: (_, __, ___) => Container(
-                                          color: AppColors.muted,
-                                          child: const Center(
-                                            child: Icon(
-                                              Icons.broken_image,
-                                              size: 40,
-                                            ),
-                                          ),
+                                            if (item.isLive)
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: _LiveBadge(),
+                                              ),
+                                          ],
                                         ),
                                       ),
-                                  ),
-                                  if (item.isLive)
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: _LiveBadge(),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.description,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.bodyStyle.copyWith(
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  if (item.uploaderName.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        item.uploaderName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTheme.bodyStyle.copyWith(
-                                          fontSize: 11,
-                                          color: AppColors.muted,
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            8, 8, 8, 8),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.description.isEmpty
+                                                  ? '未填写描述'
+                                                  : item.description,
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  AppTheme.bodyStyle.copyWith(
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            if (item.uploaderName.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 2),
+                                                child: Text(
+                                                  item.uploaderName,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTheme.bodyStyle
+                                                      .copyWith(
+                                                    fontSize: 11,
+                                                    color: AppColors.muted,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                          ],
+                          ),
                         ),
-                      );
-                    },
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showUploadMenu,
@@ -974,37 +989,37 @@ class _GalleryViewerScreen extends StatelessWidget {
                 child: item.isVideo
                     ? _VideoViewer(videoUrl: item.imageUrl)
                     : item.isLive
-                    ? _LiveViewer(item: item)
-                    : InteractiveViewer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 3,
-                            ),
-                            borderRadius: AppTheme.wobblyRadius,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: AppTheme.wobblyRadius,
-                            child: item.isGif
-                                ? _GifViewer(imageUrl: item.imageUrl)
-                                : CachedNetworkImage(
-                                    imageUrl: item.imageUrl,
-                                    fit: BoxFit.contain,
-                                    placeholder: (_, __) => const Center(
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
+                        ? _LiveViewer(item: item)
+                        : InteractiveViewer(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: AppColors.border,
+                                  width: 3,
+                                ),
+                                borderRadius: AppTheme.wobblyRadius,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: AppTheme.wobblyRadius,
+                                child: item.isGif
+                                    ? _GifViewer(imageUrl: item.imageUrl)
+                                    : CachedNetworkImage(
+                                        imageUrl: item.imageUrl,
+                                        fit: BoxFit.contain,
+                                        placeholder: (_, __) => const Center(
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        errorWidget: (_, __, ___) => const Icon(
+                                          Icons.broken_image,
+                                          size: 64,
+                                          color: AppColors.muted,
+                                        ),
                                       ),
-                                    ),
-                                    errorWidget: (_, __, ___) => const Icon(
-                                      Icons.broken_image,
-                                      size: 64,
-                                      color: AppColors.muted,
-                                    ),
-                                  ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
               ),
             ),
             if (item.description.isNotEmpty)
@@ -1084,26 +1099,26 @@ class _GifThumbnailState extends State<_GifThumbnail> {
       },
       child: _visible
           ? _cachedFile != null
-                ? Image.file(
-                    _cachedFile!,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: AppColors.muted,
-                      child: const Center(
-                        child: Icon(Icons.broken_image, size: 40),
-                      ),
-                    ),
-                  )
-                : Container(
-                    color: AppColors.oldPaper,
+              ? Image.file(
+                  _cachedFile!,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: AppColors.muted,
                     child: const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.red,
-                        strokeWidth: 2,
-                      ),
+                      child: Icon(Icons.broken_image, size: 40),
                     ),
-                  )
+                  ),
+                )
+              : Container(
+                  color: AppColors.oldPaper,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.red,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                )
           : Container(color: AppColors.oldPaper),
     );
   }
@@ -1297,7 +1312,8 @@ class _VideoThumbView extends StatelessWidget {
               ? Container(
                   color: AppColors.muted,
                   child: const Center(
-                    child: Icon(Icons.videocam, size: 40, color: Colors.white70),
+                    child:
+                        Icon(Icons.videocam, size: 40, color: Colors.white70),
                   ),
                 )
               : _VideoThumbnail(videoUrl: videoUrl),
@@ -1735,6 +1751,555 @@ class _VideoViewerState extends State<_VideoViewer> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _GalleryPendingFile {
+  final File file;
+  final String name;
+  final bool isVideo;
+  final bool isGif;
+  int originalSize = 0;
+  File? compressed;
+  int compressedSize = 0;
+  bool compressing = false;
+  String? error;
+  bool useCompressed = true;
+  String? thumbPath;
+  String? compressedThumbPath;
+
+  _GalleryPendingFile({
+    required this.file,
+    required this.name,
+    required this.isVideo,
+    required this.isGif,
+  });
+
+  File get uploadFile =>
+      useCompressed && compressed != null ? compressed! : file;
+
+  int get uploadSize =>
+      useCompressed && compressed != null ? compressedSize : originalSize;
+}
+
+/// 上传前的预览/压缩/描述页：支持单文件与多文件。
+class _GalleryUploadReviewPage extends StatefulWidget {
+  final List<_GalleryPendingFile> files;
+  const _GalleryUploadReviewPage({required this.files});
+
+  @override
+  State<_GalleryUploadReviewPage> createState() =>
+      _GalleryUploadReviewPageState();
+}
+
+class _GalleryUploadReviewPageState extends State<_GalleryUploadReviewPage> {
+  static const _imageMax = 104857600;
+  static const _gifMax = 16777216;
+  static const _videoMax = 1073741824;
+  static const _imageRecommend = 15728640;
+  static const _videoRecommend = 52428800;
+
+  final _desc = TextEditingController();
+  final _api = ApiService();
+  bool _preparing = true;
+  bool _compress = true;
+  bool _uploading = false;
+  double _quality = 80;
+  int _compressSeq = 0;
+
+  bool get _single => widget.files.length == 1;
+  bool get _anyOverRecommend => widget.files.any((p) =>
+      (!p.isVideo && !p.isGif && p.originalSize > _imageRecommend) ||
+      (p.isVideo && p.originalSize > _videoRecommend));
+
+  @override
+  void initState() {
+    super.initState();
+    _prepare();
+  }
+
+  @override
+  void dispose() {
+    _desc.dispose();
+    super.dispose();
+  }
+
+  Future<void> _prepare() async {
+    for (final p in widget.files) {
+      try {
+        p.originalSize = await p.file.length();
+        if (p.isVideo) {
+          final thumb = await VideoCompress.getFileThumbnail(
+            p.file.path,
+            quality: 60,
+            position: 0,
+          );
+          p.thumbPath = thumb.path;
+        }
+      } catch (e) {
+        p.error = '读取文件失败';
+      }
+    }
+    if (!mounted) return;
+    setState(() => _preparing = false);
+    if (_compress) await _compressAll();
+  }
+
+  bool _needsCompress(_GalleryPendingFile p) {
+    if (p.isGif) return false;
+    if (p.isVideo) return p.originalSize > _videoRecommend;
+    return p.originalSize > _imageRecommend;
+  }
+
+  VideoQuality _videoQuality(double q) {
+    if (q < 72) return VideoQuality.LowQuality;
+    if (q < 88) return VideoQuality.MediumQuality;
+    return VideoQuality.HighestQuality;
+  }
+
+  Future<void> _compressAll() async {
+    if (!_compress) return;
+    final seq = ++_compressSeq;
+    for (final p in widget.files) {
+      if (!_needsCompress(p) || p.compressing) continue;
+      p.compressing = true;
+      p.error = null;
+      if (mounted) setState(() {});
+      try {
+        if (p.isVideo) {
+          final info = await VideoCompress.compressVideo(
+            p.file.path,
+            quality: _videoQuality(_quality),
+            deleteOrigin: false,
+            includeAudio: true,
+          );
+          final path = info?.path;
+          if (path != null) {
+            final out = File(path);
+            final size = await out.length();
+            if (size < p.originalSize) {
+              p.compressed = out;
+              p.compressedSize = size;
+              p.useCompressed = true;
+              try {
+                final thumb = await VideoCompress.getFileThumbnail(
+                  path,
+                  quality: 60,
+                  position: 0,
+                );
+                p.compressedThumbPath = thumb.path;
+              } catch (_) {}
+            }
+          }
+        } else {
+          final dir = await getTemporaryDirectory();
+          final target =
+              '${dir.path}/lw_gallery_${DateTime.now().microsecondsSinceEpoch}.webp';
+          final out = await FlutterImageCompress.compressAndGetFile(
+            p.file.path,
+            target,
+            quality: _quality.round(),
+            minWidth: 1600,
+            minHeight: 1600,
+            format: CompressFormat.webp,
+          );
+          if (out != null) {
+            final size = await out.length();
+            if (size < p.originalSize) {
+              p.compressed = File(out.path);
+              p.compressedSize = size;
+              p.useCompressed = true;
+            }
+          }
+        }
+      } catch (e) {
+        p.error = '压缩失败，可改用原文件上传';
+        p.useCompressed = false;
+      } finally {
+        if (seq == _compressSeq) p.compressing = false;
+      }
+      if (!mounted || seq != _compressSeq) return;
+      setState(() {});
+    }
+  }
+
+  void _clearCompressed() {
+    _compressSeq++;
+    for (final p in widget.files) {
+      p.compressed = null;
+      p.compressedSize = 0;
+      p.compressedThumbPath = null;
+      p.useCompressed = false;
+      p.compressing = false;
+      p.error = null;
+    }
+    if (mounted) setState(() {});
+  }
+
+  int _maxFor(_GalleryPendingFile p) {
+    if (p.isVideo) return _videoMax;
+    if (p.isGif) return _gifMax;
+    return _imageMax;
+  }
+
+  Future<void> _upload() async {
+    if (_preparing || _uploading) return;
+    if (_single && _desc.text.trim().isEmpty) {
+      _toast('单文件上传请填写描述');
+      return;
+    }
+    for (final p in widget.files) {
+      if (p.compressing) {
+        _toast('压缩还没完成，请稍候');
+        return;
+      }
+      if (p.originalSize > _maxFor(p) && p.compressed == null) {
+        _toast('「${p.name}」超过大小上限，请压缩或移除');
+        return;
+      }
+      if (p.uploadSize > _maxFor(p)) {
+        _toast('「${p.name}」压缩后仍超过大小上限');
+        return;
+      }
+    }
+
+    final auth = context.read<AuthProvider>();
+    final classId = auth.currentClassId;
+    if (classId == null || classId.isEmpty) {
+      _toast('请先选择班级');
+      return;
+    }
+    final multi = widget.files.length > 1;
+    final desc = _desc.text.trim();
+    setState(() => _uploading = true);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const LoadingOverlay(message: '上传中...'),
+    );
+    try {
+      for (final p in widget.files) {
+        final file = p.uploadFile;
+        final size = await file.length();
+        if (size > 16 * 1024 * 1024) {
+          await _api.saveGalleryChunked(
+            classId,
+            file,
+            desc,
+            multi: multi,
+          );
+        } else {
+          await _api.saveGallery(
+            classId,
+            file,
+            desc,
+            multi: multi,
+          );
+        }
+      }
+      if (!mounted) return;
+      Navigator.pop(context); // loading
+      Navigator.pop(context, true); // review page
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _toast(e.message.isEmpty ? '上传失败' : e.message);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _toast('网络错误，请检查网络后重试');
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  void _toast(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  void _remove(int index) {
+    setState(() => widget.files.removeAt(index));
+    if (widget.files.isEmpty) Navigator.pop(context, false);
+  }
+
+  String _mb(int bytes) => (bytes / 1048576).toStringAsFixed(1);
+
+  Widget _preview(_GalleryPendingFile p, {required bool compressed}) {
+    File? file;
+    if (compressed) {
+      if (p.isVideo) {
+        file =
+            p.compressedThumbPath == null ? null : File(p.compressedThumbPath!);
+      } else {
+        file = p.compressed;
+      }
+    } else {
+      if (p.isVideo) {
+        file = p.thumbPath == null ? null : File(p.thumbPath!);
+      } else {
+        file = p.file;
+      }
+    }
+    return Container(
+      height: 86,
+      decoration: BoxDecoration(
+        color: AppColors.oldPaper,
+        borderRadius: AppTheme.wobblySm,
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: file == null
+          ? const Center(child: Icon(Icons.videocam_outlined, size: 30))
+          : Image.file(
+              file,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              cacheWidth: 360,
+            ),
+    );
+  }
+
+  Widget _fileCard(_GalleryPendingFile p, int index) {
+    final overRecommend =
+        (!p.isVideo && !p.isGif && p.originalSize > _imageRecommend) ||
+            (p.isVideo && p.originalSize > _videoRecommend);
+    final overMax = p.originalSize > _maxFor(p);
+    return HandDrawnCard(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  p.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.bodyStyle.copyWith(fontSize: 13),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: '移除',
+                onPressed: _uploading ? null : () => _remove(index),
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            ],
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    _preview(p, compressed: false),
+                    const SizedBox(height: 4),
+                    Text(
+                      '原图 ${_mb(p.originalSize)}MB',
+                      style: AppTheme.bodyStyle.copyWith(
+                        fontSize: 11,
+                        color: overMax ? AppColors.red : AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  children: [
+                    _preview(p, compressed: true),
+                    const SizedBox(height: 4),
+                    Text(
+                      p.compressed != null
+                          ? '压缩后 ${_mb(p.compressedSize)}MB'
+                          : (p.compressing
+                              ? '压缩中…'
+                              : (overRecommend ? '未压缩' : '无需压缩')),
+                      style: AppTheme.bodyStyle.copyWith(
+                        fontSize: 11,
+                        color: p.compressed != null
+                            ? AppColors.blue
+                            : AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (p.error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                p.error!,
+                style: AppTheme.bodyStyle.copyWith(
+                  fontSize: 11,
+                  color: AppColors.red,
+                ),
+              ),
+            ),
+          if (overMax && p.compressed == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '超过硬上限，请压缩或移除',
+                style: AppTheme.bodyStyle.copyWith(
+                  fontSize: 11,
+                  color: AppColors.red,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_single ? '上传文件' : '上传 ${widget.files.length} 个文件'),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.pencil,
+      ),
+      body: PaperTexture(
+        child: _preparing
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.red))
+            : Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                      children: [
+                        if (_anyOverRecommend)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.postIt,
+                              borderRadius: AppTheme.wobblySm,
+                              border: Border.all(
+                                  color: AppColors.border, width: 1.5),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value: _compress,
+                                      onChanged: _uploading
+                                          ? null
+                                          : (v) {
+                                              setState(
+                                                  () => _compress = v == true);
+                                              if (_compress) {
+                                                _compressAll();
+                                              } else {
+                                                _clearCompressed();
+                                              }
+                                            },
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        '压缩超过建议大小的文件（图片 15MB / 视频 50MB）',
+                                        style: AppTheme.bodyStyle
+                                            .copyWith(fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Slider(
+                                        min: 60,
+                                        max: 95,
+                                        divisions: 7,
+                                        value: _quality,
+                                        label: '${_quality.round()}%',
+                                        onChanged: _uploading || !_compress
+                                            ? null
+                                            : (v) =>
+                                                setState(() => _quality = v),
+                                        onChangeEnd: _uploading || !_compress
+                                            ? null
+                                            : (_) => _compressAll(),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_quality.round()}%',
+                                      style: AppTheme.bodyStyle
+                                          .copyWith(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ...widget.files.asMap().entries.map(
+                              (e) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _fileCard(e.value, e.key),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      border: Border(
+                        top: BorderSide(color: AppColors.border, width: 2),
+                      ),
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextField(
+                            controller: _desc,
+                            maxLines: 2,
+                            maxLength: 500,
+                            decoration: InputDecoration(
+                              hintText: _single
+                                  ? '描述这个文件（必填）'
+                                  : '多文件描述（可不填，留空显示未填写描述）',
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _uploading ? '正在上传…' : '上传后将自动刷新图集',
+                                  style: AppTheme.bodyStyle.copyWith(
+                                    fontSize: 11,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                              ),
+                              HandDrawnButton(
+                                label: _uploading ? '上传中…' : '上传',
+                                onPressed: _uploading ? null : _upload,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }

@@ -82,9 +82,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
     if (mb_strlen($desc) > 500) { echo json_encode(['success' => false, 'error' => '描述不能超过500字']); exit; }
     $isGif = false;
     $isMp4 = false;
+    $galleryW = 0;
+    $galleryH = 0;
     if (isset($image['tmp_name']) && is_file($image['tmp_name'])) {
         $info = @getimagesize($image['tmp_name']);
         $isGif = is_array($info) && ($info[2] ?? 0) === IMAGETYPE_GIF;
+        if (is_array($info)) { $galleryW = (int)$info[0]; $galleryH = (int)$info[1]; }
         if (!$isGif) $isMp4 = Database::isMp4File($image['tmp_name']);
     }
     if ($isMp4) {
@@ -122,7 +125,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
 
     $id = bin2hex(random_bytes(16));
     try {
-        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4) {
+        $result = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $filename, $desc, $liveFile, $isMp4, $galleryW, $galleryH) {
             if (!is_array($latest)) $latest = [];
             $item = [
                 'id' => $id,
@@ -130,6 +133,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_gallery') {
                 'description' => $desc,
                 'uploaded_at' => date('Y-m-d H:i:s'),
                 'type' => $liveFile ? 'live' : ($isMp4 ? 'video' : 'image'),
+                'width' => (int)$galleryW,
+                'height' => (int)$galleryH,
                 'uploader_name' => '网页',
             ];
             if ($liveFile) $item['live_video'] = $liveFile;

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' show VoidCallback;
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
@@ -117,8 +118,34 @@ class ApiService {
     }
 
     final streamedResponse = await request.send().timeout(
-          const Duration(seconds: 60),
+          const Duration(seconds: 300),
           onTimeout: () => throw ApiException('上传超时，请重试'),
+        );
+    final response = await http.Response.fromStream(streamedResponse);
+    return _handleResponse(response);
+  }
+
+  /// 发送一个内存中的分片（图集 1GB 分片上传专用）。
+  Future<Map<String, dynamic>> _postMultipartBytes(
+    String action,
+    Map<String, String> fields,
+    String fileField,
+    List<int> bytes,
+    String filename,
+  ) async {
+    final uri = Uri.parse(ApiConfig.apiEndpoint);
+    final request = http.MultipartRequest('POST', uri);
+    request.fields['action'] = action;
+    fields.forEach((key, value) => request.fields[key] = value);
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    request.files.add(http.MultipartFile.fromBytes(
+      fileField,
+      bytes,
+      filename: filename,
+    ));
+    final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 120),
+          onTimeout: () => throw ApiException('分片上传超时，请重试'),
         );
     final response = await http.Response.fromStream(streamedResponse);
     return _handleResponse(response);
@@ -474,10 +501,12 @@ class ApiService {
     File image,
     String description, {
     File? liveVideo,
+    bool multi = false,
   }) {
     final fields = <String, String>{
       'class_id': classId,
       'description': description,
+      if (multi) 'multi': '1',
     };
     final files = <String, File>{'image': image};
     if (liveVideo != null) {
@@ -485,6 +514,54 @@ class ApiService {
       files['live_video'] = liveVideo;
     }
     return _postWithFiles('save_gallery', fields, files);
+  }
+
+  /// 分片上传图集文件（8MB/片，支持到 1GB）。
+  /// 图片/视频都走同一套接口，服务端按魔数识别类型。
+  Future<Map<String, dynamic>> saveGalleryChunked(
+    String classId,
+    File file,
+    String description, {
+    bool multi = false,
+    void Function(double progress)? onProgress,
+  }) async {
+    const chunkSize = 8 * 1024 * 1024;
+    final length = await file.length();
+    if (length <= 0) throw ApiException('文件为空');
+    final total = (length + chunkSize - 1) ~/ chunkSize;
+    final rnd = Random.secure();
+    final uid =
+        List.generate(32, (_) => rnd.nextInt(16).toRadixString(16)).join();
+    final raf = await file.open();
+    try {
+      for (var i = 0; i < total; i++) {
+        await raf.setPosition(i * chunkSize);
+        final bytes = await raf.read(min(chunkSize, length - i * chunkSize));
+        if (bytes.isEmpty) throw ApiException('读取文件失败');
+        await _postMultipartBytes(
+          'upload_gallery_chunk',
+          {
+            'class_id': classId,
+            'upload_id': uid,
+            'index': i.toString(),
+            'total': total.toString(),
+          },
+          'chunk',
+          bytes,
+          'part',
+        );
+        onProgress?.call((i + 1) / total);
+      }
+    } finally {
+      await raf.close();
+    }
+    return _post('upload_gallery_finish', fields: {
+      'class_id': classId,
+      'upload_id': uid,
+      'total': total.toString(),
+      'description': description,
+      if (multi) 'multi': '1',
+    });
   }
 
   Future<void> deleteGallery(String classId, String id) {

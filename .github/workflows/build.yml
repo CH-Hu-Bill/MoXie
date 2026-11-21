@@ -54,7 +54,7 @@ jobs:
           class ApiConfig {
             static String baseUrl = '$API_BASE_URL';
             static String get apiEndpoint => '\$baseUrl/app_api.php';
-            static const String appVersion = '2.0.0';
+            static const String appVersion = '${{ steps.version.outputs.version }}';
             static const String minWebVersion = '2.0.0';
           }
           EOF

@@ -42,6 +42,35 @@ function appRateLimit($bucket, $identity, $max, $windowSec) {
     }
 }
 
+/** APP 图集分片上传：临时目录/清理/校验与 Web 端保持一致（8MB 分片）。 */
+const APP_GALLERY_CHUNK_BYTES = 8388608;
+const APP_GALLERY_CHUNK_MAX_AGE = 3 * 3600;
+function appGalleryChunkRoot($classId) {
+    return Database::getClassDir($classId) . DIRECTORY_SEPARATOR . 'chunks';
+}
+function appGalleryChunkDir($classId, $uploadId) {
+    return appGalleryChunkRoot($classId) . DIRECTORY_SEPARATOR . $uploadId;
+}
+function appGalleryChunkCleanup($classId, $only = null) {
+    $root = appGalleryChunkRoot($classId);
+    if (!is_dir($root)) return;
+    $targets = $only !== null ? [$root . DIRECTORY_SEPARATOR . $only] : (glob($root . DIRECTORY_SEPARATOR . '*') ?: []);
+    foreach ($targets as $dir) {
+        if (!is_dir($dir)) continue;
+        if ($only === null && (time() - (int)@filemtime($dir)) < APP_GALLERY_CHUNK_MAX_AGE) continue;
+        foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) @unlink($f);
+        @rmdir($dir);
+    }
+    @rmdir($root);
+}
+
+/** 图片宽高（用于 APP 瀑布流；读不到时返回 0，客户端回退到默认比例）。 */
+function appGalleryImageDims($tmpPath) {
+    if (!is_string($tmpPath) || !is_file($tmpPath)) return [0, 0];
+    $info = @getimagesize($tmpPath);
+    return is_array($info) ? [(int)$info[0], (int)$info[1]] : [0, 0];
+}
+
 /**
  * 知识库条目统一序列化（单词/句子/作文）。旧数据缺省视为 word。
  */
@@ -409,7 +438,7 @@ if ($action === 'unbind_class') {
     appJson(['success' => true]);
 }
 
-$classActions = ['verify_class_password', 'get_words', 'get_library_meta', 'get_rev', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent', 'get_pronunciations', 'upload_pronunciation', 'delete_pronunciation'];
+$classActions = ['verify_class_password', 'get_words', 'get_library_meta', 'get_rev', 'search_word', 'add_word', 'ai_word', 'mark_wrong', 'unmark_wrong', 'toggle_favorite', 'get_favorites', 'get_tasks', 'get_task_detail', 'export_task_csv', 'export_task_text', 'complete_task', 'cancel_task', 'get_completed_tasks', 'search_all', 'export_words_pdf', 'export_wrong_csv', 'export_wrong_text', 'get_wrong_words', 'export_personal_history', 'get_class_history', 'get_personal_history', 'get_authorized_vlogs', 'save_personal_history', 'upload_image', 'get_gallery', 'save_gallery', 'upload_gallery_chunk', 'upload_gallery_finish', 'update_gallery', 'delete_gallery', 'set_consent', 'get_consent', 'get_pronunciations', 'upload_pronunciation', 'delete_pronunciation'];
 $classId = null;
 if (in_array($action, $classActions, true)) {
     $classId = appStrictId($_POST['class_id'] ?? '', 'class_id');
@@ -1129,11 +1158,103 @@ switch ($action) {
         }
         appJson(['success' => true, 'data' => ['items' => $result, 'total' => $total, 'page' => $page, 'per_page' => $perPage, 'has_more' => ($page * $perPage) < $total]]);
 
+    case 'upload_gallery_chunk':
+        $uid = trim((string)reqPost('upload_id'));
+        if (!preg_match('/\A[a-f0-9]{32}\z/D', $uid)) appError('分片参数无效');
+        $index = (int)reqPost('index');
+        $total = (int)reqPost('total');
+        if ($index < 0 || $total < 1 || $total > 8192 || $index >= $total) appError('分片参数无效');
+        $chunk = $_FILES['chunk'] ?? null;
+        if (!is_array($chunk) || ($chunk['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('分片接收失败');
+        if (($chunk['size'] ?? 0) > APP_GALLERY_CHUNK_BYTES + 1048576) appError('分片过大', null, 413);
+        $dir = appGalleryChunkDir($classId, $uid);
+        if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) appError('临时目录不可用');
+        if (!@move_uploaded_file($chunk['tmp_name'], $dir . DIRECTORY_SEPARATOR . $index . '.part')) appError('分片保存失败');
+        appJson(['success' => true, 'data' => ['index' => $index]]);
+
+    case 'upload_gallery_finish':
+        $uid = trim((string)reqPost('upload_id'));
+        if (!preg_match('/\A[a-f0-9]{32}\z/D', $uid)) appError('分片参数无效');
+        $total = (int)reqPost('total');
+        if ($total < 1 || $total > 8192) appError('分片参数无效');
+        $desc = sanitizePlainText(reqPost('description'));
+        $isMultiUpload = reqPost('multi') === '1';
+        if ($desc === '' && !$isMultiUpload) appError('单文件上传请填写描述');
+        if (mb_strlen($desc) > 500) appError('描述不能超过500字');
+        $dir = appGalleryChunkDir($classId, $uid);
+        if (!is_dir($dir)) appError('分片已过期，请重新上传');
+        $size = 0;
+        for ($i = 0; $i < $total; $i++) {
+            $part = $dir . DIRECTORY_SEPARATOR . $i . '.part';
+            if (!is_file($part)) appError('分片缺失（第 ' . ($i + 1) . ' 片），请重新上传');
+            $size += (int)@filesize($part);
+        }
+        if ($size <= 0 || $size > Database::MP4_MAX_BYTES) {
+            appGalleryChunkCleanup($classId, $uid);
+            appError('文件超过 1GB 上限', null, 413);
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'lwappchunk');
+        $out = @fopen($tmp, 'wb');
+        if (!$out) appError('临时文件不可用');
+        for ($i = 0; $i < $total; $i++) {
+            $in = @fopen($dir . DIRECTORY_SEPARATOR . $i . '.part', 'rb');
+            if ($in) { stream_copy_to_stream($in, $out); fclose($in); }
+        }
+        fclose($out);
+        $isVideo = Database::isMp4File($tmp);
+        $isGif = false;
+        if (!$isVideo) {
+            $infoUp = @getimagesize($tmp);
+            $isGif = is_array($infoUp) && ($infoUp[2] ?? 0) === IMAGETYPE_GIF;
+        }
+        list($galleryW, $galleryH) = appGalleryImageDims($tmp);
+        $maxBytes = $isVideo ? Database::MP4_MAX_BYTES : ($isGif ? Database::GIF_MAX_BYTES : Database::GALLERY_IMAGE_MAX_BYTES);
+        if ($size > $maxBytes) {
+            @unlink($tmp);
+            appGalleryChunkCleanup($classId, $uid);
+            appError($isGif ? 'GIF 动图最大 16MB' : ($isVideo ? '视频最大 1GB' : '图片最大 100MB'), null, 413);
+        }
+        try {
+            $fname = Database::saveUploadedImage($classId, $tmp);
+        } catch (RuntimeException $e) {
+            @unlink($tmp);
+            appGalleryChunkCleanup($classId, $uid);
+            appError($e->getMessage(), null, 413);
+        } finally {
+            @unlink($tmp);
+        }
+        appGalleryChunkCleanup($classId, $uid);
+        $id = bin2hex(random_bytes(16));
+        $user = Database::getUser($userId);
+        try {
+            $res = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc, $isVideo, $isGif, $galleryW, $galleryH, $userId, $user) {
+                if (!is_array($latest)) $latest = [];
+                array_unshift($latest, [
+                    'id' => $id,
+                    'image' => $fname,
+                    'description' => $desc,
+                    'uploaded_at' => date('Y-m-d H:i:s'),
+                    'type' => $isVideo ? 'video' : 'image',
+                    'width' => (int)$galleryW,
+                    'height' => (int)$galleryH,
+                    'uploader_id' => (string)$userId,
+                    'uploader_name' => (string)($user['name'] ?? ''),
+                ]);
+                return $latest;
+            });
+            if ($res === false) throw new RuntimeException('数据保存失败');
+        } catch (Throwable $e) {
+            Database::deleteUploadedImage($classId, $fname);
+            appError('保存失败，请重试');
+        }
+        appJson(['success' => true, 'data' => ['id' => $id, 'chunked' => true]]);
+
     case 'save_gallery':
         if (!isset($_FILES['image']) || !is_array($_FILES['image'])) appError('请选择图片');
         $img = $_FILES['image'];
         if (($img['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) appError('图片上传失败');
         $tmpName = $img['tmp_name'] ?? '';
+        list($galleryW, $galleryH) = appGalleryImageDims($tmpName);
         $isGif = false;
         $isMp4 = false;
         if (is_string($tmpName) && is_file($tmpName)) {
@@ -1148,7 +1269,9 @@ switch ($action) {
             if (($img['size'] ?? 0) > $maxBytes) appError($isGif ? 'GIF 动图最大 16MB' : '图片最大 100MB', null, 413);
         }
         $desc = sanitizePlainText(reqPost('description'));
-        if ($desc === '' || mb_strlen($desc) > 500) appError('描述不能为空且不超过500字');
+        $isMultiUpload = reqPost('multi') === '1';
+        if ($desc === '' && !$isMultiUpload) appError('单文件上传请填写描述');
+        if (mb_strlen($desc) > 500) appError('描述不能超过500字');
 
         $isLiveRequested = reqPost('is_live') === '1';
         $liveWarning = '';
@@ -1194,7 +1317,7 @@ switch ($action) {
         $user = Database::getUser($userId);
         // 首帧缩略图由 CLI 计划任务 cron_gallery_thumbs.php 生成（FPM 无法 exec，此处不内联调用）
         try {
-            $res = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc, $liveFile, $isMp4, $isGif, $userId, $user) {
+            $res = Database::updateClassData($classId, 'gallery', function($latest) use ($id, $fname, $desc, $liveFile, $isMp4, $isGif, $galleryW, $galleryH, $userId, $user) {
                 if (!is_array($latest)) $latest = [];
                 $item = [
                     'id' => $id,
@@ -1202,6 +1325,8 @@ switch ($action) {
                     'description' => $desc,
                     'uploaded_at' => date('Y-m-d H:i:s'),
                     'type' => $liveFile ? 'live' : ($isMp4 ? 'video' : 'image'),
+                    'width' => (int)$galleryW,
+                    'height' => (int)$galleryH,
                     'uploader_id' => (string)$userId,
                     'uploader_name' => (string)($user['name'] ?? ''),
                 ];

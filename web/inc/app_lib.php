@@ -139,6 +139,8 @@ function appGalleryItemOut(array $item, string $classId, string $base): array {
             'thumb_url' => $mediaUrl($imgFile),
             'live_video_url' => $mediaUrl($liveFile),
             'uploader_name' => (string)($item['uploader_name'] ?? ''),
+            'width' => (int)($item['width'] ?? 0),
+            'height' => (int)($item['height'] ?? 0),
         ];
     }
 
@@ -152,5 +154,7 @@ function appGalleryItemOut(array $item, string $classId, string $base): array {
         'thumb_url' => $isMp4 ? ($base . '/video_thumb.php?class_id=' . rawurlencode($classId) . '&file=' . rawurlencode($imgFile)) : null,
         'live_video_url' => null,
         'uploader_name' => (string)($item['uploader_name'] ?? ''),
+        'width' => (int)($item['width'] ?? 0),
+        'height' => (int)($item['height'] ?? 0),
     ];
 }
