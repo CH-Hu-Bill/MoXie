@@ -417,7 +417,7 @@ require 'inc/header.php';
             <option value="desc">最新在前</option>
             <option value="asc">最早在前</option>
         </select>
-        <span id="galCount" style="font-size:12px;color:#888;"></span>
+        <span id="galCount" style="font-size:12px;color:#888;white-space:nowrap;"></span>
     </div>
 
     <div class="gallery-grid" id="galleryGrid" style="columns:280px;column-gap:20px;"></div>

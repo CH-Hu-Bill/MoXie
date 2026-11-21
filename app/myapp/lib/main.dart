@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
@@ -15,9 +16,9 @@ import 'screens/class_selection_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
-  final binding = WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
   // 图片内存缓存上限（S6）：图集多图/视频缩略图时不无限增长，200MB 够两三屏预览
-  binding.imageCache.maximumSizeBytes = 200 << 20;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 200 << 20;
   await StorageService().init();
   // 运行时端点：优先使用用户上次保存的地址
   final saved = StorageService().getServerBaseUrl();
