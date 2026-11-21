@@ -20,6 +20,7 @@
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
 require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/gallery_trash.php';
 
 const THUMB_BUDGET_SECONDS = 50;      // 单次运行时间预算（秒）
 const THUMB_FAIL_RETRY_SECONDS = 3600; // 失败退避：同一文件 1 小时内不再重试
@@ -61,6 +62,8 @@ foreach ($classes as $cid => $c) {
             @touch($failMark);
         }
     }
+    // 顺手清理回收站里超过 7 天的图集（不依赖用户打开页面）
+    try { galleryTrashPurge($cid); } catch (Throwable $e) {}
 }
 
 flock($lock, LOCK_UN);
