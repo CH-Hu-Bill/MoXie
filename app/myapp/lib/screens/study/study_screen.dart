@@ -343,7 +343,12 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
       if (tasksChanged) _loadTasks(classId);
       if (!wordsChanged) return;
 
+      // words 指纹覆盖单词/句子/作文三个板块：别的板块也可能变了，
+      // 先标记为过期，用户切过去时再拉最新（否则只剩计数变了、列表不动）
       final type = _kbTypes[_kbTab];
+      for (final t in _kbTypes) {
+        if (t != type) _kbLoaded[t] = false;
+      }
       if (_kbLoading[type] == true) return; // 正在加载，下轮再补
       final offset =
           _kbScroll[type]!.hasClients ? _kbScroll[type]!.offset : 0.0;
@@ -468,7 +473,8 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     }
     if (!_kbLoaded[type]!) return; // 还没加载完，等加载完成时再触发
     _locateRequestType = null;
-    Future.microtask(() => _locate(type, id, highlight: false));
+    // 自动定位也要给提示：卡片高亮，用户手动滑动后自动清除
+    Future.microtask(() => _locate(type, id, highlight: true));
   }
 
   // ── 错题本 / 任务 ──
