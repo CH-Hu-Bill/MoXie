@@ -6,7 +6,7 @@
  * 旧 APP 仍可读取 check_version 的旧字段；新增字段只增不改。
  */
 
-const LW_WEB_VERSION = '2.1.2';
+const LW_WEB_VERSION = '2.1.3';
 const LW_API_VERSION = 2;
 const LW_MIN_APP_VERSION = '2.0.0';
 const LW_MIN_WEB_VERSION = '2.0.0';

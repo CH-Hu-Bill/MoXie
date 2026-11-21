@@ -60,7 +60,7 @@
 | 数据库 | 无，使用 JSON 文件存储（`inc/db.php` 封装，原子写入 + 文件锁） |
 | APP 运行环境 | Android 7.0（API 24）+ |
 | 最低兼容版本 | Web 要求 APP **2.0.0+**；APP 要求 Web **2.0.0+** |
-| 当前正式版本 | Web **2.1.2** / APP **2.1.2** |
+| 当前正式版本 | Web **2.1.3** / APP **2.1.2** |
 | 前端依赖 | 原生 HTML/CSS/JS；**Hand-Drawn 设计系统**（手绘风格，纸纹理背景，wobbly 不规则边框，硬阴影）；中文字体 [ZCOOL KuaiLe](https://fonts.google.com/specimen/ZCOOL+KuaiLe) + [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（**自托管于 `web/fonts/`，无外部 CDN**）；可选英文字体 **Andika**（`web/fonts/Andika-*.ttf`，班级设置页切换）；富文本编辑器 [Quill 2.x](https://quilljs.com)（**本地 `web/lib/quill/`**）；手写板基于 **快捷白板 8.2.5 / ParkerStudio**（`web/lib/handwrite/`）；图标 **Font Awesome Free 6.5.0**（`web/lib/fontawesome/`）；内置 2048 来自 [gabrielecirulli/2048](https://github.com/gabrielecirulli/2048)（MIT，`web/games/2048/`）；数独工坊来自 [mini-browser-games](https://github.com/wangzifan396-wzf/mini-browser-games)（MIT，`web/games/mini/`）；别踩白块来自 [DontTapTheWhiteTile](https://github.com/zero-icespirit/DontTapTheWhiteTile)（MIT）；拳皇来自 [kaiyanWang/kof](https://github.com/kaiyanWang/kof)（原仓库未附许可证，含本地触屏改动）；人生重开模拟器来自 [AliyunWorkbench/lifeRestart](https://github.com/AliyunWorkbench/lifeRestart)（上游 [VickScarlet/lifeRestart](https://github.com/VickScarlet/lifeRestart)，MIT）；拳皇使用本地 `jquery-3.3.1.min.js` |
 | 外部服务 | [DeepSeek API](https://platform.deepseek.com)（AI 导入单词、名言翻译；可选，不配置则相关功能不可用） |
 | 视频首帧缩略图（可选） | **系统 ffmpeg 4.x**（`/usr/bin/ffmpeg` + `/usr/bin/ffprobe`）+ composer 包 [php-ffmpeg/php-ffmpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg) `^1.4`（`web/composer.json`）。用于 MP4 图集卡片/APP 端首帧预览图；**未安装时优雅降级**（视频卡片直接播放，不影响上传） |
@@ -177,7 +177,7 @@ cp inc/config.example.php inc/config.php
 
 至少修改：
 
-- `admin_password` / `admin_password_hash` — 管理后台密码（推荐 `password_hash`）
+- `admin_password_hash` — 管理后台密码哈希（推荐）。**它非空时 `admin_password` 明文会被忽略**；只有旧配置在 hash 为空时才回退明文登录。
 - `app_secret` — 至少 32 位随机字符串（Cookie 签名 / token 校验）
 - `allowed_origins` — 跨域来源；默认 `[]` 仅同源，局域网/独立前端按需加入白名单
 - `github_token` — 可选，GitHub 只读 Token；后台「检查更新」用它避免匿名 API 限流 403（fine-grained / classic 均可，不需要任何写权限）
@@ -543,8 +543,11 @@ return [
     // AI 接口已改为「按班级」配置（设置 → AI 设置），此处不再需要全局密钥。
 
     // 管理后台密码与 Session 有效期（秒）
-    'admin_password'    => 'change-this-password',
-    'admin_session_ttl' => 1800,
+    // 推荐只填 hash；hash 非空时 admin_password 明文会被忽略。
+    // 生成 hash：php -r "echo password_hash('新密码', PASSWORD_DEFAULT), PHP_EOL;"
+    'admin_password'      => '',
+    'admin_password_hash' => '$2y$10$在这里粘贴password_hash输出',
+    'admin_session_ttl'   => 1800,
 ];
 ```
 

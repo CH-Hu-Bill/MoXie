@@ -13,7 +13,9 @@ return [
     'allowed_origins' => [],
     // 反向代理/隧道地址：只有这些来源的 X-Forwarded-Proto/Host 会被信任
     'trusted_proxies' => ['127.0.0.1', '::1'],
-    // 二选一：优先使用 password_hash 生成的值；留空则回退明文（仅兼容旧配置）
+    // 二选一：推荐只设置 admin_password_hash；它非空时 admin_password 明文会被忽略。
+    // 仅旧配置在 admin_password_hash 为空时才回退明文登录。
+    // 生成 hash：php -r "echo password_hash('新密码', PASSWORD_DEFAULT), PHP_EOL;"
     'admin_password'      => '',
     'admin_password_hash' => '',
     'admin_session_ttl'   => 1800,

@@ -6,7 +6,7 @@
 
 班级默写 + 班级史记应用。本仓库为 **monorepo**，包含 Web 端（PHP 后端 + 浏览器前端）与 APP 端（Flutter Android 客户端）。
 
-- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`2.1.2`　**Web 版本**：`2.1.2`
+- **APP 名称**：ListenWrite　**Android 包名**：`billspace.listenwrite.flutter`　**当前版本**：`2.1.2`　**Web 版本**：`2.1.3`
 - 历史版本与更新说明见 GitHub Releases 与 Web 端 `data/app_versions.json`
 - **开源协议**：[GPL-3.0](LICENSE)
 - **本应用为本地运行设计**：原线上服务器已下线，请在本地电脑启动服务，内网设备通过局域网访问。
@@ -133,10 +133,10 @@ APP 端通过 GitHub Actions 自动构建 APK，无需本地 Flutter 环境。
 | Web 后端 | **PHP 8.0+**（代码使用 `str_contains` 等 PHP 8.0 特性） | **PHP 8.2 / 8.3** |
 | Web 扩展 | GD、cURL、mbstring、fileinfo | 一键更新另需 zip；视频首帧另需 ffmpeg（可选） |
 | APP | **Android 7.0（API 24）+** | Android 8.0+；CI 使用 Flutter 3.50.1 构建 |
-| Web 要求 APP | **2.0.0+** | 建议与 Web 保持 2.1.2 |
-| APP 要求 Web | **2.0.0+** | 建议与 APP 保持 2.1.2 |
+| Web 要求 APP | **2.0.0+** | 当前 APP 正式版 2.1.2 |
+| APP 要求 Web | **2.0.0+** | 当前 Web 正式版 2.1.3 |
 
-> 当前正式版本：**Web 2.1.2 / APP 2.1.2**。最低兼容版本由 `web/inc/version.php` 与 `web/data/app_versions.json` 控制。
+> 当前正式版本：**Web 2.1.3 / APP 2.1.2**。最低兼容版本由 `web/inc/version.php` 与 `web/data/app_versions.json` 控制。
 >
 > 压缩功能已暂停：Web 与 APP 上传时均保留原文件，不再提供图片/视频压缩与前后对比。
 
