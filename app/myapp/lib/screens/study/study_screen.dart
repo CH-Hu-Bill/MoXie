@@ -85,7 +85,8 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
       _kbScroll[t] = ScrollController();
     }
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll(initial: true));
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _loadAll(initial: true));
     // S3：每 10s 拉一次区块指纹（get_rev），只重载变化的那一块
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _pollRevs();
@@ -112,7 +113,9 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     super.didChangeDependencies();
     final auth = context.read<AuthProvider>();
     final classId = auth.currentClassId;
-    if (classId != null && classId.isNotEmpty && classId != _lastLoadedClassId) {
+    if (classId != null &&
+        classId.isNotEmpty &&
+        classId != _lastLoadedClassId) {
       final switched = _lastLoadedClassId != null;
       _lastLoadedClassId = classId;
       // 切班级：清空上一个班的列表/分页/指纹/高亮，避免串数据
@@ -239,13 +242,14 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadKb(String classId, String type, {bool reset = false}) async {
+  Future<void> _loadKb(String classId, String type,
+      {bool reset = false}) async {
     if (_kbLoading[type] == true) return;
     setState(() => _kbLoading[type] = true);
     try {
       final page = reset ? 1 : _kbPage[type]! + 1;
-      final res = await _api.getWords(classId,
-          page: page, perPage: 20, type: type);
+      final res =
+          await _api.getWords(classId, page: page, perPage: 100, type: type);
       if (!mounted) return;
       final data = res['data'] as Map<String, dynamic>;
       // 客户端再按类型兜底过滤：即便服务端较旧未按 type 过滤，也不会串板块
@@ -300,6 +304,49 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// 无感刷新：只拉第一页并按 id 合并，保留已加载的后续页与当前滚动位置。
+  /// 这样新增单词会出现在顶部，但不会把用户拉回第一个区块。
+  Future<void> _refreshKbFirstPage(String classId, String type) async {
+    if (_kbLoading[type] == true) return;
+    final controller = _kbScroll[type]!;
+    final offset = controller.hasClients ? controller.offset : null;
+    final res = await _api.getWords(
+      classId,
+      page: 1,
+      perPage: 100,
+      type: type,
+    );
+    if (!mounted) return;
+    final data = res['data'] as Map<String, dynamic>;
+    final incoming = (data['words'] as List)
+        .map((w) => Word.fromJson(w as Map<String, dynamic>))
+        .where((w) => w.type == type)
+        .toList();
+    final oldById = {for (final w in _kb[type]!) w.id: w};
+    final seen = <String>{};
+    final merged = <Word>[];
+    for (final w in incoming) {
+      merged.add(oldById[w.id] ?? w);
+      seen.add(w.id);
+    }
+    for (final w in _kb[type]!) {
+      if (!seen.contains(w.id)) merged.add(w);
+    }
+    setState(() {
+      _kb[type] = merged;
+      _kbHasMore[type] = data['has_more'] ?? _kbHasMore[type];
+      _kbLoaded[type] = true;
+      _applyMetaData(data);
+    });
+    if (offset != null && controller.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !controller.hasClients) return;
+        final max = controller.position.maxScrollExtent;
+        controller.jumpTo(offset.clamp(0.0, max).toDouble());
+      });
+    }
+  }
+
   /// S3 轮询：只问指纹（get_rev），哪块变了刷哪块。
   /// 首次调用只记录基线——初次加载已经拉过数据，不重复请求。
   Future<void> _pollRevs() async {
@@ -350,14 +397,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
         if (t != type) _kbLoaded[t] = false;
       }
       if (_kbLoading[type] == true) return; // 正在加载，下轮再补
-      final offset =
-          _kbScroll[type]!.hasClients ? _kbScroll[type]!.offset : 0.0;
-      await _loadKb(classId, type, reset: true);
-      if (mounted && _kbScroll[type]!.hasClients) {
-        final max = _kbScroll[type]!.position.maxScrollExtent;
-        _kbScroll[type]!.jumpTo(offset.clamp(0.0, max));
-      }
-      _loadMeta(classId, locate: false);
+      await _refreshKbFirstPage(classId, type);
     } catch (_) {}
   }
 
@@ -527,8 +567,8 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
       final res = await _api.getWrongWords(classId, perPage: 100);
       final data = res['data'] as Map<String, dynamic>;
       final words = (data['words'] as List)
-          .map((w) => Word.fromJson(w as Map<String, dynamic>)
-              .copyWith(isWrong: true))
+          .map((w) =>
+              Word.fromJson(w as Map<String, dynamic>).copyWith(isWrong: true))
           .toList();
       if (!mounted) return;
       if (!_sameWordList(_wrongWords, words)) {
@@ -675,9 +715,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
                 ],
                 HandDrawnInput(
                   controller: contentCtrl,
-                  label: isWord
-                      ? '单词'
-                      : (isEssay ? '作文内容（英文）' : '句子（英文）'),
+                  label: isWord ? '单词' : (isEssay ? '作文内容（英文）' : '句子（英文）'),
                   hint: isWord ? 'english' : 'English text ...',
                   maxLines: isWord ? 1 : (isEssay ? 5 : 3),
                   validator: (v) =>
@@ -702,8 +740,7 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
                 ],
                 const SizedBox(height: 20),
                 HandDrawnButton(
-                  label:
-                      aiLoading ? '生成中…' : (isWord ? 'AI 补全' : 'AI 直译'),
+                  label: aiLoading ? '生成中…' : (isWord ? 'AI 补全' : 'AI 直译'),
                   icon: Icons.auto_awesome,
                   isSecondary: true,
                   fullWidth: true,
@@ -990,8 +1027,8 @@ class StudyScreenState extends State<StudyScreen> with WidgetsBindingObserver {
             return Container(
               key: key,
               padding: const EdgeInsets.only(bottom: 12),
-              child: _buildItemCard(classId, w,
-                  highlighted: _highlightId == w.id),
+              child:
+                  _buildItemCard(classId, w, highlighted: _highlightId == w.id),
             );
           },
         ),

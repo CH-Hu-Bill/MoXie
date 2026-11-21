@@ -225,6 +225,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
           .map((e) => GalleryItem.fromJson(e as Map<String, dynamic>))
           .toList();
       if (!mounted) return;
+      final keepOffset =
+          reset && _gridController.hasClients ? _gridController.offset : null;
       setState(() {
         if (reset) {
           _items = _mergeItems(_ensureFocus(items));
@@ -243,6 +245,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _remoteLoadDone = true;
       });
       _notifyCount();
+      if (keepOffset != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_gridController.hasClients) return;
+          final max = _gridController.position.maxScrollExtent;
+          _gridController.jumpTo(keepOffset.clamp(0.0, max).toDouble());
+        });
+      }
       _storage.cacheGallery(
         classId,
         _items.map((e) => e.toCacheJson()).toList(),
